@@ -92,6 +92,11 @@ export function QuotePage() {
   // Closed-Won details + the Workspace project link (lifted here so Save persists
   // them and the Workspace payload uses the live values).
   const [wonInfo, setWonInfo] = useState<WonInfo>({ wonDate: '', jobNum: '', poNum: '' })
+  // Closed-Won date safeguard: auto-fill today's date when a quote is moved TO
+  // Closed Won this session, and require an explicit confirm before it saves.
+  const [wonConfirmOpen, setWonConfirmOpen] = useState(false)
+  const wonConfirmedRef = useRef(false)
+  const prevStageRef = useRef<string>('')
   // The Job # as it was when the quote loaded — an unchanged saved Job # means the
   // project presumably exists (button shows "Open"); a freshly-typed one means create.
   const [loadedJobNum, setLoadedJobNum] = useState('')
@@ -199,6 +204,19 @@ export function QuotePage() {
       alive = false
     }
   }, [])
+
+  // When the stage transitions TO Closed Won this session, auto-fill the Won Date
+  // with today's date (editable) if it's empty. Transition-guarded via prevStageRef
+  // so loading an existing quote never stamps or overwrites its date.
+  useEffect(() => {
+    const stage = s(qiEdit.stage)
+    const prev = prevStageRef.current
+    prevStageRef.current = stage
+    if (prev && prev !== 'Closed Won' && stage === 'Closed Won') {
+      wonConfirmedRef.current = false // each fresh close-won re-requires confirmation
+      if (!wonInfo.wonDate.trim()) setWonInfo((w) => ({ ...w, wonDate: new Date().toLocaleDateString('en-US') }))
+    }
+  }, [qiEdit.stage])
 
   // Browser-tab title reflects the quote number being viewed (live as it's edited).
   useEffect(() => {
@@ -474,12 +492,12 @@ export function QuotePage() {
   const onSave = () => {
     if (!row) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
-    // Date barrier (ported from Classic): moving a quote TO Closed Won this session
-    // requires the Won Date before it can save. Already-Closed-Won quotes loaded
-    // from the DB skip this — no friction on routine edits.
-    if (s(qiEdit.stage) === 'Closed Won' && row.stage !== 'Closed Won' && !wonInfo.wonDate.trim()) {
-      showToast('Confirm the Won Date first.', 'warn', 4000)
-      return
+    // Won-date safeguard (ported from Classic): moving a quote TO Closed Won this
+    // session needs a Won Date AND an explicit confirmation before it saves.
+    // Already-Closed-Won quotes loaded from the DB skip this — no friction on edits.
+    if (s(qiEdit.stage) === 'Closed Won' && row.stage !== 'Closed Won') {
+      if (!wonInfo.wonDate.trim()) { showToast('Enter the Won Date first.', 'warn', 4000); return }
+      if (!wonConfirmedRef.current) { setWonConfirmOpen(true); return }
     }
     // A brand-new quote (no row id yet) just inserts — no rev/opp-change prompts.
     if (row.id) {
@@ -747,6 +765,20 @@ export function QuotePage() {
                 <Button variant="ghost" small disabled={saveBusy} onClick={() => setRevDecision(null)}>Cancel</Button>
                 <Button variant="secondary" small disabled={saveBusy} onClick={() => persist()}>{saveBusy ? 'Saving…' : 'Overwrite'}</Button>
                 <Button variant="primary" small disabled={saveBusy} onClick={() => persist({ forceInsert: true })}>{saveBusy ? 'Saving…' : 'Save as new revision'}</Button>
+              </div>
+            </Modal>
+          )}
+
+          {wonConfirmOpen && (
+            <Modal title="Confirm Closed-Won date" onClose={() => setWonConfirmOpen(false)} width={440}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.6, marginBottom: 'var(--sp-4)' }}>
+                You're marking <b>{s(qi.opp) || row.opportunity}</b> as <b>Closed Won</b> dated{' '}
+                <b>{wonInfo.wonDate || '(no date)'}</b>. Is that date correct?
+                <div style={{ color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>The date auto-fills to today — edit it in the Closed-Won details below if the deal closed on a different day.</div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                <Button variant="ghost" small onClick={() => setWonConfirmOpen(false)}>Go back &amp; edit</Button>
+                <Button variant="primary" small onClick={() => { wonConfirmedRef.current = true; setWonConfirmOpen(false); onSave() }}>Yes, mark Closed Won</Button>
               </div>
             </Modal>
           )}
