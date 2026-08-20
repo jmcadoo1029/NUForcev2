@@ -35,8 +35,44 @@ const MOJIBAKE: [string, string][] = [
   ['Ã·', '÷'],       // ÷
 ]
 
-export function fixEncoding(text: string): string {
+// HTML entities that arrive from Salesforce rich-text fields (apostrophes,
+// ampersands, quotes, dashes…). React renders text nodes literally, so a stored
+// "&#39;" shows as "&#39;" on screen and in the PDF unless we decode it here.
+const NAMED_ENTITIES: Record<string, string> = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ',
+  rsquo: '’', lsquo: '‘', ldquo: '“', rdquo: '”', sbquo: '‚', bdquo: '„',
+  ndash: '–', mdash: '—', hellip: '…', bull: '•', middot: '·',
+  trade: '™', reg: '®', copy: '©', deg: '°', plusmn: '±', micro: 'µ',
+  frac12: '½', frac14: '¼', frac34: '¾', sup2: '²', sup3: '³', times: '×', divide: '÷',
+}
+
+function decodeEntitiesOnce(s: string): string {
+  return s.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]*);/g, (m: string, body: string) => {
+    if (body[0] === '#') {
+      const hex = body[1] === 'x' || body[1] === 'X'
+      const code = parseInt(body.slice(hex ? 2 : 1), hex ? 16 : 10)
+      if (!Number.isFinite(code) || code <= 0 || code > 0x10ffff) return m
+      try { return String.fromCodePoint(code) } catch { return m }
+    }
+    const named = NAMED_ENTITIES[body] ?? NAMED_ENTITIES[body.toLowerCase()]
+    return named != null ? named : m
+  })
+}
+
+/** Decode HTML entities. Two passes so double-encoded input (e.g. "&amp;#39;")
+ *  fully resolves ("&amp;#39;" -> "&#39;" -> "'"). */
+export function decodeEntities(text: string): string {
   let s = text || ''
+  for (let i = 0; i < 2; i++) {
+    const next = decodeEntitiesOnce(s)
+    if (next === s) break
+    s = next
+  }
+  return s
+}
+
+export function fixEncoding(text: string): string {
+  let s = decodeEntities(text || '')
   for (const [bad, good] of MOJIBAKE) s = s.split(bad).join(good)
   // A number followed by the replacement char before C/F is almost always a
   // dropped degree sign (e.g. "125�C" -> "125°C").

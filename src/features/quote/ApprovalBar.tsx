@@ -136,7 +136,9 @@ export function ApprovalBar({
   const wBadge = WON_BADGE[wStatus]
 
   const canSubmit = aStatus === 'none' || aStatus === 'rejected' || (aStatus === 'approved' && !locked) || !!needsReapproval
-  const canRequestReopen = !isApprover && aStatus === 'approved' && locked && !needsReapproval && !reopenRequested && !!onRequestReopen
+  // A teammate can ask to reopen any locked quote that isn't mid-approval — covers
+  // both approved-locked and won-locked quotes.
+  const canRequestReopen = !isApprover && locked && aStatus !== 'pending' && !needsReapproval && !reopenRequested && !!onRequestReopen
   const pendingApprovalMine = aStatus === 'pending'
   const pendingWon = wStatus === 'pending_won'
   const canSubmitWon = stage === 'Closed Won' && wStatus === 'none'
@@ -144,7 +146,7 @@ export function ApprovalBar({
   const textarea: React.CSSProperties = { width: '100%', minHeight: 56, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }
 
   const nothingToShow = aStatus === 'none' && wStatus === 'none' && !canSubmitWon && !isSalesforce
-  if (nothingToShow && !canSubmit) return null
+  if (nothingToShow && !canSubmit && !canRequestReopen && !(isApprover && locked)) return null
 
   return (
     <Card style={{ padding: 'var(--sp-4) var(--sp-5)', marginBottom: 'var(--sp-4)' }}>
@@ -184,11 +186,11 @@ export function ApprovalBar({
 
       {/* Approved-and-locked note (imports land here too). Approvers instead see
           the Reopen button above, so only show this to non-approvers. */}
-      {aStatus === 'approved' && locked && !isApprover && !needsReapproval && (
+      {locked && !isApprover && aStatus !== 'pending' && !needsReapproval && (
         <div style={{ fontSize: 'var(--fs-sm)', color: reopenRequested ? 'var(--info)' : 'var(--muted)', marginTop: 'var(--sp-2)' }}>
           {reopenRequested
             ? 'Reopen requested — an approver will review it and unlock the quote.'
-            : `Approved and locked${isSalesforce ? ' (imported from Salesforce)' : ''}. Use “Request reopen” to ask an approver to unlock it for editing.`}
+            : `${aStatus === 'approved' ? 'Approved and locked' : 'Locked'}${isSalesforce ? ' (imported from Salesforce)' : ''}. Use “Request reopen” to ask an approver to unlock it for editing.`}
         </div>
       )}
 

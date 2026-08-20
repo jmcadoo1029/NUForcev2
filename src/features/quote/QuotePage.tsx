@@ -159,9 +159,15 @@ export function QuotePage() {
         const wStatus = r.won_approval_status || wa.status || 'none'
         setApproval({ ...ap, status: aStatus, history: ap.history || [] })
         setWonApproval({ ...wa, status: wStatus, history: wa.history || [] })
-        // Hard-lock while mid-approval or already approved (imports included).
-        // An approver reopens to edit.
-        setLocked(aStatus === 'pending' || aStatus === 'approved' || wStatus === 'pending_won')
+        // Hard-lock while mid-approval or already approved (imports included), and
+        // for won deals (Closed Won stage or won-approved) so completed quotes can't
+        // be edited by accident. `editUnlocked` (set when an approver reopens) is the
+        // deliberate override that keeps a reopened quote editable across reloads.
+        const stg = r.stage || ((r.data?.qi as { stage?: string } | undefined)?.stage) || ''
+        const isWonStage = stg === 'Closed Won'
+        const editUnlocked = !!(r.data as { editUnlocked?: boolean } | undefined)?.editUnlocked
+        const wonLock = (isWonStage || wStatus === 'won_approved') && !editUnlocked
+        setLocked(aStatus === 'pending' || aStatus === 'approved' || wStatus === 'pending_won' || wonLock)
         setReopenRequested(((r.data?.reopenRequest as { status?: string } | undefined)?.status) === 'requested')
         setState('ok')
       })
@@ -197,20 +203,24 @@ export function QuotePage() {
   const hist = (a: ApprovalState, event: string, comments: string) => [...(a.history || []), { event, by: me, at: now(), comments }]
 
   const applyApproval = async (next: ApprovalState, lock: boolean, label: string, extraData?: Record<string, unknown>) => {
+    // Any lock-imposing action clears the editUnlocked override so a re-locked quote
+    // stays locked; unlock passes editUnlocked:true via extraData (lock=false).
+    const extra = { ...(extraData || {}), ...(lock ? { editUnlocked: false } : {}) }
     setApproval(next)
     setLocked(lock)
-    setRow((prev) => (prev ? { ...prev, approval_status: next.status, data: { ...(prev.data || {}), ...(extraData || {}), approval: next } as typeof prev.data } : prev))
+    setRow((prev) => (prev ? { ...prev, approval_status: next.status, data: { ...(prev.data || {}), ...extra, approval: next } as typeof prev.data } : prev))
     if (!WRITES_ENABLED) { showToast(`${label} (preview)`, 'info'); return }
     if (!row) return
-    try { await persistApproval(row.id, next, { ...((row.data || {}) as Record<string, unknown>), ...(extraData || {}) }); showToast(label, 'success') } catch (e) { showToast('Approval save failed: ' + errMsg(e), 'error', 6000) }
+    try { await persistApproval(row.id, next, { ...((row.data || {}) as Record<string, unknown>), ...extra }); showToast(label, 'success') } catch (e) { showToast('Approval save failed: ' + errMsg(e), 'error', 6000) }
   }
   const applyWon = async (next: ApprovalState, lock: boolean, label: string) => {
+    const extra = lock ? { editUnlocked: false } : {}
     setWonApproval(next)
     setLocked(lock)
-    setRow((prev) => (prev ? { ...prev, won_approval_status: next.status, data: { ...(prev.data || {}), wonApproval: next } as typeof prev.data } : prev))
+    setRow((prev) => (prev ? { ...prev, won_approval_status: next.status, data: { ...(prev.data || {}), ...extra, wonApproval: next } as typeof prev.data } : prev))
     if (!WRITES_ENABLED) { showToast(`${label} (preview)`, 'info'); return }
     if (!row) return
-    try { await persistWonApproval(row.id, next, (row.data || {}) as Record<string, unknown>); showToast(label, 'success') } catch (e) { showToast('Won-approval save failed: ' + errMsg(e), 'error', 6000) }
+    try { await persistWonApproval(row.id, next, { ...((row.data || {}) as Record<string, unknown>), ...extra }); showToast(label, 'success') } catch (e) { showToast('Won-approval save failed: ' + errMsg(e), 'error', 6000) }
   }
 
   const submitApproval = () => applyApproval({ status: 'pending', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'submitted', '') }, true, 'Submitted for approval')
@@ -229,7 +239,7 @@ export function QuotePage() {
       { ...approval, status: 'none', submittedBy: '', submittedAt: '', decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'reopened', '') },
       false,
       'Reopened for editing — needs re-approval',
-      clearedReq ? { reopenRequest: clearedReq } : undefined,
+      { editUnlocked: true, ...(clearedReq ? { reopenRequest: clearedReq } : {}) },
     )
   }
   // A teammate (non-approver) asks an approver to unlock this approved quote. It

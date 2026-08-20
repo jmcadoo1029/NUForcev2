@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { Card, CardLabel } from '../../../components'
 import { str } from '../../../lib/format'
 import { TYPE_OPTS } from '../../../data/quoteDefaults'
@@ -16,13 +17,16 @@ export function QuoteInfoCard({ editing, qi, setQi }: { editing: boolean; qi: Re
   const pickClient = (c: ClientRow) =>
     setQi({ account: c.name || '', client_id: c.id, billTo: c.address || '', billToCity: [c.city, c.state, c.zip].filter(Boolean).join(', ') })
 
-  // Primary-contact suggestions come from the linked account's contact list.
-  const searchAccountContacts = async (term: string): Promise<PersonRow[]> => {
+  // Primary-contact suggestions come from the linked account's contact list. An
+  // empty term returns the whole list, so the field opens as a pick-list on focus
+  // (see minChars={0} below). Stable per-account identity so it doesn't re-fetch on
+  // every keystroke in other fields.
+  const searchAccountContacts = useCallback(async (term: string): Promise<PersonRow[]> => {
     if (!clientId) return []
     const list = await fetchClientContacts(clientId)
     const t = term.toLowerCase()
     return list.filter((p) => (personName(p) + ' ' + (p.email || '')).toLowerCase().includes(t))
-  }
+  }, [clientId])
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
       <CardLabel>Quote info</CardLabel>
@@ -75,8 +79,9 @@ export function QuoteInfoCard({ editing, qi, setQi }: { editing: boolean; qi: Re
                 itemPrimary={(p) => personName(p) || '(no name)'}
                 itemSecondary={(p) => p.email || ''}
                 onPick={(p) => setQi({ contact: personName(p), email: p.email || '' })}
-                placeholder={clientId ? 'Pick from account, or type a custom name' : 'Type a contact name'}
-                emptyText={clientId ? 'No contacts match on this account.' : 'Link an account above to pick its contacts.'}
+                minChars={clientId ? 0 : 1}
+                placeholder={clientId ? 'Click to choose a contact, or type a custom name' : 'Type a contact name'}
+                emptyText={clientId ? 'No contacts on this account yet — type a custom name.' : 'Link an account above to pick its contacts.'}
               />
             </RegField>
           ) : (

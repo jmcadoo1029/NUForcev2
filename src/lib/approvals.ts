@@ -119,7 +119,8 @@ export async function resolveReopen(quoteId: string, action: 'unlock' | 'dismiss
       approval_status: 'none',
       submitted_by: null,
       approved_by: null,
-      data: { ...data, approval: nextAp, reopenRequest: { ...prevReq, status: 'cleared', resolvedBy: by, resolvedAt: at, resolution: 'unlocked' } },
+      // editUnlocked keeps won quotes (locked by stage) editable across reloads.
+      data: { ...data, approval: nextAp, editUnlocked: true, reopenRequest: { ...prevReq, status: 'cleared', resolvedBy: by, resolvedAt: at, resolution: 'unlocked' } },
     })
   } else {
     await patch(quoteId, { data: { ...data, reopenRequest: { ...prevReq, status: 'cleared', resolvedBy: by, resolvedAt: at, resolution: 'dismissed' } } })
