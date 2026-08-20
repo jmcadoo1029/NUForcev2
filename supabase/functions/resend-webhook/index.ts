@@ -37,6 +37,9 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL          = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_KEY           = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const RESEND_WEBHOOK_SECRET = Deno.env.get('RESEND_WEBHOOK_SECRET') || '';
+const RESEND_API_KEY        = Deno.env.get('RESEND_API_KEY') || ''; // reused to send status alerts
+const SENDING_DOMAIN        = 'mail.nulabs.com';        // verified Resend send-only subdomain
+const OVERSIGHT_EMAIL       = 'jordanmcadoo@nulabs.com'; // always copied on problem alerts
 const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 // ── Svix signature verification (manual — no external dependency) ────────────
 // Resend signs webhooks with the Svix scheme:
@@ -101,42 +104,91 @@ async function verifySignature(
   });
 }
 
-// ── NUForce addition: reconcile the quote-send audit + flag the quote ────────
-// Best-effort: a failure here never changes the HTTP result Resend sees (the
-// contacts path already decided that). email_id ↔ quote_sends.resend_id.
-async function reconcileQuoteSend(emailId: string, recipient: string, status: 'bounced' | 'complained', reason: string): Promise<void> {
+// ── NUForce addition: delivery-status alerts + audit reconcile ───────────────
+type SendStatus = 'delivered' | 'bounced' | 'complained' | 'delayed';
+
+// Email the send's owner about a delivery-status event; problems (bounce /
+// complaint / delay) are also copied to oversight. Best-effort; needs RESEND_API_KEY.
+async function sendStatusAlert(opts: {
+  opportunity: string | null; recipient: string; status: SendStatus;
+  reason: string; sendKind: string | null; sentByEmail: string | null;
+}): Promise<void> {
+  if (!RESEND_API_KEY) return;
+  const isProblem = opts.status !== 'delivered';
+  const to = Array.from(new Set(
+    [opts.sentByEmail, ...(isProblem ? [OVERSIGHT_EMAIL] : [])]
+      .map((e) => (e || '').trim())
+      .filter((e) => e.includes('@')),
+  ));
+  if (!to.length) return;
+  const kind = opts.sendKind === 'follow_up' ? 'Follow-up' : 'Quote';
+  const statusLabel = opts.status === 'delivered' ? 'Delivered'
+    : opts.status === 'bounced' ? 'Bounced'
+    : opts.status === 'complained' ? 'Marked as spam'
+    : 'Delivery delayed';
+  const opp = opts.opportunity || '(no number)';
+  const subject = `${kind} ${opp} — ${statusLabel}: ${opts.recipient}`;
+  const body = [
+    `${kind} email status update from NUForce.`,
+    ``,
+    `Quote:     ${opp}`,
+    `Recipient: ${opts.recipient}`,
+    `Status:    ${statusLabel}`,
+    ...(opts.reason ? [`Detail:    ${opts.reason}`] : []),
+    `Time:      ${new Date().toISOString()}`,
+  ].join('\n');
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: `NUForce Delivery <notifications@${SENDING_DOMAIN}>`, to, reply_to: OVERSIGHT_EMAIL, subject, text: body }),
+    });
+  } catch (e) {
+    console.error('resend-webhook: sendStatusAlert failed', e);
+  }
+}
+
+// Reconcile the quote-send audit, flag the quote on hard problems, and alert the
+// sender/oversight. Only NUForce quote/follow-up sends match (email_id ↔
+// quote_sends.resend_id); anything else matches zero rows and is ignored.
+async function reconcileAndNotify(emailId: string, recipient: string, status: SendStatus, reason: string): Promise<void> {
   if (!emailId) return;
   try {
-    const { data: rows, error } = await sb
-      .from('quote_sends')
-      .update({ status, error: reason })
-      .eq('resend_id', emailId)
-      .select('quote_id, opportunity, send_kind');
-    if (error) { console.error('resend-webhook: quote_sends update failed', error); return; }
-    const now = new Date().toISOString();
-    for (const r of rows || []) {
-      if (!r.quote_id) continue;
-      // Label the flag by what was sent (a follow-up nudge vs the quote itself).
-      const label = r.send_kind === 'follow_up' ? 'Follow-up email' : 'Quote email';
-      const what = status === 'complained' ? 'was marked as spam' : 'bounced';
-      // Upsert a flag on the quote so the sender sees the bounce (quote_flags has
-      // a UNIQUE constraint on quote_id, so this replaces any prior open flag).
-      const { error: fErr } = await sb.from('quote_flags').upsert({
-        quote_id: r.quote_id,
-        opportunity: r.opportunity ?? null,
-        customer: null,
-        flagged_by: 'resend_webhook',
-        flagged_at: now,
-        note: `${label} to ${recipient} ${what} — ${reason}`,
-        resolved: false,
-        resolved_by: null,
-        resolved_at: null,
-      }, { onConflict: 'quote_id' });
-      if (fErr) console.error('resend-webhook: quote flag upsert failed', fErr);
+    type Row = { quote_id: string | null; opportunity: string | null; send_kind: string | null; sent_by_email: string | null };
+    let rows: Row[] | null = null;
+    // Stamp the audit row for terminal statuses; delayed is transient, so just read.
+    if (status === 'delayed') {
+      const { data } = await sb.from('quote_sends').select('quote_id, opportunity, send_kind, sent_by_email').eq('resend_id', emailId);
+      rows = data as Row[] | null;
+    } else {
+      const { data, error } = await sb
+        .from('quote_sends')
+        .update({ status, ...(status !== 'delivered' ? { error: reason } : {}) })
+        .eq('resend_id', emailId)
+        .select('quote_id, opportunity, send_kind, sent_by_email');
+      if (error) console.error('resend-webhook: quote_sends update failed', error);
+      rows = data as Row[] | null;
     }
-    console.log(`resend-webhook: reconciled ${rows?.length || 0} quote_send(s) for email ${emailId} (${status})`);
+    if (!rows || !rows.length) return; // not a NUForce quote/follow-up send
+    const now = new Date().toISOString();
+    for (const r of rows) {
+      // Flag the quote so the sender sees it in-app — hard bounce / complaint only.
+      if ((status === 'bounced' || status === 'complained') && r.quote_id) {
+        const label = r.send_kind === 'follow_up' ? 'Follow-up email' : 'Quote email';
+        const what = status === 'complained' ? 'was marked as spam' : 'bounced';
+        const { error: fErr } = await sb.from('quote_flags').upsert({
+          quote_id: r.quote_id, opportunity: r.opportunity ?? null, customer: null,
+          flagged_by: 'resend_webhook', flagged_at: now,
+          note: `${label} to ${recipient} ${what} — ${reason}`,
+          resolved: false, resolved_by: null, resolved_at: null,
+        }, { onConflict: 'quote_id' });
+        if (fErr) console.error('resend-webhook: quote flag upsert failed', fErr);
+      }
+      await sendStatusAlert({ opportunity: r.opportunity, recipient, status, reason, sendKind: r.send_kind, sentByEmail: r.sent_by_email });
+    }
+    console.log(`resend-webhook: reconciled ${rows.length} quote_send(s) for email ${emailId} (${status})`);
   } catch (e) {
-    console.error('resend-webhook: reconcileQuoteSend threw', e);
+    console.error('resend-webhook: reconcileAndNotify threw', e);
   }
 }
 // ── end NUForce addition ─────────────────────────────────────────────────────
@@ -170,8 +222,8 @@ serve(async (req: Request) => {
   const recipient = (rawTo || '').toString().trim();
   // The Resend message id — matches quote_sends.resend_id (NUForce addition).
   const emailId = (data.email_id || data.id || '').toString();
-  let reason: string | null = null;
-  let sendStatus: 'bounced' | 'complained' | null = null;
+  let reason = '';
+  let sendStatus: SendStatus | null = null;
   if (type === 'email.bounced') {
     const bounceType = data?.bounce?.type as string | undefined; // Permanent | Transient | Undetermined
     if (bounceType === 'Transient') {
@@ -184,35 +236,41 @@ serve(async (req: Request) => {
   } else if (type === 'email.complained') {
     reason = 'spam_complaint';
     sendStatus = 'complained';
+  } else if (type === 'email.delivered') {
+    sendStatus = 'delivered';
+  } else if (type === 'email.delivery_delayed') {
+    reason = 'delivery_delayed';
+    sendStatus = 'delayed';
   } else {
-    // sent / delivered / opened / clicked / delivery_delayed / etc. — ignore.
+    // sent / opened / clicked / etc. — acknowledge and ignore.
     return ack();
   }
   if (!recipient || !recipient.includes('@')) {
     console.log(`resend-webhook: ${type} with no usable recipient, skipping`);
     return ack();
   }
-  // Flag the matching contact(s). Non-contact recipients match zero rows.
-  const { data: updated, error } = await sb
-    .from('contacts')
-    .update({
-      email_invalid:        true,
-      email_invalid_at:     new Date().toISOString(),
-      email_invalid_reason: reason,
-    })
-    .eq('email', recipient)
-    .select('id');
-  if (error) {
-    console.error('resend-webhook: contacts update failed', error);
-    // Return 500 so Resend retries with backoff (handles transient DB issues).
-    return new Response('db error', { status: 500 });
+  // Hard bounce / complaint: mark the contact's address invalid (existing logic;
+  // delivered/delayed never touch contacts). Non-contact recipients match 0 rows.
+  if (sendStatus === 'bounced' || sendStatus === 'complained') {
+    const { data: updated, error } = await sb
+      .from('contacts')
+      .update({
+        email_invalid:        true,
+        email_invalid_at:     new Date().toISOString(),
+        email_invalid_reason: reason,
+      })
+      .eq('email', recipient)
+      .select('id');
+    if (error) {
+      console.error('resend-webhook: contacts update failed', error);
+      // Return 500 so Resend retries with backoff (handles transient DB issues).
+      return new Response('db error', { status: 500 });
+    }
+    console.log(`resend-webhook: ${type} → flagged ${updated?.length || 0} contact(s) for ${recipient} (${reason})`);
   }
-  console.log(
-    `resend-webhook: ${type} → flagged ${updated?.length || 0} contact(s) ` +
-    `for ${recipient} (${reason})`,
-  );
-  // NUForce addition: reconcile the quote-send audit + flag the quote.
-  await reconcileQuoteSend(emailId, recipient, sendStatus, reason);
+  // NUForce: reconcile the quote-send audit, flag the quote on problems, and email
+  // the sender (+ oversight on problems) about the delivery status.
+  await reconcileAndNotify(emailId, recipient, sendStatus, reason);
   return ack();
 });
 function ack(): Response {

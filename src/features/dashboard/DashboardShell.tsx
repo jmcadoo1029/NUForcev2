@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '../../components'
 import { WORKSPACE_URL, CLASSIC_URL } from '../../lib/config'
-import { useIsApprover } from '../../lib/perms'
+import { useCanViewManager } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
 
@@ -32,7 +32,7 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({
 export function DashboardShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { isApprover } = useIsApprover() // Manager tab is approver-only
+  const { canView } = useCanViewManager() // Manager tab: approvers + view-only roles (Accounting)
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : 'manager'
@@ -53,8 +53,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 4 }}>{subtitle}</div>
           </div>
           <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 9, overflow: 'hidden' }}>
-            {isApprover && <Link to="/" style={seg(view === 'manager', true)}>Manager</Link>}
-            <Link to="/my-work" style={seg(view === 'mywork', isApprover ? false : true)}>My Work</Link>
+            {canView && <Link to="/" style={seg(view === 'manager', true)}>Manager</Link>}
+            <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
           </div>
         </div>

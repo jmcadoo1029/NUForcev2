@@ -7,19 +7,19 @@ import { fetchProductOverrides } from './lib/productOverrides'
 import { DevAuthGate } from './features/auth/DevAuthGate'
 import { DashboardShell } from './features/dashboard/DashboardShell'
 import { DashboardHome } from './features/dashboard/DashboardHome'
-import { useIsApprover } from './lib/perms'
+import { useCanViewManager } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 
-// The Manager dashboard is for approvers/managers only. Non-managers who land on
-// "/" are sent to their own worklist. While the role resolves we render nothing
-// (rather than flashing the Manager view to a non-manager).
+// The Manager dashboard is for managers + view-only roles (Accounting). Everyone
+// else who lands on "/" is sent to their own worklist. While the role resolves we
+// render nothing (rather than flashing the Manager view to a non-manager).
 function ManagerHome() {
-  const { isApprover, loading } = useIsApprover()
+  const { canView, loading } = useCanViewManager()
   if (loading) return null
-  if (!isApprover) return <Navigate to="/my-work" replace />
+  if (!canView) return <Navigate to="/my-work" replace />
   return (
     <DashboardShell>
       <DashboardHome />
