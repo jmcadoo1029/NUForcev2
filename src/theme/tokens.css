@@ -1,0 +1,81 @@
+/* NUForce V2 — design tokens.
+   The single source of truth for the theme. Every screen and component reads
+   from these variables, so the whole app can be re-themed from this one file.
+   Values match the approved theme preview: lighter surfaces, one NU-red accent,
+   bigger readable type, no emoji. */
+
+:root {
+  /* ── Type scale (readability-first; base is 15px vs. the old ~11px) ── */
+  --fs-caption: 12px;
+  --fs-sm: 13px;
+  --fs-base: 15px;
+  --fs-md: 16px;
+  --fs-lg: 19px;
+  --fs-xl: 23px;
+  --fs-2xl: 29px;
+  --fs-3xl: 36px;
+
+  /* ── Spacing scale ── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 28px;
+  --sp-7: 40px;
+
+  /* ── Color ── */
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #e6e8ec;
+  --border-strong: #d5d9df;
+  --text: #1c2430;
+  --muted: #667085;
+  --dim: #9aa2ad;
+
+  --accent: #b3282d;
+  --accent-hover: #9c2226;
+  --accent-soft: #fbeceb;
+
+  --pos: #1e8449;
+  --pos-soft: #eaf6ef;
+  --pos-border: #bfe3cc;
+
+  --info: #2e6da4;
+  --info-soft: #ecf2f9;
+
+  --warn: #a9791b;
+  --warn-soft: #fdf6e6;
+  --warn-border: #f0dfa8;
+
+  /* ── Shape & elevation ── */
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(20, 30, 45, 0.06), 0 1px 2px rgba(20, 30, 45, 0.04);
+  --shadow-lg: 0 8px 30px rgba(20, 30, 45, 0.14);
+
+  /* ── Fonts ── */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; }
+
+/* Visible keyboard focus everywhere — accessibility baseline. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

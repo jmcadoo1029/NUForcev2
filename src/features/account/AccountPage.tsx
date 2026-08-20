@@ -1,0 +1,160 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { Button, StatTile } from '../../components'
+import { money } from '../../lib/format'
+import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow } from '../../lib/accounts'
+
+// Account history page (/account/:name) — all of one account's quotes grouped by
+// year in an aligned table (quotes / total / closed won / won value / win %),
+// with lifetime totals. Ported from Classic's AccountDashboard.
+
+const GRID = '64px 1fr 1.1fr 0.9fr 1.1fr 68px'
+
+function stageTone(stage: string | null): string {
+  if (stage?.includes('Won')) return 'var(--pos)'
+  if (stage?.includes('Lost') || stage?.includes('Cancelled')) return 'var(--accent)'
+  return 'var(--info)'
+}
+
+export function AccountPage() {
+  const { name: rawName } = useParams<{ name: string }>()
+  const name = decodeURIComponent(rawName || '')
+  const [rows, setRows] = useState<AccountRow[] | null>(null)
+  const [err, setErr] = useState('')
+  const [address, setAddress] = useState('')
+  const [openYears, setOpenYears] = useState<Set<string>>(new Set())
+  const initedFor = useRef<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    setRows(null)
+    setAddress('')
+    fetchAccountQuotes(name)
+      .then((r) => alive && setRows(r))
+      .catch((e) => alive && setErr(String(e?.message || e)))
+    fetchClient(name)
+      .then((c) => alive && setAddress(formatClientAddress(c)))
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [name])
+
+  const { years, lifetime } = useMemo(() => {
+    const groups = new Map<string, { rows: AccountRow[]; total: number; wonCount: number; wonTotal: number }>()
+    ;(rows || []).forEach((r) => {
+      const y = yearOfOpp(r.opportunity)
+      const g = groups.get(y) || { rows: [], total: 0, wonCount: 0, wonTotal: 0 }
+      g.rows.push(r)
+      g.total += Number(r.total) || 0
+      if (r.stage === 'Closed Won') {
+        g.wonCount += 1
+        g.wonTotal += Number(r.total) || 0
+      }
+      groups.set(y, g)
+    })
+    const years = Array.from(groups.entries())
+      .map(([year, g]) => ({ year, ...g, winPct: g.rows.length ? Math.round((g.wonCount / g.rows.length) * 100) : 0 }))
+      .sort((a, b) => (a.year === 'Unknown' ? 1 : b.year === 'Unknown' ? -1 : b.year.localeCompare(a.year)))
+    const count = (rows || []).length
+    const total = (rows || []).reduce((a, r) => a + (Number(r.total) || 0), 0)
+    const wonCount = (rows || []).filter((r) => r.stage === 'Closed Won').length
+    return { years, lifetime: { count, total, wonCount, winRate: count ? Math.round((wonCount / count) * 100) : 0 } }
+  }, [rows])
+
+  // Default the newest year open — once per account load, so collapsing it sticks.
+  useEffect(() => {
+    if (years.length && initedFor.current !== name) {
+      setOpenYears(new Set([years[0].year]))
+      initedFor.current = name
+    }
+  }, [years, name])
+
+  const toggle = (y: string) =>
+    setOpenYears((prev) => {
+      const next = new Set(prev)
+      next.has(y) ? next.delete(y) : next.add(y)
+      return next
+    })
+
+  const hCol: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }
+
+  return (
+    <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
+      <Link to="/" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>
+        ← Back to dashboard
+      </Link>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', margin: 'var(--sp-3) 0 var(--sp-5)', flexWrap: 'wrap' }}>
+        <div>
+          <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>{name}</div>
+          {address && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 3 }}>{address}</div>}
+        </div>
+        <Button>+ New Quote</Button>
+      </div>
+
+      {err && <div style={{ color: 'var(--accent)' }}>Couldn’t load account: {err}</div>}
+      {!err && rows == null && <div style={{ color: 'var(--muted)' }}>Loading…</div>}
+
+      {!err && rows != null && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-5)' }}>
+            <StatTile label="Quotes (lifetime)" value={lifetime.count} />
+            <StatTile label="Total quoted" value={money(lifetime.total)} />
+            <StatTile label="Closed Won" value={lifetime.wonCount} tone="pos" />
+            <StatTile label="Win rate" value={`${lifetime.winRate}%`} tone="pos" />
+          </div>
+
+          {years.length === 0 && <div style={{ color: 'var(--muted)' }}>No quotes for this account.</div>}
+          {years.length > 0 && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 8, padding: '0 14px 8px' }}>
+                <div style={hCol}>Year</div>
+                <div style={hCol}>Quotes</div>
+                <div style={hCol}>Total value</div>
+                <div style={hCol}>Closed won</div>
+                <div style={hCol}>Won value</div>
+                <div style={{ ...hCol, textAlign: 'right' }}>Win %</div>
+              </div>
+              {years.map((y) => {
+                const isOpen = openYears.has(y.year)
+                return (
+                  <div key={y.year} style={{ marginBottom: 6 }}>
+                    <div
+                      onClick={() => toggle(y.year)}
+                      style={{ display: 'grid', gridTemplateColumns: GRID, gap: 8, alignItems: 'center', padding: '12px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: isOpen ? 'var(--accent-soft)' : 'var(--card)', border: '1px solid ' + (isOpen ? 'var(--accent)' : 'var(--border)') }}
+                    >
+                      <div style={{ fontWeight: 800, fontSize: 'var(--fs-md)', color: y.year === 'Unknown' ? 'var(--dim)' : 'var(--text)' }}>{y.year}</div>
+                      <div style={{ fontWeight: 600 }}>{y.rows.length}</div>
+                      <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(y.total)}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--pos)' }}>{y.wonCount}</div>
+                      <div style={{ fontWeight: 600, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{money(y.wonTotal)}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, fontWeight: 700, color: y.winPct >= 50 ? 'var(--pos)' : 'var(--muted)' }}>
+                        {y.winPct}%
+                        <span style={{ width: 7, height: 7, borderRight: '2px solid var(--dim)', borderBottom: '2px solid var(--dim)', transform: isOpen ? 'rotate(45deg)' : 'rotate(-45deg)' }} />
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <div style={{ margin: '4px 0 0 14px', borderLeft: '2px solid var(--accent)', paddingLeft: 12 }}>
+                        {y.rows.map((r) => (
+                          <Link
+                            key={r.id}
+                            to={`/quote/${encodeURIComponent(r.opportunity || String(r.id))}`}
+                            style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr', gap: 8, alignItems: 'center', padding: '8px 8px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}
+                          >
+                            <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{r.opportunity || '—'}</span>
+                            <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: stageTone(r.stage) }}>{r.stage || '—'}</span>
+                            <span style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(Number(r.total) || 0)}</span>
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
+}

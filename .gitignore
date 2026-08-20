@@ -1,0 +1,9 @@
+node_modules
+dist
+.DS_Store
+*.local
+.env
+.env.*
+# reference-only copies of the classic app's files (not part of the build)
+Reference Old/
+*.zip
