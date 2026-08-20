@@ -102,7 +102,11 @@ export function GlobalSearch() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginTop: 1 }}>
                     <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer || '—'}</span>
-                    {r.stage && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{r.stage}</span>}
+                    <span style={{ display: 'flex', alignItems: 'baseline', gap: 6, whiteSpace: 'nowrap' }}>
+                      {r.job_number && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)' }}>Job {r.job_number}</span>}
+                      {r.po_number && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--info)' }}>PO {r.po_number}</span>}
+                      {r.stage && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{r.stage}</span>}
+                    </span>
                   </div>
                 </div>
               ))}

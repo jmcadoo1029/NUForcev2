@@ -1,10 +1,10 @@
 import { restFetch } from './restFetch'
 
 // Comprehensive dashboard search over quotes: quote numbers, accounts, contacts,
-// and emails. Quote-number input is normalized so "23-123" and "23123" match the
-// same opportunity. Read-only. Each sub-query fails soft (→ []) and results are
-// merged + de-duped, so if the backend rejects a JSON-path filter the rest still
-// returns.
+// emails, and job numbers. Quote-number input is normalized so "23-123" and
+// "23123" match the same opportunity. Read-only. Each sub-query fails soft (→ [])
+// and results are merged + de-duped, so if the backend rejects a JSON-path filter
+// the rest still returns.
 
 export interface SearchQuote {
   id: string
@@ -13,6 +13,8 @@ export interface SearchQuote {
   stage: string | null
   total: number | null
   rfq: string | null
+  job_number: string | null
+  po_number: string | null
 }
 
 export interface SearchResults {
@@ -20,7 +22,7 @@ export interface SearchResults {
   accounts: string[]
 }
 
-const COLS = 'id,opportunity,customer,stage,total,rfq'
+const COLS = 'id,opportunity,customer,stage,total,rfq,job_number,po_number'
 const like = (term: string) => encodeURIComponent('*' + term + '*')
 
 /**
@@ -48,10 +50,10 @@ export async function globalSearch(term: string): Promise<SearchResults> {
   const L = like(t)
 
   const batches: Promise<SearchQuote[]>[] = [
-    // Top-level text columns — the reliable path.
-    q(`quotes?select=${COLS}&or=(opportunity.ilike.${L},customer.ilike.${L},rfq.ilike.${L})&order=updated_at.desc&limit=40`),
-    // People / email / account inside the quote data blob — fails soft.
-    q(`quotes?select=${COLS}&or=(data->qi->>email.ilike.${L},data->qi->>contact.ilike.${L},data->qi->>account.ilike.${L})&order=updated_at.desc&limit=40`),
+    // Top-level text columns — the reliable path (incl. Closed-Won job & PO numbers).
+    q(`quotes?select=${COLS}&or=(opportunity.ilike.${L},customer.ilike.${L},rfq.ilike.${L},job_number.ilike.${L},po_number.ilike.${L})&order=updated_at.desc&limit=40`),
+    // People / email / account / job & PO number inside the quote data blob — fails soft.
+    q(`quotes?select=${COLS}&or=(data->qi->>email.ilike.${L},data->qi->>contact.ilike.${L},data->qi->>account.ilike.${L},data->wonInfo->>jobNum.ilike.${L},data->wonInfo->>poNum.ilike.${L})&order=updated_at.desc&limit=40`),
   ]
   // Quote-number normalization (23123 → 23-123).
   const norm = normalizeOpp(t)
