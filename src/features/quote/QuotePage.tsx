@@ -131,8 +131,18 @@ export function QuotePage() {
         // split imported blobs to one-sentence-per-line so a manual edit is easier.
         const imported = r.source === 'salesforce'
         const cleanSpec = (t: unknown) => cleanSpecText(String(t ?? ''), imported)
+        // Notes/specs: the dedicated `notes`/`specifications` columns are canonical
+        // (shared with Classic and reliably written on save). The data.ti copies can
+        // be normalized away by the shared backend, so for non-imports the column
+        // wins and the blob is only a fallback; imports carry their text in the blob,
+        // so prefer that. This is what keeps edited notes from vanishing on reload.
+        const notesCol = String((r.notes ?? '') as string)
+        const specsCol = String((r.specifications ?? '') as string)
+        const blobNotes = String(tiData.tiNotes ?? '')
+        const blobSpecs = String(tiData.tiSpecs ?? '')
+        const pickText = (col: string, blob: string) => (imported ? (blob.trim() ? blob : col) : (col.trim() ? col : blob))
         // Strip the boilerplate paragraph from the editable notes first, then clean.
-        setTiEdit({ ...TI_DEFAULTS, ...tiData, tiSpecs: cleanSpec(tiData.tiSpecs), tiNotes: cleanSpec(cleanNotes(String(tiData.tiNotes ?? ''))) })
+        setTiEdit({ ...TI_DEFAULTS, ...tiData, tiSpecs: cleanSpec(pickText(specsCol, blobSpecs)), tiNotes: cleanSpec(cleanNotes(pickText(notesCol, blobNotes))) })
         const q = (r.data?.qi || {}) as Record<string, any>
         setQiEdit({
           ...QI_DEFAULTS,

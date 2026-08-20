@@ -18,12 +18,17 @@ export interface QuoteRow {
   source?: string | null
   updated_at?: string | null
   created_at?: string | null
+  // Canonical free-text columns (shared with Classic). The data blob also carries
+  // copies under data.ti, but the columns are the source of truth on load — the
+  // shared backend can normalize the blob copies away.
+  notes?: string | null
+  specifications?: string | null
   data?: QuoteData
 }
 
 const LIST_COLS = 'id,opportunity,customer,revision,stage,total,updated_at'
 const FULL_COLS =
-  'id,opportunity,customer,rfq,revision,stage,total,approval_status,won_approval_status,source,updated_at,created_at,data'
+  'id,opportunity,customer,rfq,revision,stage,total,approval_status,won_approval_status,source,updated_at,created_at,notes,specifications,data'
 
 /** Most recently updated quotes (for the dashboard list). */
 export async function fetchRecentQuotes(limit = 15): Promise<QuoteRow[]> {
