@@ -44,6 +44,8 @@ const EVENT_META: Record<string, { label: string; tone: string }> = {
   submitted_won: { label: 'Submitted Closed-Won', tone: 'var(--info)' },
   won_approved: { label: 'Won approved', tone: 'var(--pos)' },
   won_rejected: { label: 'Won rejected', tone: 'var(--accent)' },
+  reopen_requested: { label: 'Reopen requested', tone: 'var(--info)' },
+  reopened: { label: 'Reopened for editing', tone: 'var(--warn)' },
 }
 const stamp = (iso: string) => {
   try {
@@ -89,10 +91,12 @@ export function ApprovalBar({
   needsReapproval,
   locked,
   stage,
+  reopenRequested,
   onSubmit,
   onApprove,
   onReject,
   onUnlock,
+  onRequestReopen,
   onSubmitWon,
   onWonApprove,
   onWonReject,
@@ -106,16 +110,21 @@ export function ApprovalBar({
   needsReapproval?: boolean
   locked: boolean
   stage: string
+  // A reopen request is already pending an approver's decision for this quote.
+  reopenRequested?: boolean
   onSubmit: () => void
   onApprove: (comments: string) => void
   onReject: (comments: string) => void
   onUnlock: () => void
+  onRequestReopen?: (reason: string) => void
   onSubmitWon: () => void
   onWonApprove: (comments: string) => void
   onWonReject: (comments: string) => void
 }) {
   const [comments, setComments] = useState('')
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [reopenOpen, setReopenOpen] = useState(false)
+  const [reopenReason, setReopenReason] = useState('')
 
   const allHistory = [...(approval.history || []), ...(wonApproval.history || [])].sort((a, b) => String(a.at).localeCompare(String(b.at)))
 
@@ -127,6 +136,7 @@ export function ApprovalBar({
   const wBadge = WON_BADGE[wStatus]
 
   const canSubmit = aStatus === 'none' || aStatus === 'rejected' || (aStatus === 'approved' && !locked) || !!needsReapproval
+  const canRequestReopen = !isApprover && aStatus === 'approved' && locked && !needsReapproval && !reopenRequested && !!onRequestReopen
   const pendingApprovalMine = aStatus === 'pending'
   const pendingWon = wStatus === 'pending_won'
   const canSubmitWon = stage === 'Closed Won' && wStatus === 'none'
@@ -148,6 +158,7 @@ export function ApprovalBar({
           {allHistory.length > 0 && <Button variant="ghost" small onClick={() => setHistoryOpen(true)}>History</Button>}
           {canSubmit && <Button small onClick={onSubmit}>{aStatus === 'approved' && !needsReapproval ? 'Re-submit for approval' : 'Submit for approval'}</Button>}
           {canSubmitWon && <Button small onClick={onSubmitWon}>Submit Closed-Won</Button>}
+          {canRequestReopen && <Button variant="secondary" small onClick={() => { setReopenReason(''); setReopenOpen(true) }}>Request reopen</Button>}
           {isApprover && locked && <Button variant="secondary" small onClick={onUnlock}>Reopen to edit</Button>}
         </div>
       </div>
@@ -174,7 +185,11 @@ export function ApprovalBar({
       {/* Approved-and-locked note (imports land here too). Approvers instead see
           the Reopen button above, so only show this to non-approvers. */}
       {aStatus === 'approved' && locked && !isApprover && !needsReapproval && (
-        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>Approved and locked{isSalesforce ? ' (imported from Salesforce)' : ''}. An approver can reopen it to edit.</div>
+        <div style={{ fontSize: 'var(--fs-sm)', color: reopenRequested ? 'var(--info)' : 'var(--muted)', marginTop: 'var(--sp-2)' }}>
+          {reopenRequested
+            ? 'Reopen requested — an approver will review it and unlock the quote.'
+            : `Approved and locked${isSalesforce ? ' (imported from Salesforce)' : ''}. Use “Request reopen” to ask an approver to unlock it for editing.`}
+        </div>
       )}
 
       {/* Approver decision panel — regular quote */}
@@ -210,6 +225,17 @@ export function ApprovalBar({
       {!WRITES_ENABLED && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', marginTop: 'var(--sp-3)', fontStyle: 'italic' }}>Preview — writes are off, so approval actions won’t persist yet.</div>}
 
       {historyOpen && <ApprovalHistory events={allHistory} onClose={() => setHistoryOpen(false)} />}
+
+      {reopenOpen && (
+        <Modal title="Request reopen" onClose={() => setReopenOpen(false)} width={460}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>This asks an approver to unlock the quote so it can be edited. Add a reason (optional) — they'll see it on their dashboard.</div>
+          <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={3} placeholder="Why does this need to reopen?" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+            <Button variant="ghost" small onClick={() => setReopenOpen(false)}>Cancel</Button>
+            <Button small onClick={() => { onRequestReopen?.(reopenReason.trim()); setReopenOpen(false) }}>Send request</Button>
+          </div>
+        </Modal>
+      )}
     </Card>
   )
 }

@@ -4,7 +4,7 @@ import { Card, CardLabel, Button, Modal, menuItemStyle, useToast } from '../../c
 import { WRITES_ENABLED } from '../../lib/config'
 import { serializeQuote, saveQuote, type QuoteSaveModel } from '../../lib/quoteSave'
 import { isRevisionChange, oppChangeInfo, resetApprovalForNewRevision } from '../../lib/quoteGuards'
-import { persistApproval, persistWonApproval } from '../../lib/approvals'
+import { persistApproval, persistWonApproval, requestReopen } from '../../lib/approvals'
 import { fetchQuoteByKey, type QuoteRow } from '../../lib/quotes'
 import { lineItemsFromData } from '../../data/quoteModel'
 import { TI_DEFAULTS, QI_DEFAULTS, SETUP_FORM_DEFAULTS, STAGE_OPTS, type RelatedContact, type BudgetRow, type LineItem } from '../../data/quoteDefaults'
@@ -79,6 +79,7 @@ export function QuotePage() {
   const [approval, setApproval] = useState<ApprovalState>({ status: 'none', history: [] })
   const [wonApproval, setWonApproval] = useState<ApprovalState>({ status: 'none', history: [] })
   const [locked, setLocked] = useState(false)
+  const [reopenRequested, setReopenRequested] = useState(false)
   const [isApprover, setIsApprover] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   // Set when a save detects a revision-letter change — the modal asks new vs overwrite.
@@ -112,6 +113,7 @@ export function QuotePage() {
       setLoadedJobNum('')
       setWorkspaceProjectId(null)
       setLocked(false)
+      setReopenRequested(false)
       setEditing(true)
       setState('ok')
       return () => { alive = false }
@@ -160,6 +162,7 @@ export function QuotePage() {
         // Hard-lock while mid-approval or already approved (imports included).
         // An approver reopens to edit.
         setLocked(aStatus === 'pending' || aStatus === 'approved' || wStatus === 'pending_won')
+        setReopenRequested(((r.data?.reopenRequest as { status?: string } | undefined)?.status) === 'requested')
         setState('ok')
       })
       .catch((e) => {
@@ -193,13 +196,13 @@ export function QuotePage() {
   const now = () => new Date().toISOString()
   const hist = (a: ApprovalState, event: string, comments: string) => [...(a.history || []), { event, by: me, at: now(), comments }]
 
-  const applyApproval = async (next: ApprovalState, lock: boolean, label: string) => {
+  const applyApproval = async (next: ApprovalState, lock: boolean, label: string, extraData?: Record<string, unknown>) => {
     setApproval(next)
     setLocked(lock)
-    setRow((prev) => (prev ? { ...prev, approval_status: next.status, data: { ...(prev.data || {}), approval: next } as typeof prev.data } : prev))
+    setRow((prev) => (prev ? { ...prev, approval_status: next.status, data: { ...(prev.data || {}), ...(extraData || {}), approval: next } as typeof prev.data } : prev))
     if (!WRITES_ENABLED) { showToast(`${label} (preview)`, 'info'); return }
     if (!row) return
-    try { await persistApproval(row.id, next, (row.data || {}) as Record<string, unknown>); showToast(label, 'success') } catch (e) { showToast('Approval save failed: ' + errMsg(e), 'error', 6000) }
+    try { await persistApproval(row.id, next, { ...((row.data || {}) as Record<string, unknown>), ...(extraData || {}) }); showToast(label, 'success') } catch (e) { showToast('Approval save failed: ' + errMsg(e), 'error', 6000) }
   }
   const applyWon = async (next: ApprovalState, lock: boolean, label: string) => {
     setWonApproval(next)
@@ -217,7 +220,30 @@ export function QuotePage() {
   // approval resets to none, so it stays unlocked for whoever opens it next (a
   // teammate) and won't lock again until it's re-submitted and re-approved. It
   // also drops out of Ready-to-Send until re-approved.
-  const unlockQuote = () => applyApproval({ ...approval, status: 'none', submittedBy: '', submittedAt: '', decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'reopened', '') }, false, 'Reopened for editing — needs re-approval')
+  const unlockQuote = () => {
+    // Reopening also clears any pending reopen request so it drops off the manager's queue.
+    const existingReq = (row?.data?.reopenRequest || null) as Record<string, unknown> | null
+    const clearedReq = existingReq ? { ...existingReq, status: 'cleared', resolvedBy: me, resolvedAt: now(), resolution: 'unlocked' } : null
+    if (reopenRequested) setReopenRequested(false)
+    applyApproval(
+      { ...approval, status: 'none', submittedBy: '', submittedAt: '', decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'reopened', '') },
+      false,
+      'Reopened for editing — needs re-approval',
+      clearedReq ? { reopenRequest: clearedReq } : undefined,
+    )
+  }
+  // A teammate (non-approver) asks an approver to unlock this approved quote. It
+  // stays approved/locked until an approver acts; the request surfaces on their
+  // dashboard "Needs your attention".
+  const requestReopenNow = async (reason: string) => {
+    const at = now()
+    const rr = { status: 'requested', requestedBy: me, requestedAt: at, reason: reason || '' }
+    setReopenRequested(true)
+    setRow((prev) => (prev ? { ...prev, data: { ...(prev.data || {}), reopenRequest: rr } as typeof prev.data } : prev))
+    if (!WRITES_ENABLED) { showToast('Reopen requested (preview)', 'info'); return }
+    if (!row) return
+    try { await requestReopen(row.id, me, reason); showToast('Reopen requested — your manager will review', 'success') } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
+  }
   const submitWon = () => applyWon({ status: 'pending_won', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(wonApproval, 'submitted_won', '') }, true, 'Submitted Closed-Won')
   const approveWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_approved', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_approved', comments) }, locked, 'Closed-Won approved')
   const rejectWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_rejected', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_rejected', comments) }, false, 'Closed-Won rejected')
@@ -660,10 +686,12 @@ export function QuotePage() {
                 needsReapproval={reapprovalNeeded}
                 locked={locked}
                 stage={s(qi.stage) || row.stage || ''}
+                reopenRequested={reopenRequested}
                 onSubmit={submitApproval}
                 onApprove={approveQuote}
                 onReject={rejectQuote}
                 onUnlock={unlockQuote}
+                onRequestReopen={requestReopenNow}
                 onSubmitWon={submitWon}
                 onWonApprove={approveWon}
                 onWonReject={rejectWon}

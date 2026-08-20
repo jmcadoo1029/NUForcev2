@@ -7,7 +7,7 @@ import { prettifyEmail } from '../../lib/text'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fetchIsApprover } from '../../lib/perms'
-import { decideApproval, decideWon } from '../../lib/approvals'
+import { decideApproval, decideWon, resolveReopen } from '../../lib/approvals'
 import { useApprovalQueue, type ApprovalRow } from './useApprovalQueue'
 
 // "Needs your attention" — the pending-approval queues. This is where approvers
@@ -51,6 +51,39 @@ function Section({ title, rows, tone, isApprover, onDecide }: { title: string; r
   )
 }
 
+function ReopenSection({ rows, isApprover, busyId, onResolve }: { rows: ApprovalRow[]; isApprover: boolean; busyId: string; onResolve: (row: ApprovalRow, action: 'unlock' | 'dismiss') => void }) {
+  if (rows.length === 0) return null
+  const actBtn = (bg: string, border: string, color: string): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.02em', padding: '4px 11px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${border}`, background: bg, color, flexShrink: 0 })
+  return (
+    <div style={{ marginBottom: 'var(--sp-4)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--sp-2)' }}>
+        <span style={{ minWidth: 26, height: 26, borderRadius: 7, background: 'var(--info)', color: '#fff', fontWeight: 800, fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{rows.length}</span>
+        <span style={{ fontWeight: 600 }}>Reopen requests</span>
+      </div>
+      <div>
+        {rows.slice(0, 8).map((r) => {
+          const busy = busyId === r.id
+          return (
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 0 8px 36px', borderBottom: '1px solid var(--border)' }}>
+              <Link to={`/quote/${r.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', flex: 1, minWidth: 0, textDecoration: 'none', color: 'var(--text)' }}>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.opportunity}</span>
+                <span style={{ flex: 1, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer}{r.submittedBy ? ` · ${prettifyEmail(r.submittedBy)}` : ''}{r.reason ? ` — “${r.reason}”` : ''}</span>
+              </Link>
+              {isApprover && (
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button disabled={busy} onClick={() => onResolve(r, 'unlock')} style={{ ...actBtn('var(--pos)', 'var(--pos)', '#fff'), opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>{busy ? '…' : 'Unlock'}</button>
+                  <button disabled={busy} onClick={() => onResolve(r, 'dismiss')} style={{ ...actBtn('#fff', 'var(--border-strong)', 'var(--muted)'), opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>Dismiss</button>
+                </div>
+              )}
+            </div>
+          )
+        })}
+        {rows.length > 8 && <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 36, marginTop: 6 }}>+{rows.length - 8} more</div>}
+      </div>
+    </div>
+  )
+}
+
 export function ApprovalsCard() {
   const { data, err } = useApprovalQueue()
   const { showToast } = useToast()
@@ -59,13 +92,33 @@ export function ApprovalsCard() {
   const [target, setTarget] = useState<Target | null>(null)
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
+  const [reopenBusyId, setReopenBusyId] = useState('')
   const me = getSessionEmail() || ''
 
   useEffect(() => { let alive = true; fetchIsApprover().then((v) => alive && setIsApprover(v)); return () => { alive = false } }, [])
 
   const quoteRows = (data?.quote || []).filter((r) => !decidedIds.has(r.id))
   const wonRows = (data?.won || []).filter((r) => !decidedIds.has(r.id))
+  const reopenRows = (data?.reopen || []).filter((r) => !decidedIds.has(r.id))
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+  const resolveReopenNow = async (row: ApprovalRow, action: 'unlock' | 'dismiss') => {
+    if (reopenBusyId) return
+    setReopenBusyId(row.id)
+    try {
+      if (!WRITES_ENABLED) {
+        showToast(`${row.opportunity} ${action === 'unlock' ? 'unlocked' : 'request dismissed'} (preview)`, 'info')
+      } else {
+        await resolveReopen(row.id, action, me)
+        showToast(`${row.opportunity} ${action === 'unlock' ? 'reopened for editing' : 'reopen request dismissed'}`, 'success')
+      }
+      setDecidedIds((s) => new Set(s).add(row.id))
+    } catch (e) {
+      showToast('Reopen action failed: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setReopenBusyId('')
+    }
+  }
 
   const confirmDecision = async () => {
     if (!target || busy) return
@@ -90,7 +143,7 @@ export function ApprovalsCard() {
     }
   }
 
-  if (!err && data && quoteRows.length + wonRows.length === 0) {
+  if (!err && data && quoteRows.length + wonRows.length + reopenRows.length === 0) {
     return (
       <Card style={{ marginBottom: 'var(--sp-4)', display: 'flex', alignItems: 'center', gap: 10, padding: '13px var(--sp-5)' }}>
         <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pos)', flexShrink: 0 }} />
@@ -108,6 +161,7 @@ export function ApprovalsCard() {
         <>
           <Section title="Quote approvals pending" rows={quoteRows} tone="var(--accent)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'quote', decision }) }} />
           <Section title="Won approvals pending" rows={wonRows} tone="var(--info)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'won', decision }) }} />
+          <ReopenSection rows={reopenRows} isApprover={isApprover} busyId={reopenBusyId} onResolve={resolveReopenNow} />
         </>
       )}
 

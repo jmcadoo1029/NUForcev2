@@ -13,6 +13,7 @@ export interface ApprovalRow {
   customer: string | null
   total: number | null
   submittedBy: string | null
+  reason?: string | null
 }
 
 interface RawRow {
@@ -20,12 +21,17 @@ interface RawRow {
   opportunity?: string | null
   customer?: string | null
   total?: number | null
-  data?: { approval?: { submittedBy?: string }; wonApproval?: { submittedBy?: string } }
+  data?: {
+    approval?: { submittedBy?: string }
+    wonApproval?: { submittedBy?: string }
+    reopenRequest?: { requestedBy?: string; reason?: string }
+  }
 }
 
 export interface ApprovalQueue {
   quote: ApprovalRow[]
   won: ApprovalRow[]
+  reopen: ApprovalRow[]
 }
 
 function mapRows(rows: RawRow[], kind: 'quote' | 'won'): ApprovalRow[] {
@@ -38,13 +44,25 @@ function mapRows(rows: RawRow[], kind: 'quote' | 'won'): ApprovalRow[] {
   }))
 }
 
+function mapReopen(rows: RawRow[]): ApprovalRow[] {
+  return (rows || []).map((r) => ({
+    id: r.id,
+    opportunity: r.opportunity ?? null,
+    customer: r.customer ?? null,
+    total: r.total ?? null,
+    submittedBy: r.data?.reopenRequest?.requestedBy ?? null,
+    reason: r.data?.reopenRequest?.reason ?? null,
+  }))
+}
+
 async function load(): Promise<ApprovalQueue> {
   const cols = 'id,opportunity,customer,total,data'
-  const [q, w] = await Promise.all([
+  const [q, w, ro] = await Promise.all([
     restFetch<RawRow[]>('GET', `quotes?select=${cols}&approval_status=eq.pending&order=updated_at.desc&limit=50`),
     restFetch<RawRow[]>('GET', `quotes?select=${cols}&won_approval_status=eq.pending_won&order=updated_at.desc&limit=50`),
+    restFetch<RawRow[]>('GET', `quotes?select=${cols}&data->reopenRequest->>status=eq.requested&order=updated_at.desc&limit=50`),
   ])
-  return { quote: mapRows(q, 'quote'), won: mapRows(w, 'won') }
+  return { quote: mapRows(q, 'quote'), won: mapRows(w, 'won'), reopen: mapReopen(ro) }
 }
 
 export function useApprovalQueue() {

@@ -67,3 +67,61 @@ export async function decideWon(quoteId: string, decision: 'won_approved' | 'won
   }
   await persistWonApproval(quoteId, next, data)
 }
+
+// ── Reopen requests ────────────────────────────────────────────────────────
+// A non-approver viewing an approved+locked quote can ask an approver to reopen
+// it for editing. The request lives in data.reopenRequest (status 'requested');
+// it does NOT change approval_status, so the quote stays approved/locked until an
+// approver acts. The dashboard "Needs your attention" surfaces open requests and
+// the approver unlocks or dismisses from there. Callers gate on WRITES_ENABLED.
+
+export interface ReopenRequest {
+  status: 'requested' | 'cleared'
+  requestedBy?: string
+  requestedAt?: string
+  reason?: string
+  resolvedBy?: string
+  resolvedAt?: string
+  resolution?: 'unlocked' | 'dismissed'
+}
+
+/** A teammate asks an approver to reopen an approved+locked quote. Logs the ask
+ *  in approval history but leaves approval_status untouched (stays locked). */
+export async function requestReopen(quoteId: string, by: string, reason: string): Promise<void> {
+  const data = await loadData(quoteId)
+  const prevAp = (data.approval || {}) as ApprovalBlock
+  const at = new Date().toISOString()
+  const reopenRequest: ReopenRequest = { status: 'requested', requestedBy: by, requestedAt: at, reason: reason || '' }
+  const approval: ApprovalBlock = { ...prevAp, history: [...(prevAp.history || []), { event: 'reopen_requested', by, at, comments: reason || '' }] }
+  await patch(quoteId, { data: { ...data, approval, reopenRequest } })
+}
+
+/** Approver resolves a reopen request from the dashboard. 'unlock' reopens the
+ *  quote (approval → none, needs re-approval) and clears the request; 'dismiss'
+ *  just clears the request, leaving the quote approved/locked. */
+export async function resolveReopen(quoteId: string, action: 'unlock' | 'dismiss', by: string): Promise<void> {
+  const data = await loadData(quoteId)
+  const at = new Date().toISOString()
+  const prevReq = (data.reopenRequest || {}) as ReopenRequest
+  if (action === 'unlock') {
+    const prevAp = (data.approval || {}) as ApprovalBlock
+    const nextAp: ApprovalBlock = {
+      ...prevAp,
+      status: 'none',
+      submittedBy: '',
+      submittedAt: '',
+      decidedBy: '',
+      decidedAt: '',
+      comments: '',
+      history: [...(prevAp.history || []), { event: 'reopened', by, at, comments: '' }],
+    }
+    await patch(quoteId, {
+      approval_status: 'none',
+      submitted_by: null,
+      approved_by: null,
+      data: { ...data, approval: nextAp, reopenRequest: { ...prevReq, status: 'cleared', resolvedBy: by, resolvedAt: at, resolution: 'unlocked' } },
+    })
+  } else {
+    await patch(quoteId, { data: { ...data, reopenRequest: { ...prevReq, status: 'cleared', resolvedBy: by, resolvedAt: at, resolution: 'dismissed' } } })
+  }
+}
