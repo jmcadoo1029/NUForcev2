@@ -30,37 +30,59 @@ export function ReadyToSendCard() {
   const [target, setTarget] = useState<ReadyRow | null>(null)
   const [busy, setBusy] = useState(false)
   const [loadingId, setLoadingId] = useState<string | null>(null)
+  const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null)
   const [sendTarget, setSendTarget] = useState<SendTarget | null>(null)
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
   const rows = (data || []).filter((r) => !dismissedIds.has(r.id))
   const hide = (id: string) => setDismissedIds((cur) => new Set(cur).add(id))
 
-  // Load the quote's full data, then open the composer with the Quote PDF and
-  // contacts prefilled (To = primary contact, CC = related contacts).
+  // Load the quote's full data blob and assemble the send/PDF inputs (contacts +
+  // the exact Quote-PDF source). Shared by "Send" and the "PDF" download so both
+  // produce the same file the customer receives.
+  const loadSendInfo = async (id: string): Promise<Omit<SendTarget, 'row'>> => {
+    const res = await restFetch<Array<{ data?: Record<string, any>; revision?: string | null }>>('GET', `quotes?id=eq.${encodeURIComponent(id)}&select=data,revision&limit=1`)
+    const d = res?.[0]?.data || {}
+    const qi = (d.qi || {}) as Record<string, any>
+    const ti = (d.ti || {}) as Record<string, any>
+    const b = (d.budget || {}) as Record<string, any>
+    const lines = lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price }))
+    const cc = Array.isArray(qi.relatedContacts) ? qi.relatedContacts.map((rc: any) => String(rc?.email || '').trim()).filter(Boolean) : []
+    return {
+      revision: res?.[0]?.revision ?? null,
+      contactName: String(qi.contact || ''),
+      contactEmail: String(qi.email || ''),
+      ccEmails: cc,
+      testItem: String(ti.item || ''),
+      pdfInput: { qi, ti, lines, budget: { on: !!b.on, rows: Array.isArray(b.rows) ? b.rows : [], markup: b.markup != null ? String(b.markup) : '25' } },
+    }
+  }
+
+  // Open the composer with the Quote PDF and contacts prefilled.
   const openSend = async (r: ReadyRow) => {
     setLoadingId(r.id)
     try {
-      const res = await restFetch<Array<{ data?: Record<string, any>; revision?: string | null }>>('GET', `quotes?id=eq.${encodeURIComponent(r.id)}&select=data,revision&limit=1`)
-      const d = res?.[0]?.data || {}
-      const qi = (d.qi || {}) as Record<string, any>
-      const ti = (d.ti || {}) as Record<string, any>
-      const b = (d.budget || {}) as Record<string, any>
-      const lines = lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price }))
-      const cc = Array.isArray(qi.relatedContacts) ? qi.relatedContacts.map((rc: any) => String(rc?.email || '').trim()).filter(Boolean) : []
-      setSendTarget({
-        row: r,
-        revision: res?.[0]?.revision ?? null,
-        contactName: String(qi.contact || ''),
-        contactEmail: String(qi.email || ''),
-        ccEmails: cc,
-        testItem: String(ti.item || ''),
-        pdfInput: { qi, ti, lines, budget: { on: !!b.on, rows: Array.isArray(b.rows) ? b.rows : [], markup: b.markup != null ? String(b.markup) : '25' } },
-      })
+      const info = await loadSendInfo(r.id)
+      setSendTarget({ row: r, ...info })
     } catch (e) {
       showToast('Couldn’t load the quote: ' + errMsg(e), 'error', 6000)
     } finally {
       setLoadingId(null)
+    }
+  }
+
+  // Download the quote PDF straight from the queue — the same file Send attaches,
+  // so she can review it and keep the hard copy on the network before sending.
+  const downloadPdf = async (r: ReadyRow) => {
+    setPdfLoadingId(r.id)
+    try {
+      const { pdfInput } = await loadSendInfo(r.id)
+      const { buildQuotePdf } = await import('../quote/pdf/buildQuotePdf')
+      await buildQuotePdf({ qi: pdfInput.qi, ti: pdfInput.ti, lines: pdfInput.lines, budget: pdfInput.budget })
+    } catch (e) {
+      showToast('Couldn’t build the PDF: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setPdfLoadingId(null)
     }
   }
 
@@ -87,6 +109,7 @@ export function ReadyToSendCard() {
   }
 
   const sendBtn: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: '1px solid var(--accent)', background: 'var(--accent)', color: '#fff', flexShrink: 0 }
+  const pdfBtn: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--muted)', flexShrink: 0 }
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
@@ -126,6 +149,7 @@ export function ReadyToSendCard() {
                 </span>
                 <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 70, textAlign: 'right' }}>{money(r.total)}</span>
               </Link>
+              <button onClick={() => downloadPdf(r)} disabled={pdfLoadingId === r.id} style={pdfBtn} title="Download the quote PDF — the same file that gets sent">{pdfLoadingId === r.id ? '…' : 'PDF'}</button>
               <button onClick={() => openSend(r)} disabled={loadingId === r.id} style={sendBtn} title="Compose and send this quote">{loadingId === r.id ? '…' : 'Send'}</button>
               <button
                 onClick={() => setTarget(r)}
