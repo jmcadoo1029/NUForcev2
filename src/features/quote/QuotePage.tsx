@@ -621,7 +621,7 @@ export function QuotePage() {
 
       {state === 'ok' && row && (
         <>
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-3)', margin: 'var(--sp-3) 0 var(--sp-5)' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-3)', margin: 'var(--sp-3) 0 var(--sp-5)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
               {editing ? (
                 <div>
@@ -632,30 +632,37 @@ export function QuotePage() {
                 <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>{s(qi.opp) || row.opportunity}</div>
               )}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-              <Button variant="ghost" small onClick={() => setRevOpen(true)}>Revisions</Button>
-              <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(false)}>{pdfBusy === 'quote' ? 'Generating…' : 'Quote PDF'}</Button>
-              {budgetEdit.rows.length > 0 && <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(true)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF'}</Button>}
-              <div style={{ position: 'relative' }}>
-                <Button variant="secondary" small onClick={() => setSpecMenuOpen((v) => !v)}>Spec Builder</Button>
-                {specMenuOpen && (
-                  <>
-                    <div onClick={() => setSpecMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                    <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
-                      <button onClick={openClassicSpec} style={menuItemStyle}>Classic Spec Builder</button>
-                      <button onClick={openSpecFromCrr} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Spec Builder from CRR</button>
-                    </div>
-                  </>
+            {/* Two rows: primary quote actions on top, tools + the Edit/Save toggle
+                below. Edit/Save is one button — Edit in view mode, Save while editing. */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)', alignItems: 'flex-end' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button variant="ghost" small onClick={() => setRevOpen(true)}>Revisions</Button>
+                {row.id && WRITES_ENABLED && <Button variant="secondary" small onClick={() => { setCloneOpp(''); setCloneOpen(true) }} title="Create a copy of this quote under a new number">Clone</Button>}
+                {row.id && <Button variant="secondary" small onClick={() => setSendOpen(true)}>Send</Button>}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(false)}>{pdfBusy === 'quote' ? 'Generating…' : 'Quote PDF'}</Button>
+                {budgetEdit.rows.length > 0 && <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(true)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF'}</Button>}
+                <div style={{ position: 'relative' }}>
+                  <Button variant="secondary" small onClick={() => setSpecMenuOpen((v) => !v)}>Spec Builder</Button>
+                  {specMenuOpen && (
+                    <>
+                      <div onClick={() => setSpecMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                        <button onClick={openClassicSpec} style={menuItemStyle}>Classic Spec Builder</button>
+                        <button onClick={openSpecFromCrr} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Spec Builder from CRR</button>
+                      </div>
+                    </>
+                  )}
+                </div>
+                {editing ? (
+                  <Button variant="primary" small disabled={saveBusy} onClick={onSave}>{saveBusy ? 'Saving…' : 'Save'}</Button>
+                ) : !locked ? (
+                  <Button variant="secondary" small onClick={() => setEditing(true)}>Edit</Button>
+                ) : (
+                  <Button variant="secondary" small disabled title={approval.status === 'pending' ? 'Locked while pending approval' : approval.status === 'approved' ? (isSalesforce ? 'Imported (approved) — an approver can reopen to edit' : 'Approved — an approver can reopen to edit') : 'Locked'}>Locked</Button>
                 )}
               </div>
-              {WRITES_ENABLED && !locked && <Button variant="primary" small disabled={saveBusy} onClick={onSave}>{saveBusy ? 'Saving…' : 'Save'}</Button>}
-              {row.id && <Button variant="secondary" small onClick={() => setSendOpen(true)}>Send</Button>}
-              {row.id && WRITES_ENABLED && <Button variant="secondary" small onClick={() => { setCloneOpp(''); setCloneOpen(true) }} title="Create a copy of this quote under a new number">Clone</Button>}
-              {editing || !locked ? (
-                <Button variant="secondary" small onClick={() => setEditing((e) => !e)}>{editing ? 'Done editing' : 'Edit'}</Button>
-              ) : (
-                <Button variant="secondary" small disabled title={approval.status === 'pending' ? 'Locked while pending approval' : approval.status === 'approved' ? (isSalesforce ? 'Imported (approved) — an approver can reopen to edit' : 'Approved — an approver can reopen to edit') : 'Locked'}>Locked</Button>
-              )}
             </div>
           </div>
 

@@ -58,7 +58,7 @@ export function LineItemsCard({
           {needsConversion && <Button variant="primary" small onClick={onConvert}>Convert to picker</Button>}
           <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenCalc}>Pricing Calculator</Button>
           <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenPicker}>+ Add line items</Button>
-          {!editing && !locked && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{lineEditing ? 'Done' : 'Edit'}</Button>}
+          {!editing && !locked && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{lineEditing ? 'Save' : 'Edit'}</Button>}
         </div>
       </div>
 
