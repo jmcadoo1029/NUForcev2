@@ -45,7 +45,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>Dashboard</div>
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', background: 'var(--pos-soft)', border: '1px solid var(--pos-border)', borderRadius: 20, padding: '3px 10px' }}>
                 <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--pos)' }} />
-                Live · read-only
+                Live
               </span>
             </div>
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 4 }}>{subtitle}</div>
