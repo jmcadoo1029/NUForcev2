@@ -7,6 +7,8 @@ import { fetchAttachableDocuments, fetchTermsDocument, type QuoteDocument } from
 import { downloadObject } from '../../lib/storage'
 import { invokeQuoteSend, filesToAttachments, logSentFiles, type OutgoingFile, type SendKind, type QuoteSendResult } from '../../lib/sendQuote'
 import { markQuoteSent, rescheduleFollowUp } from '../../lib/followups'
+import { appendChatter } from '../../lib/quoteActions'
+import { getSessionEmail } from '../../lib/auth'
 import type { PdfLine, PdfBudget } from './pdf/buildQuotePdf'
 
 // The send composer — one modal for both quote sends and follow-up nudges.
@@ -201,6 +203,16 @@ export function SendComposer(props: SendComposerProps) {
         await rescheduleFollowUp(followUpId, me)
       }
       await logSentFiles({ quoteId: qid, followUpId: followUpRowId, revision: revision || null, sentBy: me, files: logFiles })
+
+      // Auto-log the send to the quote's chatter as an activity note (best-effort —
+      // never fail the send over a chatter write).
+      try {
+        const ccList = recipients(cc)
+        const note = (mode === 'quote' ? 'Quote emailed to ' : 'Follow-up email sent to ')
+          + toList.join(', ')
+          + (ccList.length ? ` (cc ${ccList.join(', ')})` : '')
+        await appendChatter(qid, { by: getSessionEmail() || me || 'system', at: new Date().toISOString(), msg: note })
+      } catch { /* chatter note is best-effort */ }
 
       showToast(mode === 'quote' ? 'Quote sent — marked sent, follow-up set for 30 days' : 'Follow-up sent — next reminder in 90 days', 'success', 5000)
       onSent?.(result)
