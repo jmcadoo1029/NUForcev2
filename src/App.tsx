@@ -7,14 +7,29 @@ import { fetchProductOverrides } from './lib/productOverrides'
 import { DevAuthGate } from './features/auth/DevAuthGate'
 import { DashboardShell } from './features/dashboard/DashboardShell'
 import { DashboardHome } from './features/dashboard/DashboardHome'
+import { useIsApprover } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 
-// App shell: routing/layout only, kept thin. The two dashboard views share a
-// frame (DashboardShell) and each have their own URL, so the Manager/My Work
-// switch is real navigation. DevAuthGate ensures a read-only session first.
+// The Manager dashboard is for approvers/managers only. Non-managers who land on
+// "/" are sent to their own worklist. While the role resolves we render nothing
+// (rather than flashing the Manager view to a non-manager).
+function ManagerHome() {
+  const { isApprover, loading } = useIsApprover()
+  if (loading) return null
+  if (!isApprover) return <Navigate to="/my-work" replace />
+  return (
+    <DashboardShell>
+      <DashboardHome />
+    </DashboardShell>
+  )
+}
+
+// App shell: routing/layout only, kept thin. The dashboard views share a frame
+// (DashboardShell) and each have their own URL, so the Manager/My Work switch is
+// real navigation. DevAuthGate ensures a session first.
 export default function App() {
   // Load manager catalog overrides once at startup into the module cache, then
   // bump state so the tree re-renders with the merged catalog.
@@ -30,14 +45,7 @@ export default function App() {
       <AppHeader />
       <DevAuthGate>
         <Routes>
-        <Route
-          path="/"
-          element={
-            <DashboardShell>
-              <DashboardHome />
-            </DashboardShell>
-          }
-        />
+        <Route path="/" element={<ManagerHome />} />
         <Route
           path="/my-work"
           element={
