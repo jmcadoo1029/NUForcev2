@@ -29,7 +29,8 @@ import { TestItemCard } from './form/TestItemCard'
 import { SpecsNotes } from './form/SpecsNotes'
 import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
-import { fetchIsApprover } from '../../lib/perms'
+import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
+import { notifyQuoteSubmitted, notifyQuoteApproved, fetchPendingSubmitterIds } from '../../lib/notify'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -233,8 +234,28 @@ export function QuotePage() {
     try { await persistWonApproval(row.id, next, { ...((row.data || {}) as Record<string, unknown>), ...extra }); showToast(label, 'success') } catch (e) { showToast('Won-approval save failed: ' + errMsg(e), 'error', 6000) }
   }
 
-  const submitApproval = () => applyApproval({ status: 'pending', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'submitted', '') }, true, 'Submitted for approval')
-  const approveQuote = (comments: string) => applyApproval({ ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }, true, 'Quote approved')
+  const submitApproval = async () => {
+    const empId = await fetchMyEmployeeId()
+    await applyApproval({ status: 'pending', submittedBy: me, submittedById: empId || '', submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'submitted', '') }, true, 'Submitted for approval')
+    // Notify approvers (best-effort). Payload is the pending queue's submitter ids
+    // so the email can show queue depth; the function resolves recipients.
+    if (!WRITES_ENABLED) return
+    const others = await fetchPendingSubmitterIds()
+    const ids = Array.from(new Set([...others, ...(empId ? [empId] : [])].filter(Boolean)))
+    notifyQuoteSubmitted(ids.map((id) => ({ submittedById: id })))
+  }
+  const approveQuote = async (comments: string) => {
+    await applyApproval({ ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }, true, 'Quote approved')
+    // Event 2: tell the send-group it's approved and ready to send (best-effort).
+    if (!WRITES_ENABLED) return
+    notifyQuoteApproved({
+      opportunity: s(qi.opp) || row?.opportunity || '',
+      customer: s(qi.account) || row?.customer || '',
+      total: money(lineItems.reduce((a, l) => a + (l.price || 0), 0)),
+      approverName: prettifyEmail(me),
+      submitterName: prettifyEmail(approval.submittedBy || ''),
+    })
+  }
   const rejectQuote = (comments: string) => applyApproval({ ...approval, status: 'rejected', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'rejected', comments) }, false, 'Quote rejected')
   // Unlock reopens an approved/pending quote for editing and PERSISTS it: the
   // approval resets to none, so it stays unlocked for whoever opens it next (a
@@ -264,7 +285,14 @@ export function QuotePage() {
     if (!row) return
     try { await requestReopen(row.id, me, reason); showToast('Reopen requested — your manager will review', 'success') } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
   }
-  const submitWon = () => applyWon({ status: 'pending_won', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(wonApproval, 'submitted_won', '') }, true, 'Submitted Closed-Won')
+  const submitWon = async () => {
+    const empId = await fetchMyEmployeeId()
+    await applyWon({ status: 'pending_won', submittedBy: me, submittedById: empId || '', submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(wonApproval, 'submitted_won', '') }, true, 'Submitted Closed-Won')
+    // Classic sent no email on won-submission; we ping approvers here too (same
+    // shared type) so a pending Closed-Won approval doesn't go unnoticed.
+    if (!WRITES_ENABLED) return
+    notifyQuoteSubmitted(empId ? [{ submittedById: empId }] : [])
+  }
   const approveWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_approved', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_approved', comments) }, locked, 'Closed-Won approved')
   const rejectWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_rejected', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_rejected', comments) }, false, 'Closed-Won rejected')
   const isSalesforce = row?.source === 'salesforce'

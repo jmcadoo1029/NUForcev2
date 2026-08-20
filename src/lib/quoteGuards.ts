@@ -7,6 +7,7 @@ export interface ApprovalHistoryEvent { event: string; by: string; at: string; c
 export interface ApprovalBlock {
   status: string
   submittedBy?: string
+  submittedById?: string
   submittedAt?: string
   decidedBy?: string
   decidedAt?: string

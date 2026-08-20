@@ -8,6 +8,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fetchIsApprover } from '../../lib/perms'
 import { decideApproval, decideWon, resolveReopen } from '../../lib/approvals'
+import { notifyQuoteApproved } from '../../lib/notify'
 import { useApprovalQueue, type ApprovalRow } from './useApprovalQueue'
 
 // "Needs your attention" — the pending-approval queues. This is where approvers
@@ -130,6 +131,16 @@ export function ApprovalsCard() {
       } else if (kind === 'quote') {
         await decideApproval(row.id, decision === 'approve' ? 'approved' : 'rejected', comment.trim(), me)
         showToast(`${row.opportunity} ${decision === 'approve' ? 'approved' : 'rejected'}`, 'success')
+        // Event 2: notify the send-group it's ready to send (best-effort; on approve only).
+        if (decision === 'approve') {
+          notifyQuoteApproved({
+            opportunity: row.opportunity || '',
+            customer: row.customer || '',
+            total: money(Number(row.total) || 0),
+            approverName: prettifyEmail(me),
+            submitterName: prettifyEmail(row.submittedBy || ''),
+          })
+        }
       } else {
         await decideWon(row.id, decision === 'approve' ? 'won_approved' : 'won_rejected', comment.trim(), me)
         showToast(`${row.opportunity} Closed-Won ${decision === 'approve' ? 'approved' : 'rejected'}`, 'success')

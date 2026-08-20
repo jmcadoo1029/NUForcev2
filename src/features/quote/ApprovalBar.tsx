@@ -13,6 +13,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 export interface ApprovalState {
   status: string
   submittedBy?: string
+  submittedById?: string
   submittedAt?: string
   decidedBy?: string
   decidedAt?: string

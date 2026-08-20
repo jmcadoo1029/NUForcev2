@@ -9,6 +9,23 @@ import { getSessionEmail } from './auth'
 // session so repeated checks (dashboard shell + route guard) don't re-query.
 
 let _approverCache: boolean | null = null
+let _empIdCache: string | null | undefined = undefined
+
+/** The current user's Workspace employees.id (used as the submitter id in approval
+ *  notifications). Cached for the session; null if no employee row matches. */
+export async function fetchMyEmployeeId(): Promise<string | null> {
+  if (_empIdCache !== undefined) return _empIdCache
+  const email = getSessionEmail()
+  if (!email) return null
+  const safe = encodeURIComponent(email)
+  try {
+    const emps = await restFetch<{ id: string }[]>('GET', `employees?select=id&or=(email.eq.${safe},personal_email.eq.${safe})&limit=1`)
+    _empIdCache = emps?.[0]?.id ?? null
+    return _empIdCache
+  } catch {
+    return null // don't cache transient failures
+  }
+}
 
 export async function fetchIsApprover(): Promise<boolean> {
   if (_approverCache !== null) return _approverCache
