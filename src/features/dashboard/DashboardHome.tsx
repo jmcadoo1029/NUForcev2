@@ -1,15 +1,13 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Card, CardLabel, StatTile } from '../../components'
 import { money, moneyShort } from '../../lib/format'
 import { useDashboardMetrics } from './useDashboardMetrics'
-import { useQuotesThisMonth } from './useQuotesThisMonth'
 import { ThreeMonthWidgets } from './ThreeMonthWidgets'
 import { ApprovalsCard } from './ApprovalsCard'
 import { TrendChart } from './TrendChart'
 import { ProductCodeDeepDive } from './ProductCodeDeepDive'
 import { WonBreakdown } from './WonBreakdown'
 import { YtdMetrics } from './YtdMetrics'
+import { ActiveQuotesCard } from './ActiveQuotesCard'
 
 // Manager view content (the top bar/frame lives in DashboardShell). The sales
 // cockpit: action items, KPI tiles, Closed-Won, quotes created this month, and
@@ -21,8 +19,6 @@ const MONTHLY_WON_TARGET = 175000
 
 export function DashboardHome() {
   const { data: m, err: mErr } = useDashboardMetrics()
-  const { data: created, err: cErr } = useQuotesThisMonth()
-  const [qFilter, setQFilter] = useState<'all' | 'new' | 'revision'>('all')
 
   const dash = (v: string) => (m ? v : mErr ? '—' : '…')
 
@@ -71,47 +67,7 @@ export function DashboardHome() {
           )}
         </Card>
 
-        <Card>
-          <CardLabel>Active quotes this month{created && created.length > 0 ? ` · ${created.length}` : ''}</CardLabel>
-          {cErr && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {cErr}</div>}
-          {!cErr && created == null && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Loading…</div>}
-          {!cErr && created != null && created.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>None this month.</div>}
-          {!cErr && created != null && created.length > 0 && (() => {
-            const counts = { all: created.length, new: created.filter((q) => q.bucket === 'new').length, revision: created.filter((q) => q.bucket === 'revision').length }
-            const visible = qFilter === 'all' ? created : created.filter((q) => q.bucket === qFilter)
-            const total = visible.reduce((a, q) => a + (Number(q.total) || 0), 0)
-            const pill = (key: 'new' | 'revision' | 'all', label: string) => (
-              <button key={key} onClick={() => setQFilter(key)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '4px 11px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (qFilter === key ? 'var(--accent)' : 'var(--border-strong)'), background: qFilter === key ? 'var(--accent-soft)' : '#fff', color: qFilter === key ? 'var(--accent)' : 'var(--muted)' }}>
-                {label} {counts[key]}
-              </button>
-            )
-            return (
-              <>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 'var(--sp-3)' }}>
-                  {pill('new', 'New')}
-                  {pill('revision', 'Revisions')}
-                  {pill('all', 'All')}
-                </div>
-                <div style={{ height: 280, overflowY: 'auto' }}>
-                  {visible.map((q) => (
-                    <Link key={q.id} to={`/quote/${encodeURIComponent(q.opportunity || String(q.id))}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 'var(--sp-3)', padding: '10px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
-                      <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity}</span>
-                      <span style={{ color: 'var(--muted)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.customer}</span>
-                      <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{money(Number(q.total) || 0)}</span>
-                    </Link>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', paddingTop: 'var(--sp-3)', marginTop: 'var(--sp-2)', borderTop: '2px solid var(--border)' }}>
-                  <span style={{ fontWeight: 700 }}>{visible.length} quote{visible.length !== 1 ? 's' : ''}</span>
-                  <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    <span style={{ fontWeight: 700 }}>Total {money(total)}</span>
-                    {qFilter === 'all' && m && <span style={{ color: 'var(--muted)', marginLeft: 12 }}>Net {money(m.quotedTotal)}</span>}
-                  </span>
-                </div>
-              </>
-            )
-          })()}
-        </Card>
+        <ActiveQuotesCard netTotal={m?.quotedTotal} />
       </div>
 
       <YtdMetrics />

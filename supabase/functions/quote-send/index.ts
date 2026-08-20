@@ -40,6 +40,7 @@ interface SendReq {
   opportunity?: string
   to: string[]
   cc?: string[]
+  bcc?: string[]
   subject: string
   body: string
   fromName?: string
@@ -84,6 +85,7 @@ serve(async (req: Request) => {
   }
   const to = (payload.to || []).map(str).filter(Boolean)
   const cc = (payload.cc || []).map(str).filter(Boolean)
+  const bcc = (payload.bcc || []).map(str).filter(Boolean)
   if (!to.length) return json(400, { ok: false, error: 'At least one recipient is required.' })
   if (!str(payload.subject)) return json(400, { ok: false, error: 'Subject is required.' })
   if (!str(payload.quoteId)) return json(400, { ok: false, error: 'quoteId is required.' })
@@ -138,6 +140,7 @@ serve(async (req: Request) => {
         from: `${fromName} <${fromEmail}>`,
         to,
         ...(cc.length ? { cc } : {}),
+        ...(bcc.length ? { bcc } : {}),
         reply_to: replyTo,
         subject: payload.subject,
         text: payload.body || '',

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Modal, useToast } from '../../components'
-import { WRITES_ENABLED } from '../../lib/config'
+import { WRITES_ENABLED, DEFAULT_QUOTE_BCC } from '../../lib/config'
 import { fetchSelf } from '../../lib/me'
 import { fetchTemplate, fillTemplate, type TemplateKey, type TemplateVars } from '../../lib/emailTemplates'
 import { fetchAttachableDocuments, fetchTermsDocument, type QuoteDocument } from '../../lib/quoteDocs'
@@ -64,6 +64,8 @@ export function SendComposer(props: SendComposerProps) {
   const [to, setTo] = useState(contactEmail || '')
   // Related contacts are CC'd on a quote send; a follow-up goes to the primary only.
   const [cc, setCc] = useState(mode === 'quote' ? (ccEmails || []).filter(Boolean).join(', ') : '')
+  // Quote sends default to BCC'ing NU (editable/removable per send); follow-ups don't.
+  const [bcc, setBcc] = useState(mode === 'quote' ? DEFAULT_QUOTE_BCC : '')
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [rawTemplate, setRawTemplate] = useState<{ subject: string; body: string }>({ subject: '', body: '' })
@@ -174,7 +176,7 @@ export function SendComposer(props: SendComposerProps) {
 
       const attachments = await filesToAttachments(files)
       const result = await invokeQuoteSend({
-        kind: mode, quoteId: qid, opportunity, to: toList, cc: recipients(cc),
+        kind: mode, quoteId: qid, opportunity, to: toList, cc: recipients(cc), bcc: recipients(bcc),
         subject, body, fromName: senderName, attachments,
       })
 
@@ -226,6 +228,10 @@ export function SendComposer(props: SendComposerProps) {
               <label style={labelStyle}>Cc</label>
               <input value={cc} onChange={(e) => setCc(e.target.value)} placeholder="optional, comma-separated" style={inputStyle} />
             </div>
+          </div>
+          <div style={{ marginTop: 'var(--sp-2)' }}>
+            <label style={labelStyle}>Bcc</label>
+            <input value={bcc} onChange={(e) => setBcc(e.target.value)} placeholder="optional, comma-separated" style={inputStyle} />
           </div>
 
           <div>

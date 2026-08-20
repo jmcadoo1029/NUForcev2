@@ -213,7 +213,11 @@ export function QuotePage() {
   const submitApproval = () => applyApproval({ status: 'pending', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'submitted', '') }, true, 'Submitted for approval')
   const approveQuote = (comments: string) => applyApproval({ ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }, true, 'Quote approved')
   const rejectQuote = (comments: string) => applyApproval({ ...approval, status: 'rejected', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'rejected', comments) }, false, 'Quote rejected')
-  const unlockQuote = () => setLocked(false)
+  // Unlock reopens an approved/pending quote for editing and PERSISTS it: the
+  // approval resets to none, so it stays unlocked for whoever opens it next (a
+  // teammate) and won't lock again until it's re-submitted and re-approved. It
+  // also drops out of Ready-to-Send until re-approved.
+  const unlockQuote = () => applyApproval({ ...approval, status: 'none', submittedBy: '', submittedAt: '', decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'reopened', '') }, false, 'Reopened for editing — needs re-approval')
   const submitWon = () => applyWon({ status: 'pending_won', submittedBy: me, submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(wonApproval, 'submitted_won', '') }, true, 'Submitted Closed-Won')
   const approveWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_approved', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_approved', comments) }, locked, 'Closed-Won approved')
   const rejectWon = (comments: string) => applyWon({ ...wonApproval, status: 'won_rejected', decidedBy: me, decidedAt: now(), comments, history: hist(wonApproval, 'won_rejected', comments) }, false, 'Closed-Won rejected')

@@ -11,6 +11,9 @@ export const FN_BASE = `${SUPABASE_URL}/functions/v1`
 export const REST_APIKEY = 'sb_publishable_bmrPY65INpUkea8VUX1Wag_T7Vrz9ZZ'
 
 export const WORKSPACE_URL = 'https://workspace.nulabs.com'
+// Default BCC on quote sends — pre-fills the composer's BCC field, but the sender
+// can edit or clear it per send. Change here to update the default for everyone.
+export const DEFAULT_QUOTE_BCC = 'jordanmcadoo@nulabs.com'
 // Classic NUForce, once V2 takes over nuforce.nulabs.com. Used for the version
 // toggle link so both can run side by side during the cutover.
 export const CLASSIC_URL = 'https://nuforceclassic.nulabs.com'

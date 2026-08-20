@@ -29,6 +29,7 @@ export interface QuoteSendRequest {
   opportunity: string
   to: string[]
   cc: string[]
+  bcc?: string[]
   subject: string
   body: string
   fromName: string
