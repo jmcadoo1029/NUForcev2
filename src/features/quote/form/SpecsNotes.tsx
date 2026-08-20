@@ -23,27 +23,29 @@ export function SpecsNotes({ editing, ti, setTi, savedNotes }: { editing: boolea
         </Card>
       )}
 
-      {(editing || notes || tiNotes) && (
-        <Card style={{ marginBottom: 'var(--sp-4)' }}>
-          <CardLabel>Notes</CardLabel>
-          {editing ? (
-            <>
-              {notes && (
-                <div style={{ marginTop: 'var(--sp-2)', marginBottom: 'var(--sp-3)', paddingBottom: 'var(--sp-3)', borderBottom: '1px solid var(--border)' }}>
-                  <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4 }}>Saved notes · read-only</div>
-                  <div style={{ whiteSpace: 'pre-wrap', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{notes}</div>
-                </div>
-              )}
-              <AutoTextarea value={s(ti.tiNotes)} onChange={(v) => setTi({ tiNotes: v })} placeholder="Notes for this quote…" style={{ ...textArea, marginTop: notes ? 0 : 'var(--sp-2)' }} />
-            </>
-          ) : (
-            <>
-              {notes && <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)', marginBottom: tiNotes ? 'var(--sp-3)' : 0 }}>{notes}</div>}
-              {tiNotes && <div style={{ whiteSpace: 'pre-wrap', color: 'var(--muted)' }}>{tiNotes}</div>}
-            </>
-          )}
-        </Card>
-      )}
+      {/* Notes card always renders (even empty, in view mode) so a new quote reads
+          the same as a loaded one — previously it disappeared when empty and not
+          editing, which hid the section on new quotes outside edit mode. */}
+      <Card style={{ marginBottom: 'var(--sp-4)' }}>
+        <CardLabel>Notes</CardLabel>
+        {editing ? (
+          <>
+            {notes && (
+              <div style={{ marginTop: 'var(--sp-2)', marginBottom: 'var(--sp-3)', paddingBottom: 'var(--sp-3)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4 }}>Saved notes · read-only</div>
+                <div style={{ whiteSpace: 'pre-wrap', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{notes}</div>
+              </div>
+            )}
+            <AutoTextarea value={s(ti.tiNotes)} onChange={(v) => setTi({ tiNotes: v })} placeholder="Notes for this quote…" style={{ ...textArea, marginTop: notes ? 0 : 'var(--sp-2)' }} />
+          </>
+        ) : (
+          <>
+            {notes && <div style={{ whiteSpace: 'pre-wrap', color: 'var(--text)', marginBottom: tiNotes ? 'var(--sp-3)' : 0 }}>{notes}</div>}
+            {tiNotes && <div style={{ whiteSpace: 'pre-wrap', color: 'var(--muted)' }}>{tiNotes}</div>}
+            {!notes && !tiNotes && <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>No notes.</div>}
+          </>
+        )}
+      </Card>
     </>
   )
 }
