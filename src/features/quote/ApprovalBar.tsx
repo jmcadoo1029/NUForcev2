@@ -162,7 +162,7 @@ export function ApprovalBar({
           {canSubmit && <Button small onClick={onSubmit}>{aStatus === 'approved' && !needsReapproval ? 'Re-submit for approval' : 'Submit for approval'}</Button>}
           {canSubmitWon && <Button small onClick={onSubmitWon}>Submit Closed-Won</Button>}
           {canRequestReopen && <Button variant="secondary" small onClick={() => { setReopenReason(''); setReopenOpen(true) }}>Request reopen</Button>}
-          {isApprover && locked && <Button variant="secondary" small onClick={onUnlock}>Reopen to edit</Button>}
+          {isApprover && locked && aStatus !== 'pending' && <Button variant="secondary" small onClick={onUnlock}>Reopen to edit</Button>}
         </div>
       </div>
 

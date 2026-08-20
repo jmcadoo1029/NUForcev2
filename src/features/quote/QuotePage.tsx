@@ -245,7 +245,25 @@ export function QuotePage() {
     notifyQuoteSubmitted(ids.map((id) => ({ submittedById: id })))
   }
   const approveQuote = async (comments: string) => {
-    await applyApproval({ ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }, true, 'Quote approved')
+    const nextApproval: ApprovalState = { ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }
+    // If the approver edited the quote in place before approving, persist the FULL
+    // quote (capturing those edits) together with the approval — no reopen/resubmit.
+    if (editing && WRITES_ENABLED && row) {
+      setApproval(nextApproval); setLocked(true); setEditing(false)
+      try {
+        const model: QuoteSaveModel = { ...buildModel(), approval: nextApproval, originalData: { ...((row.data || {}) as Record<string, any>), editUnlocked: false } }
+        const serialized = serializeQuote(model)
+        const savedId = await saveQuote(serialized, {})
+        const newId = savedId || row.id
+        setRow((prev) => (prev ? { ...prev, id: newId, approval_status: 'approved', stage: serialized.row.stage ?? prev.stage, data: serialized.row.data as typeof prev.data } : prev))
+        showToast('Quote approved', 'success')
+      } catch (e) {
+        showToast('Approve failed: ' + errMsg(e), 'error', 6000)
+        return
+      }
+    } else {
+      await applyApproval(nextApproval, true, 'Quote approved')
+    }
     // Event 2: tell the send-group it's approved and ready to send (best-effort).
     if (!WRITES_ENABLED) return
     notifyQuoteApproved({
@@ -685,7 +703,9 @@ export function QuotePage() {
                 </div>
                 {editing ? (
                   <Button variant="primary" small disabled={saveBusy} onClick={onSave}>{saveBusy ? 'Saving…' : 'Save'}</Button>
-                ) : !locked ? (
+                ) : (!locked || (isApprover && approval.status === 'pending')) ? (
+                  // Approvers can edit a pending quote in place — the edit stays
+                  // pending and Approve captures the changes, no reopen/resubmit.
                   <Button variant="secondary" small onClick={() => setEditing(true)}>Edit</Button>
                 ) : (
                   <Button variant="secondary" small disabled title={approval.status === 'pending' ? 'Locked while pending approval' : approval.status === 'approved' ? (isSalesforce ? 'Imported (approved) — an approver can reopen to edit' : 'Approved — an approver can reopen to edit') : 'Locked'}>Locked</Button>
