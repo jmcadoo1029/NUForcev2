@@ -16,14 +16,16 @@ export const gridEdit3: React.CSSProperties = { display: 'grid', gridTemplateCol
 export const gridEdit2: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }
 export const textArea: React.CSSProperties = { ...regInput, minHeight: 130, resize: 'none', overflow: 'hidden', lineHeight: 1.6 }
 
-// Classic appended this boilerplate paragraph to every quote's auto-notes. It
-// adds nothing in V2's layout (the notes already ARE the notes), so strip it.
+// Classic auto-appended this boilerplate paragraph to every IMPORTED quote's
+// notes; it adds nothing in V2's layout, so we strip it — but ONLY on imports.
+// A user who deliberately types this exact sentence keeps it (stripBoilerplate
+// defaults to false), so a real note is never silently hidden.
 const NOTES_BOILERPLATE = 'Refer to the notes section at the bottom of this quote for additional details.'
-export const cleanNotes = (text: string): string =>
+export const cleanNotes = (text: string, stripBoilerplate = false): string =>
   text
     .split(/\n\s*\n/)
     .map((p) => p.trim())
-    .filter((p) => p && p !== NOTES_BOILERPLATE)
+    .filter((p) => p && (!stripBoilerplate || p !== NOTES_BOILERPLATE))
     .join('\n\n')
 
 // A read-only labeled value; renders nothing when empty.

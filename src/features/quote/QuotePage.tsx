@@ -148,7 +148,7 @@ export function QuotePage() {
         const blobSpecs = String(tiData.tiSpecs ?? '')
         const pickText = (col: string, blob: string) => (imported ? (blob.trim() ? blob : col) : (col.trim() ? col : blob))
         // Strip the boilerplate paragraph from the editable notes first, then clean.
-        setTiEdit({ ...TI_DEFAULTS, ...tiData, tiSpecs: cleanSpec(pickText(specsCol, blobSpecs)), tiNotes: cleanSpec(cleanNotes(pickText(notesCol, blobNotes))) })
+        setTiEdit({ ...TI_DEFAULTS, ...tiData, tiSpecs: cleanSpec(pickText(specsCol, blobSpecs)), tiNotes: cleanSpec(cleanNotes(pickText(notesCol, blobNotes), imported)) })
         const q = (r.data?.qi || {}) as Record<string, any>
         setQiEdit({
           ...QI_DEFAULTS,
@@ -879,7 +879,7 @@ export function QuotePage() {
 
           <TestItemCard editing={editing} ti={ti} setTi={setTi} acct={acct} />
 
-          <SpecsNotes editing={editing} ti={ti} setTi={setTi} savedNotes={cleanSpecText(s(data.notes), isSalesforce)} />
+          <SpecsNotes editing={editing} ti={ti} setTi={setTi} savedNotes={cleanSpecText(s(data.notes), isSalesforce)} imported={isSalesforce} />
 
           <LineItemsCard
             lineItems={lineItems}

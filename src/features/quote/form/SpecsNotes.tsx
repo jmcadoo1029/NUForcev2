@@ -5,10 +5,12 @@ import { AutoTextarea, textArea, cleanNotes } from './fields'
 // Specifications + Notes cards. Specs is a single free-text field. Notes shows the
 // quote's saved auto-notes (read-only) above the editable per-quote notes. Both
 // hide when empty and not editing. `savedNotes` is the raw quote data.notes.
-export function SpecsNotes({ editing, ti, setTi, savedNotes }: { editing: boolean; ti: Record<string, any>; setTi: (patch: Record<string, any>) => void; savedNotes: string }) {
+export function SpecsNotes({ editing, ti, setTi, savedNotes, imported = false }: { editing: boolean; ti: Record<string, any>; setTi: (patch: Record<string, any>) => void; savedNotes: string; imported?: boolean }) {
   const s = str
-  const notes = cleanNotes(savedNotes)
-  const tiNotes = cleanNotes(s(ti.tiNotes))
+  // Only strip the Classic boilerplate line on imported quotes — never on notes a
+  // user typed themselves (otherwise a real note matching that line vanishes).
+  const notes = cleanNotes(savedNotes, imported)
+  const tiNotes = cleanNotes(s(ti.tiNotes), imported)
 
   return (
     <>
