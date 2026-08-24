@@ -10,6 +10,7 @@ import { DashboardHome } from './features/dashboard/DashboardHome'
 import { useCanViewManager } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
+import { Contracting } from './features/dashboard/Contracting'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 
@@ -23,6 +24,18 @@ function ManagerHome() {
   return (
     <DashboardShell>
       <DashboardHome />
+    </DashboardShell>
+  )
+}
+
+// Contracting — managers + accounting (view-only role) only; others go to My Work.
+function ContractingHome() {
+  const { canView, loading } = useCanViewManager()
+  if (loading) return null
+  if (!canView) return <Navigate to="/my-work" replace />
+  return (
+    <DashboardShell>
+      <Contracting />
     </DashboardShell>
   )
 }
@@ -62,6 +75,7 @@ export default function App() {
             </DashboardShell>
           }
         />
+        <Route path="/contracting" element={<ContractingHome />} />
         <Route path="/quote/:id" element={<QuotePage />} />
         <Route path="/account/:name" element={<AccountPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

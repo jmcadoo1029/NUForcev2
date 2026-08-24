@@ -35,8 +35,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { canView } = useCanViewManager() // Manager tab: approvers + view-only roles (Accounting)
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
-  const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : 'manager'
-  const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : monthLabel
+  const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/contracting') ? 'contracting' : 'manager'
+  const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'contracting' ? 'Close won deals and open jobs' : monthLabel
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
@@ -56,6 +56,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             {canView && <Link to="/" style={seg(view === 'manager', true)}>Manager</Link>}
             <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
+            {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>

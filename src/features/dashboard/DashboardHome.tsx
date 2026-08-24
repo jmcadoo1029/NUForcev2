@@ -35,7 +35,7 @@ export function DashboardHome() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
         <StatTile label="Quoted (net) · this month" value={dash(money(m?.quotedTotal ?? 0))} sub={dash(`${m?.quotedCount ?? 0} opportunities`)} />
         <StatTile label="Avg quote" value={dash(money(m?.avgQuote ?? 0))} sub={dash(`${m?.quotedCount ?? 0} quotes`)} />
-        <StatTile label="Capture rate" value={dash(`${m?.capturePct ?? 0}%`)} sub={dash(`${m?.wonCount ?? 0} won / ${m?.quotedCount ?? 0} quoted`)} tone="pos" />
+        <StatTile label="Capture rate" value={dash(`${m?.capturePct ?? 0}%`)} sub={dash(`${moneyShort(m?.wonTotal ?? 0)} won / ${moneyShort(m?.quotedTotal ?? 0)} net quoted`)} tone="pos" />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)', alignItems: 'start' }}>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Modal, StatTile } from '../../components'
-import { money } from '../../lib/format'
+import { money, moneyShort } from '../../lib/format'
 import { loadMonthMetrics, type DashboardMetrics } from './useDashboardMetrics'
 import { WonBreakdown } from './WonBreakdown'
 
@@ -58,7 +58,7 @@ export function MonthlySnapshot({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
             <StatTile label="Quoted (net)" value={money(data.quotedTotal)} sub={`${data.quotedCount} opportunities`} />
             <StatTile label="Avg quote" value={money(data.avgQuote)} sub={`${data.quotedCount} quotes`} />
-            <StatTile label="Capture rate" value={`${data.capturePct}%`} sub={`${data.wonCount} won / ${data.quotedCount} quoted`} tone="pos" />
+            <StatTile label="Capture rate" value={`${data.capturePct}%`} sub={`${moneyShort(data.wonTotal)} won / ${moneyShort(data.quotedTotal)} net quoted`} tone="pos" />
             <StatTile label="Closed Won" value={money(data.wonTotal)} sub={`${data.wonCount} quotes`} tone="accent" />
           </div>
           <WonBreakdown wonQuotes={data.wonQuotes} wonNewTotal={data.wonNewTotal} wonExistingTotal={data.wonExistingTotal} />

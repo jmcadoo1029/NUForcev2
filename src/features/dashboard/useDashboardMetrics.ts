@@ -193,7 +193,8 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
     wonCount: wonNet.length,
     wonNewTotal,
     wonExistingTotal,
-    capturePct: newCount ? Math.round((wonNet.length / newCount) * 100) : 0,
+    // Capture rate = dollars won this month ÷ net dollars quoted this month.
+    capturePct: netTotal > 0 ? Math.round((wonTotal / netTotal) * 100) : 0,
     wonQuotes,
   }
 }
