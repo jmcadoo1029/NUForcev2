@@ -83,6 +83,18 @@ export async function rescheduleFollowUp(fuId: string, by: string): Promise<void
 }
 
 /**
+ * Delay (snooze) a follow-up: push the reminder out by `days` from today WITHOUT
+ * recording that a follow-up happened (followed_up stays false, no followed_up_at).
+ * The row goes dormant and returns due on its own at the new date. Used by the
+ * dashboard "Delay" control (30 / 60 / 90 days).
+ */
+export async function snoozeFollowUp(fuId: string, days: number): Promise<void> {
+  await restFetch('PATCH', `follow_ups?id=eq.${encodeURIComponent(fuId)}`, {
+    body: { followed_up: false, followup_again_at: plusDays(days) },
+  })
+}
+
+/**
  * Stop following up on this quote for good: followed_up=true, clear any future
  * reminder. Classic markFollowedUp(scheduleAgain=false).
  */

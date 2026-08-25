@@ -77,6 +77,7 @@ export function QuoteActions({
   chatter = [],
   me = '',
   onOpenSend,
+  onOpenFollowUp,
 }: {
   quoteId: string
   opportunity?: string | null
@@ -86,6 +87,7 @@ export function QuoteActions({
   chatter?: ChatterEntry[]
   me?: string
   onOpenSend?: () => void
+  onOpenFollowUp?: (followUpId: string | null) => void
 }) {
   const { showToast } = useToast()
   const [state, setState] = useState<QuoteActionsState | null>(null)
@@ -197,6 +199,7 @@ export function QuoteActions({
         )}
       </div>
       <Chip label={isSent ? 'Sent' : 'Send'} on={isSent} tone="var(--pos)" onClick={() => onOpenSend?.()} title="Send this quote — compose the email, choose attachments, and it marks sent on send" />
+      {isSent && onOpenFollowUp && <Chip label="Follow up" on={false} tone="var(--info)" onClick={() => onOpenFollowUp(lastSend?.id ?? null)} title="Send a follow-up email now — reschedules the next reminder" />}
       {isFollowedUp && <span title="A follow-up has gone out" style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: 'var(--pos)', borderRadius: 20, padding: '3px 10px' }}>Followed up</span>}
       <button onClick={() => setChatterOpen(true)} title="Open the chatter thread" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}

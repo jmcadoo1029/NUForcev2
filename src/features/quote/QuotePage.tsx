@@ -52,6 +52,9 @@ export function QuotePage() {
   const [calcOpen, setCalcOpen] = useState(false)
   const [convertOpen, setConvertOpen] = useState(false)
   const [sendOpen, setSendOpen] = useState(false)
+  // Manual follow-up from the quote page (mirrors the dashboard "Send follow-up").
+  const [followUpOpen, setFollowUpOpen] = useState(false)
+  const [followUpFuId, setFollowUpFuId] = useState<string | null>(null)
   // Bumped after a successful send so the actions row + sent-files log reload.
   const [sendNonce, setSendNonce] = useState(0)
   // True once an imported quote's lines have been converted to picker lines this session.
@@ -804,7 +807,7 @@ export function QuotePage() {
                 onWonReject={rejectWon}
               />
 
-              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} />
+              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} />
 
               <SentFiles key={`sf-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity || ''} />
             </>
@@ -825,6 +828,21 @@ export function QuotePage() {
               pdfInput={{ qi: qiEdit, ti: tiEdit, lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })), budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup } }}
               onClose={() => setSendOpen(false)}
               onSent={() => setSendNonce((n) => n + 1)}
+            />
+          )}
+
+          {followUpOpen && (
+            <SendComposer
+              mode="follow_up"
+              quoteId={row.id}
+              opportunity={s(qi.opp) || row.opportunity || ''}
+              revision={row.revision || null}
+              contactName={s(qi.contact) || (Array.isArray(qi.relatedContacts) && qi.relatedContacts[0]?.name) || ''}
+              contactEmail={s(qi.email) || (Array.isArray(qi.relatedContacts) && qi.relatedContacts[0]?.email) || ''}
+              testItem={s(ti.item)}
+              followUpId={followUpFuId}
+              onClose={() => setFollowUpOpen(false)}
+              onSent={() => { setFollowUpOpen(false); setSendNonce((n) => n + 1) }}
             />
           )}
 

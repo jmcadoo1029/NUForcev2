@@ -5,7 +5,7 @@ import { fmtDate } from '../../lib/format'
 import { restFetch } from '../../lib/restFetch'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
-import { stopFollowUp } from '../../lib/followups'
+import { stopFollowUp, snoozeFollowUp } from '../../lib/followups'
 import { SendComposer } from '../quote/SendComposer'
 import { useFollowUps, type FollowUpRow } from './useFollowUps'
 
@@ -31,9 +31,28 @@ export function FollowUpsCard() {
   const [target, setTarget] = useState<ComposerTarget | null>(null)
   const [stopFor, setStopFor] = useState<FollowUpRow | null>(null)
   const [stopBusy, setStopBusy] = useState(false)
+  const [delayFor, setDelayFor] = useState<string | null>(null) // row id whose Delay menu is open
+  const [delayBusy, setDelayBusy] = useState(false)
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
   const hide = (id: string) => setHidden((s) => new Set(s).add(id))
+
+  // Delay (snooze) a follow-up 30 / 60 / 90 days — it drops off the list now and
+  // returns due on its own at the new date. No follow-up is recorded.
+  const doSnooze = async (f: FollowUpRow, days: number) => {
+    if (delayBusy) return
+    setDelayFor(null)
+    setDelayBusy(true)
+    try {
+      if (WRITES_ENABLED) await snoozeFollowUp(f.id, days)
+      showToast(WRITES_ENABLED ? `${f.opportunity} delayed ${days} days` : `Delayed ${days}d (preview — writes off)`, WRITES_ENABLED ? 'info' : 'warn')
+      hide(f.id)
+    } catch (e) {
+      showToast('Couldn’t delay: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setDelayBusy(false)
+    }
+  }
 
   // Load the quote's data for placeholders, then open the composer.
   const openFollowUp = async (fu: FollowUpRow) => {
@@ -100,6 +119,20 @@ export function FollowUpsCard() {
                 <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>due {isFinite(f.dueAt) ? fmtDate(new Date(f.dueAt).toISOString()) : '—'}</span>
               </Link>
               <button onClick={() => openFollowUp(f)} disabled={loadingId === f.id} style={btn(true)} title="Compose and send a follow-up email">{loadingId === f.id ? '…' : 'Send follow-up'}</button>
+              <div style={{ position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => setDelayFor((cur) => (cur === f.id ? null : f.id))} disabled={delayBusy} style={btn(false)} title="Delay this reminder — it comes back due later">Delay ▾</button>
+                {delayFor === f.id && (
+                  <>
+                    <div onClick={() => setDelayFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', minWidth: 130 }}>
+                      <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '7px 12px 4px' }}>Remind again in</div>
+                      {[30, 60, 90].map((d) => (
+                        <button key={d} onClick={() => doSnooze(f, d)} style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: 'none', borderTop: '1px solid var(--border)', padding: '9px 12px', cursor: 'pointer' }}>{d} days</button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <button onClick={() => setStopFor(f)} style={btn(false)} title="Stop following up on this quote">Stop</button>
             </div>
           ))}
