@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardLabel, useToast } from '../../components'
 import { restFetch } from '../../lib/restFetch'
+import { money } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { updateQuoteContact, resolveBounceFlag } from '../../lib/quoteContact'
@@ -15,7 +16,7 @@ import { Autocomplete } from '../quote/form/Autocomplete'
 // digging into each quote. Uses updateQuoteContact (targeted; never resets approval).
 // Renders nothing when there are no bad contacts.
 
-interface BadQuote { id: string; opportunity: string | null; customer: string | null }
+interface BadQuote { id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; updated_at?: string | null }
 interface BadGroup { email: string; name: string; reason: string; quotes: BadQuote[] }
 
 const enc = (v: string) => encodeURIComponent(v)
@@ -30,7 +31,7 @@ async function loadBadContacts(): Promise<BadGroup[]> {
   if (!emails.length) return []
   const groups = await Promise.all(
     emails.map(async (email) => {
-      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer&data->qi->>email=eq.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
+      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,updated_at&data->qi->>email=eq.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
       const c = bad.find((b) => (b.email || '').trim() === email)
       const name = [c?.first_name, c?.last_name].filter(Boolean).join(' ').trim()
       return { email, name, reason: c?.email_invalid_reason || '', quotes: quotes || [] }
@@ -109,9 +110,14 @@ export function BadContactsCard() {
             <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
           </div>
 
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 'var(--sp-3)' }}>
+          <div style={{ marginBottom: 'var(--sp-3)' }}>
             {g.quotes.map((q) => (
-              <Link key={q.id} to={`/quote/${q.id}`} style={{ fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 20, padding: '2px 10px', textDecoration: 'none' }} title={q.customer || ''}>{q.opportunity || q.id}</Link>
+              <Link key={q.id} to={`/quote/${q.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
+                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity || q.id}</span>
+                <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.customer || '—'}</span>
+                {q.stage && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{q.stage}</span>}
+                <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 64, textAlign: 'right' }}>{money(Number(q.total) || 0)}</span>
+              </Link>
             ))}
           </div>
 
