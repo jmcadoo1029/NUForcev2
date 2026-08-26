@@ -50,6 +50,9 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
   const LIGHT: RGB = [240, 240, 240]
   let y = 44
   let pageNum = 1
+  // The date printed on the quote is the day the PDF is generated (so a re-generated
+  // or revised quote always carries the current date), not a stored/stale field.
+  const genDate = new Date().toLocaleDateString('en-US')
 
   const sf2 = (v: unknown) => { const n = parseFloat(String(v).replace(/,/g, '')); return isNaN(n) ? 0 : n }
   const money = (v: unknown) => '$' + Math.round(sf2(v)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
@@ -67,7 +70,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     const prev = curFont
     setF('normal', 8, MUTED)
     doc.text('NU Laboratories, Inc. | ' + (qi.opp || ''), ML, PH - 18)
-    doc.text('Page ' + p + ' | ' + (qi.revDate || qi.date || ''), PW - MR, PH - 18, { align: 'right' })
+    doc.text('Page ' + p + ' | ' + genDate, PW - MR, PH - 18, { align: 'right' })
     doc.setDrawColor(...LIGHT)
     doc.setLineWidth(0.5)
     doc.line(ML, PH - 26, PW - MR, PH - 26)
@@ -122,7 +125,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     setF('bold', 16, DARK)
     doc.text('Quote #' + (qi.opp || ''), ML, y)
     setF('normal', 10, MUTED)
-    doc.text('Date: ' + (qi.revDate || qi.date || ''), PW - MR, y, { align: 'right' })
+    doc.text('Date: ' + genDate, PW - MR, y, { align: 'right' })
     y += 24
 
     // ── QUOTE INFORMATION ────────────────────────────────────────────────────
@@ -138,7 +141,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
       ['Opportunity', qi.opp],
       ['Stage', qi.stage],
       ['Type', qi.type],
-      ['Date', qi.revDate || qi.date],
+      ['Date', genDate],
       ['RFQ', qi.rfq],
     ].filter((r) => r[1])
     const rightCol = [
@@ -409,7 +412,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     y += 54
     doc.setDrawColor(...RED); doc.setLineWidth(1.5); doc.line(ML, y, PW - MR, y); y += 16
     setF('bold', 16, RED); doc.text('BUDGET MATERIALS', ML, y); y += 4
-    setF('normal', 9, MUTED); doc.text('Date: ' + (qi.revDate || qi.date || ''), PW - MR, y - 10, { align: 'right' })
+    setF('normal', 9, MUTED); doc.text('Date: ' + genDate, PW - MR, y - 10, { align: 'right' })
     if (qi.opp) { setF('normal', 9, DARK); doc.text('Opportunity: ', ML, y + 6); setF('bold', 9, DARK); doc.text(qi.opp, ML + 55, y + 6); y += 20 } else { y += 14 }
 
     const bNotes = String(budget.notes || '').trim()

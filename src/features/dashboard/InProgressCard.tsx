@@ -129,7 +129,7 @@ export function InProgressCard() {
             <span>Description</span>
             <span />
           </div>
-          <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+          <div>
             {rows.map((r) => (
               <div
                 key={r.key}
