@@ -627,7 +627,7 @@ $("saveDocx").addEventListener("click",()=>{
 $("savePdf").addEventListener("click",()=>{
   $("printarea").innerHTML=buildDocHTML();
   const q=sanitize(state.quote);
-  document.title = q?("Test Specifications - Quote "+q):"Test Specifications";
+  document.title = q?(q+" Test Specifications"):"Test Specifications";
   window.print();
 });
 window.addEventListener("afterprint",()=>{ document.title="NU Laboratories — Test Specifications Builder"; });

@@ -54,11 +54,19 @@ export function LineItemsCard({
     <Card pad={false}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--sp-5) var(--sp-5) var(--sp-3)' }}>
         <CardLabel>Line items ({lineItems.length})</CardLabel>
-        <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
+        <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
           {needsConversion && <Button variant="primary" small onClick={onConvert}>Convert to picker</Button>}
-          <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenCalc}>Pricing Calculator</Button>
-          <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenPicker}>+ Add line items</Button>
-          {!editing && !locked && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{lineEditing ? 'Save' : 'Edit'}</Button>}
+          {locked ? (
+            // A locked (approved/won) quote is read-only for line items — Save is
+            // hidden too, so editing here would dead-end. Point to the reopen path.
+            <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Locked — reopen the quote to edit line items</span>
+          ) : (
+            <>
+              <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenCalc}>Pricing Calculator</Button>
+              <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenPicker}>+ Add line items</Button>
+              {!editing && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{lineEditing ? 'Save' : 'Edit'}</Button>}
+            </>
+          )}
         </div>
       </div>
 
