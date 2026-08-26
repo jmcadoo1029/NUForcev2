@@ -4,6 +4,8 @@ import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
 import { updateQuoteContact } from '../../lib/quoteContact'
+import { fetchClientContacts, searchPeople, personName, type PersonRow } from '../../lib/directory'
+import { Autocomplete } from './form/Autocomplete'
 import { WRITES_ENABLED } from '../../lib/config'
 
 // Quote-side actions as a single compact chip row: Flag (live), Send (opens the
@@ -79,6 +81,7 @@ export function QuoteActions({
   me = '',
   contactName = '',
   contactEmail = '',
+  clientId = '',
   onOpenSend,
   onOpenFollowUp,
   onContactUpdated,
@@ -92,6 +95,7 @@ export function QuoteActions({
   me?: string
   contactName?: string
   contactEmail?: string
+  clientId?: string
   onOpenSend?: () => void
   onOpenFollowUp?: (followUpId: string | null) => void
   onContactUpdated?: (contact: string, email: string) => void
@@ -190,6 +194,17 @@ export function QuoteActions({
     }
   }
 
+  // Contact suggestions come from the quote's account when it's linked, else a
+  // global contact search — same behavior as the Bad-contacts widget.
+  const contactSearch = async (term: string): Promise<PersonRow[]> => {
+    if (clientId) {
+      const list = await fetchClientContacts(clientId)
+      const t = term.toLowerCase()
+      return list.filter((p) => (personName(p) + ' ' + (p.email || '')).toLowerCase().includes(t))
+    }
+    return searchPeople(term)
+  }
+
   const postChatter = async (msg: string) => {
     const entry = { by: me, at: new Date().toISOString(), msg }
     setEntries((cur) => [...cur, entry]) // optimistic
@@ -235,13 +250,26 @@ export function QuoteActions({
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}
       </button>
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Contact</button>
+        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>
         {contactOpen && (
           <>
             <div onClick={() => setContactOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
             <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
               <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>Update contact</div>
-              <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Contact name" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+              <div style={{ marginBottom: 'var(--sp-2)' }}>
+                <Autocomplete<PersonRow>
+                  value={cName}
+                  onValueChange={setCName}
+                  search={contactSearch}
+                  minChars={clientId ? 0 : 1}
+                  itemKey={(p) => p.id}
+                  itemPrimary={(p) => personName(p) || '(no name)'}
+                  itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
+                  onPick={(p) => { setCName(personName(p)); setCEmail(p.email || '') }}
+                  placeholder={clientId ? 'Choose a contact, or type' : 'Contact name'}
+                  emptyText={clientId ? 'No contacts on this account — type a name.' : 'Type a contact name.'}
+                />
+              </div>
               <input value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Contact email" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Updates just the contact — won't reset approval or line items.</div>
               <button onClick={doSaveContact} disabled={contactBusy} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: contactBusy ? 'default' : 'pointer' }}>{contactBusy ? 'Saving…' : 'Save contact'}</button>

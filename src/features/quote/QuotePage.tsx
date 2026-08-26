@@ -824,7 +824,7 @@ export function QuotePage() {
                 onWonReject={rejectWon}
               />
 
-              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} contactName={s(qi.contact)} contactEmail={s(qi.email)} onContactUpdated={(c, e) => setQi({ contact: c, email: e })} />
+              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} contactName={s(qi.contact)} contactEmail={s(qi.email)} clientId={s(qi.client_id)} onContactUpdated={(c, e) => setQi({ contact: c, email: e })} />
 
               <SentFiles key={`sf-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity || ''} />
             </>
