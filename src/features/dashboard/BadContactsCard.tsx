@@ -6,18 +6,20 @@ import { money } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { updateQuoteContact, resolveBounceFlag } from '../../lib/quoteContact'
-import { searchPeople, personName, type PersonRow } from '../../lib/directory'
+import { searchClients, fetchClientContacts, searchPeople, personName, type PersonRow, type ClientRow } from '../../lib/directory'
 import { Autocomplete } from '../quote/form/Autocomplete'
 
 // "Bad contacts" — when a quote/follow-up email bounces, the resend-webhook marks
 // that contact's address invalid (contacts.email_invalid). This widget collects
-// every quote still addressed to a bounced address, grouped by address, so you can
-// drop in a correct contact + email once and update all of them at once — no
-// digging into each quote. Uses updateQuoteContact (targeted; never resets approval).
-// Renders nothing when there are no bad contacts.
+// every quote still addressed to a bounced address, grouped by address. Pick the
+// replacement contact from the account's own contact list (it defaults to the
+// account on those quotes) or type a different account to pull people from, then
+// update all the quotes at once. Uses updateQuoteContact (targeted; never resets
+// approval) and clears the bounce flag. Renders nothing when there's nothing to fix.
 
-interface BadQuote { id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; updated_at?: string | null }
-interface BadGroup { email: string; name: string; reason: string; quotes: BadQuote[] }
+interface BadQuote { id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; clientId?: string | null }
+interface BadGroup { email: string; name: string; reason: string; quotes: BadQuote[]; account: string; clientId: string }
+interface Pick { account: string; clientId: string; name: string; email: string }
 
 const enc = (v: string) => encodeURIComponent(v)
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -31,16 +33,20 @@ async function loadBadContacts(): Promise<BadGroup[]> {
   if (!emails.length) return []
   const groups = await Promise.all(
     emails.map(async (email) => {
-      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,updated_at&data->qi->>email=eq.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
+      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,clientId:data->qi->>client_id&data->qi->>email=eq.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
       const c = bad.find((b) => (b.email || '').trim() === email)
       const name = [c?.first_name, c?.last_name].filter(Boolean).join(' ').trim()
-      return { email, name, reason: c?.email_invalid_reason || '', quotes: quotes || [] }
+      // Default account = the account on these quotes (they almost always share one).
+      const account = (quotes.find((q) => q.customer)?.customer || '').trim()
+      const clientId = (quotes.find((q) => q.clientId)?.clientId || '').trim()
+      return { email, name, reason: c?.email_invalid_reason || '', quotes: quotes || [], account, clientId }
     }),
   )
   return groups.filter((g) => g.quotes.length > 0)
 }
 
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 3 }
 
 export function BadContactsCard() {
   const { showToast } = useToast()
@@ -48,24 +54,47 @@ export function BadContactsCard() {
   const [groups, setGroups] = useState<BadGroup[] | null>(null)
   const [err, setErr] = useState('')
   const [done, setDone] = useState<Set<string>>(new Set())
-  const [form, setForm] = useState<Record<string, { name: string; email: string }>>({})
+  const [form, setForm] = useState<Record<string, Pick>>({})
   const [busy, setBusy] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
-    loadBadContacts().then((g) => alive && setGroups(g)).catch((e) => alive && setErr(String(e?.message || e)))
+    loadBadContacts()
+      .then((g) => {
+        if (!alive) return
+        setGroups(g)
+        // Seed each group's picker with its own account (so the contact list is one click away).
+        const seed: Record<string, Pick> = {}
+        g.forEach((grp) => { seed[grp.email] = { account: grp.account, clientId: grp.clientId, name: '', email: '' } })
+        setForm(seed)
+      })
+      .catch((e) => alive && setErr(String(e?.message || e)))
     return () => { alive = false }
   }, [])
 
-  const setField = (email: string, k: 'name' | 'email', v: string) =>
-    setForm((f) => ({ ...f, [email]: { name: f[email]?.name || '', email: f[email]?.email || '', [k]: v } }))
+  const patch = (email: string, p: Partial<Pick>) =>
+    setForm((f) => {
+      const cur = f[email] || { account: '', clientId: '', name: '', email: '' }
+      return { ...f, [email]: { ...cur, ...p } }
+    })
+
+  // Contacts come from the linked account when there is one, else a global search.
+  const contactSearch = (clientId: string) => async (term: string): Promise<PersonRow[]> => {
+    if (clientId) {
+      const list = await fetchClientContacts(clientId)
+      const t = term.toLowerCase()
+      return list.filter((p) => (personName(p) + ' ' + (p.email || '')).toLowerCase().includes(t))
+    }
+    return searchPeople(term)
+  }
 
   const applyGroup = async (g: BadGroup) => {
     if (busy) return
-    const name = (form[g.email]?.name || '').trim()
-    const email = (form[g.email]?.email || '').trim()
-    if (!email || !email.includes('@')) { showToast('Enter a valid new email first.', 'warn', 4000); return }
-    if (email.toLowerCase() === g.email.toLowerCase()) { showToast('That’s the same address that bounced — enter the corrected one.', 'warn', 5000); return }
+    const f = form[g.email] || { account: '', clientId: '', name: '', email: '' }
+    const name = f.name.trim()
+    const email = f.email.trim()
+    if (!email || !email.includes('@')) { showToast('Pick or enter a valid new email first.', 'warn', 4000); return }
+    if (email.toLowerCase() === g.email.toLowerCase()) { showToast('That’s the same address that bounced — choose the corrected one.', 'warn', 5000); return }
     setBusy(g.email)
     try {
       if (WRITES_ENABLED) {
@@ -101,42 +130,60 @@ export function BadContactsCard() {
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {err}</div>}
 
-      {visible.map((g) => (
-        <div key={g.email} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-            <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>Bounced</span>
-            <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
-            <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
-            <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
-          </div>
+      {visible.map((g) => {
+        const f = form[g.email] || { account: g.account, clientId: g.clientId, name: '', email: '' }
+        return (
+          <div key={g.email} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>Bounced</span>
+              <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
+              <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
+              <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
+            </div>
 
-          <div style={{ marginBottom: 'var(--sp-3)' }}>
-            {g.quotes.map((q) => (
-              <Link key={q.id} to={`/quote/${q.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
-                <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity || q.id}</span>
-                <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.customer || '—'}</span>
-                {q.stage && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{q.stage}</span>}
-                <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 64, textAlign: 'right' }}>{money(Number(q.total) || 0)}</span>
-              </Link>
-            ))}
-          </div>
+            <div style={{ marginBottom: 'var(--sp-3)' }}>
+              {g.quotes.map((q) => (
+                <Link key={q.id} to={`/quote/${q.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
+                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity || q.id}</span>
+                  <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.customer || '—'}</span>
+                  {q.stage && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>{q.stage}</span>}
+                  <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap', minWidth: 64, textAlign: 'right' }}>{money(Number(q.total) || 0)}</span>
+                </Link>
+              ))}
+            </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr) auto', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            <Autocomplete<PersonRow>
-              value={form[g.email]?.name || ''}
-              onValueChange={(v) => setField(g.email, 'name', v)}
-              search={(t) => searchPeople(t)}
-              itemKey={(p) => p.id}
-              itemPrimary={(p) => personName(p) || '(no name)'}
-              itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
-              onPick={(p) => setForm((f) => ({ ...f, [g.email]: { name: personName(p), email: p.email || '' } }))}
-              placeholder="New contact name — type to search"
-            />
-            <input value={form[g.email]?.email || ''} onChange={(e) => setField(g.email, 'email', e.target.value)} placeholder="New contact email" style={inputStyle} />
-            <button onClick={() => applyGroup(g)} disabled={busy === g.email} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: busy === g.email ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{busy === g.email ? 'Updating…' : `Update ${g.quotes.length}`}</button>
+            <div style={label}>Replace with</div>
+            <div style={{ marginBottom: 'var(--sp-2)' }}>
+              <Autocomplete<ClientRow>
+                value={f.account}
+                onValueChange={(v) => patch(g.email, { account: v, clientId: '' })}
+                search={(t) => searchClients(t)}
+                itemKey={(c) => c.id}
+                itemPrimary={(c) => c.name || '(unnamed)'}
+                itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
+                onPick={(c) => patch(g.email, { account: c.name || '', clientId: c.id })}
+                placeholder="Account — defaults to this quote's account; type to change"
+              />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.2fr) auto', gap: 'var(--sp-2)', alignItems: 'center' }}>
+              <Autocomplete<PersonRow>
+                value={f.name}
+                onValueChange={(v) => patch(g.email, { name: v })}
+                search={contactSearch(f.clientId)}
+                minChars={f.clientId ? 0 : 1}
+                itemKey={(p) => p.id}
+                itemPrimary={(p) => personName(p) || '(no name)'}
+                itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
+                onPick={(p) => patch(g.email, { name: personName(p), email: p.email || '' })}
+                placeholder={f.clientId ? 'Click to choose a contact, or type' : 'Contact name'}
+                emptyText={f.clientId ? 'No contacts on this account — type a name.' : 'Pick an account, or type a name.'}
+              />
+              <input value={f.email} onChange={(e) => patch(g.email, { email: e.target.value })} placeholder="Contact email" style={inputStyle} />
+              <button onClick={() => applyGroup(g)} disabled={busy === g.email} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: busy === g.email ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{busy === g.email ? 'Updating…' : `Update ${g.quotes.length}`}</button>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </Card>
   )
 }
