@@ -19,20 +19,30 @@ import { useApprovalQueue, type ApprovalRow } from './useApprovalQueue'
 type Kind = 'quote' | 'won'
 interface Target { row: ApprovalRow; kind: Kind; decision: 'approve' | 'reject' }
 
-function Section({ title, rows, tone, isApprover, onDecide }: { title: string; rows: ApprovalRow[]; tone: string; isApprover: boolean; onDecide: (row: ApprovalRow, decision: 'approve' | 'reject') => void }) {
+function Section({ title, rows, tone, isApprover, onDecide, selectedIds, onToggle, onSelectAll }: { title: string; rows: ApprovalRow[]; tone: string; isApprover: boolean; onDecide: (row: ApprovalRow, decision: 'approve' | 'reject') => void; selectedIds?: Set<string>; onToggle?: (id: string) => void; onSelectAll?: () => void }) {
   const actBtn = (bg: string, border: string, color: string): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.02em', padding: '4px 11px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${border}`, background: bg, color, flexShrink: 0 })
+  const selectable = isApprover && !!onToggle && !!selectedIds
+  const allSelected = selectable && rows.length > 0 && rows.every((r) => selectedIds!.has(r.id))
   return (
     <div style={{ marginBottom: 'var(--sp-4)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--sp-2)' }}>
         <span style={{ minWidth: 26, height: 26, borderRadius: 7, background: rows.length ? tone : '#f0f2f5', color: rows.length ? '#fff' : 'var(--dim)', fontWeight: 800, fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{rows.length}</span>
         <span style={{ fontWeight: 600 }}>{title}</span>
+        {selectable && rows.length > 0 && (
+          <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--fs-caption)', color: 'var(--muted)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={allSelected} onChange={onSelectAll} /> Select all
+          </label>
+        )}
       </div>
       {rows.length === 0 ? (
         <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 36 }}>All caught up.</div>
       ) : (
         <div>
           {rows.slice(0, 8).map((r) => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 0 8px 36px', borderBottom: '1px solid var(--border)' }}>
+            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 0 8px 12px', borderBottom: '1px solid var(--border)' }}>
+              {selectable ? (
+                <input type="checkbox" checked={selectedIds!.has(r.id)} onChange={() => onToggle!(r.id)} style={{ marginRight: 4, flexShrink: 0 }} />
+              ) : <span style={{ width: 24, flexShrink: 0 }} />}
               <Link to={`/quote/${r.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', flex: 1, minWidth: 0, textDecoration: 'none', color: 'var(--text)' }}>
                 <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.opportunity}</span>
                 <span style={{ flex: 1, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer}{r.submittedBy ? ` · ${prettifyEmail(r.submittedBy)}` : ''}</span>
@@ -95,6 +105,9 @@ export function ApprovalsCard() {
   const [comment, setComment] = useState('')
   const [busy, setBusy] = useState(false)
   const [reopenBusyId, setReopenBusyId] = useState('')
+  const [selQuote, setSelQuote] = useState<Set<string>>(new Set())
+  const [massOpen, setMassOpen] = useState(false)
+  const [massComment, setMassComment] = useState('')
   const me = getSessionEmail() || ''
 
   useEffect(() => { let alive = true; fetchIsApprover().then((v) => alive && setIsApprover(v)); return () => { alive = false } }, [])
@@ -121,6 +134,34 @@ export function ApprovalsCard() {
       showToast('Reopen action failed: ' + errMsg(e), 'error', 6000)
     } finally {
       setReopenBusyId('')
+    }
+  }
+
+  const toggleSel = (id: string) => setSelQuote((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAllQuotes = () => setSelQuote((s) => (quoteRows.length > 0 && quoteRows.every((r) => s.has(r.id)) ? new Set() : new Set(quoteRows.map((r) => r.id))))
+  const selectedCount = quoteRows.filter((r) => selQuote.has(r.id)).length
+
+  // Mass-approve every selected quote (best-effort per row; a failure skips just that one).
+  const confirmMass = async () => {
+    if (busy) return
+    const targets = quoteRows.filter((r) => selQuote.has(r.id))
+    if (targets.length === 0) return
+    setBusy(true)
+    let ok = 0
+    try {
+      for (const row of targets) {
+        if (!WRITES_ENABLED) { ok++; continue }
+        try {
+          await decideApproval(row.id, 'approved', massComment.trim(), me)
+          notifyQuoteApproved({ opportunity: row.opportunity || '', customer: row.customer || '', total: money(Number(row.total) || 0), approverName: prettifyEmail(me), submitterName: prettifyEmail(row.submittedBy || '') })
+          ok++
+        } catch { /* skip individual failures, keep going */ }
+      }
+      setDecidedIds((s) => { const n = new Set(s); targets.forEach((r) => n.add(r.id)); return n })
+      showToast(WRITES_ENABLED ? `${ok} quote${ok !== 1 ? 's' : ''} approved` : `${targets.length} approved (preview)`, WRITES_ENABLED ? 'success' : 'info')
+      setSelQuote(new Set()); setMassOpen(false); setMassComment('')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -173,10 +214,29 @@ export function ApprovalsCard() {
       {!err && !data && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Loading…</div>}
       {!err && data && (
         <>
-          <Section title="Quote approvals pending" rows={quoteRows} tone="var(--accent)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'quote', decision }) }} />
+          {isApprover && selectedCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', background: 'var(--pos-soft)', border: '1px solid var(--pos-border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', marginBottom: 'var(--sp-3)' }}>
+              <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)' }}>{selectedCount} selected</span>
+              <button onClick={() => setSelQuote(new Set())} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+              <button onClick={() => { setMassComment(''); setMassOpen(true) }} style={{ marginLeft: 'auto', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 20, padding: '6px 16px', cursor: 'pointer' }}>Approve {selectedCount} selected</button>
+            </div>
+          )}
+          <Section title="Quote approvals pending" rows={quoteRows} tone="var(--accent)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'quote', decision }) }} selectedIds={selQuote} onToggle={toggleSel} onSelectAll={toggleAllQuotes} />
           <Section title="Won approvals pending" rows={wonRows} tone="var(--info)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'won', decision }) }} />
           <ReopenSection rows={reopenRows} isApprover={isApprover} busyId={reopenBusyId} onResolve={resolveReopenNow} />
         </>
+      )}
+
+      {massOpen && (
+        <Modal title={`Approve ${selectedCount} quote${selectedCount !== 1 ? 's' : ''}?`} onClose={() => !busy && setMassOpen(false)} width={460}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Approves all {selectedCount} selected quote{selectedCount !== 1 ? 's' : ''} at once. Decision comment (optional) — applied to each.</div>
+          <textarea value={massComment} onChange={(e) => setMassComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>Preview — writes are off, so this only clears them from your view.</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+            <button onClick={() => setMassOpen(false)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>
+            <button onClick={confirmMass} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Approving…' : `Approve ${selectedCount}`}</button>
+          </div>
+        </Modal>
       )}
 
       {target && (
