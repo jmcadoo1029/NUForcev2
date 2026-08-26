@@ -8,6 +8,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fetchIsApprover } from '../../lib/perms'
 import { decideApproval, decideWon, resolveReopen } from '../../lib/approvals'
+import { notifyReopenUnlocked } from '../../lib/notify'
 import { notifyQuoteApproved } from '../../lib/notify'
 import { useApprovalQueue, type ApprovalRow } from './useApprovalQueue'
 
@@ -112,6 +113,8 @@ export function ApprovalsCard() {
       } else {
         await resolveReopen(row.id, action, me)
         showToast(`${row.opportunity} ${action === 'unlock' ? 'reopened for editing' : 'reopen request dismissed'}`, 'success')
+        // Let the requester know their quote is unlocked (best-effort).
+        if (action === 'unlock') notifyReopenUnlocked({ requestedBy: row.submittedBy || '', opportunity: row.opportunity || '', unlockedByName: prettifyEmail(me) })
       }
       setDecidedIds((s) => new Set(s).add(row.id))
     } catch (e) {

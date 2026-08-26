@@ -110,7 +110,7 @@ export function FollowUpsCard() {
       {!err && data && rows.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No follow-ups due.</div>}
 
       {!err && rows.length > 0 && (
-        <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+        <div>
           {rows.map((f) => (
             <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', padding: '9px 4px', borderBottom: '1px solid var(--border)' }}>
               <Link to={f.quote_id ? `/quote/${f.quote_id}` : '#'} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', flex: 1, minWidth: 0, textDecoration: 'none', color: 'var(--text)' }}>

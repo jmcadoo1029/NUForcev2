@@ -30,7 +30,7 @@ import { SpecsNotes } from './form/SpecsNotes'
 import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
-import { notifyQuoteSubmitted, notifyQuoteApproved, fetchPendingSubmitterIds } from '../../lib/notify'
+import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, fetchPendingSubmitterIds } from '../../lib/notify'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -311,6 +311,11 @@ export function QuotePage() {
       'Reopened for editing — needs re-approval',
       { editUnlocked: true, ...(clearedReq ? { reopenRequest: clearedReq } : {}) },
     )
+    // Email the teammate who requested the reopen that it's unlocked (best-effort).
+    const requestedBy = existingReq?.requestedBy ? String(existingReq.requestedBy) : ''
+    if (requestedBy && WRITES_ENABLED) {
+      notifyReopenUnlocked({ requestedBy, opportunity: s(qi.opp) || row?.opportunity || '', unlockedByName: prettifyEmail(me) })
+    }
   }
   // A teammate (non-approver) asks an approver to unlock this approved quote. It
   // stays approved/locked until an approver acts; the request surfaces on their
@@ -495,6 +500,13 @@ export function QuotePage() {
   const onSave = () => {
     if (!row) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    // Hard safeguard: an imported quote whose legacy lines haven't been converted to
+    // picker lines would be saved with NO line items (the save drops the legacy
+    // format). Block it — convert first (Convert to picker) so the lines survive.
+    if (needsConversion) {
+      showToast('Convert the imported line items first — saving now would drop them. Use “Convert to picker line items,” then save.', 'error', 7000)
+      return
+    }
     // Won-date safeguard (ported from Classic): moving a quote TO Closed Won this
     // session needs a Won Date AND an explicit confirmation before it saves.
     // Already-Closed-Won quotes loaded from the DB skip this — no friction on edits.
@@ -807,7 +819,7 @@ export function QuotePage() {
                 onWonReject={rejectWon}
               />
 
-              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} />
+              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} contactName={s(qi.contact)} contactEmail={s(qi.email)} onContactUpdated={(c, e) => setQi({ contact: c, email: e })} />
 
               <SentFiles key={`sf-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity || ''} />
             </>

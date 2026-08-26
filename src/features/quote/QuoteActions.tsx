@@ -3,6 +3,7 @@ import { Card, Modal, useToast } from '../../components'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
+import { updateQuoteContact } from '../../lib/quoteContact'
 import { WRITES_ENABLED } from '../../lib/config'
 
 // Quote-side actions as a single compact chip row: Flag (live), Send (opens the
@@ -76,8 +77,11 @@ export function QuoteActions({
   approvalStatus,
   chatter = [],
   me = '',
+  contactName = '',
+  contactEmail = '',
   onOpenSend,
   onOpenFollowUp,
+  onContactUpdated,
 }: {
   quoteId: string
   opportunity?: string | null
@@ -86,8 +90,11 @@ export function QuoteActions({
   approvalStatus: string
   chatter?: ChatterEntry[]
   me?: string
+  contactName?: string
+  contactEmail?: string
   onOpenSend?: () => void
   onOpenFollowUp?: (followUpId: string | null) => void
+  onContactUpdated?: (contact: string, email: string) => void
 }) {
   const { showToast } = useToast()
   const [state, setState] = useState<QuoteActionsState | null>(null)
@@ -101,6 +108,12 @@ export function QuoteActions({
   const [previewNote, setPreviewNote] = useState('') // note shown for a preview (writes-off) flag
   const [entries, setEntries] = useState<ChatterEntry[]>(chatter)
   const [chatterOpen, setChatterOpen] = useState(false)
+  // Contact editor — targeted update (data.qi.contact/email only), so it never
+  // resets an approval or needs a reopen.
+  const [contactOpen, setContactOpen] = useState(false)
+  const [cName, setCName] = useState(contactName)
+  const [cEmail, setCEmail] = useState(contactEmail)
+  const [contactBusy, setContactBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -160,6 +173,23 @@ export function QuoteActions({
     }
   }
 
+  const doSaveContact = async () => {
+    if (contactBusy) return
+    const name = cName.trim(); const email = cEmail.trim()
+    if (!WRITES_ENABLED) { onContactUpdated?.(name, email); setContactOpen(false); showToast('Contact updated (preview — writes off)', 'warn'); return }
+    setContactBusy(true)
+    try {
+      await updateQuoteContact(quoteId, name, email)
+      onContactUpdated?.(name, email)
+      showToast('Contact updated', 'success')
+      setContactOpen(false)
+    } catch (e) {
+      showToast('Couldn’t update contact: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setContactBusy(false)
+    }
+  }
+
   const postChatter = async (msg: string) => {
     const entry = { by: me, at: new Date().toISOString(), msg }
     setEntries((cur) => [...cur, entry]) // optimistic
@@ -204,6 +234,21 @@ export function QuoteActions({
       <button onClick={() => setChatterOpen(true)} title="Open the chatter thread" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}
       </button>
+      <div style={{ position: 'relative' }}>
+        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Contact</button>
+        {contactOpen && (
+          <>
+            <div onClick={() => setContactOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
+              <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>Update contact</div>
+              <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Contact name" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+              <input value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Contact email" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+              <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Updates just the contact — won't reset approval or line items.</div>
+              <button onClick={doSaveContact} disabled={contactBusy} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: contactBusy ? 'default' : 'pointer' }}>{contactBusy ? 'Saving…' : 'Save contact'}</button>
+            </div>
+          </>
+        )}
+      </div>
       {detail && <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>· {detail}</span>}
 
       {isFlagged && (

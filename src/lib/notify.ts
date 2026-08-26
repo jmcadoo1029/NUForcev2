@@ -50,6 +50,26 @@ export async function notifyQuoteApproved(d: QuoteApprovedData): Promise<void> {
   }
 }
 
+export interface ReopenUnlockedData {
+  requestedBy: string // the teammate who asked for the reopen (their email)
+  opportunity: string
+  unlockedByName: string
+}
+
+/** Notify the teammate who requested a reopen that an approver has unlocked the
+ *  quote for them. Recipient is the specific requester (data.requestedBy). */
+export async function notifyReopenUnlocked(d: ReopenUnlockedData): Promise<void> {
+  if (!d.requestedBy) return
+  try {
+    await invokeFunction('send-notification', {
+      type: 'nuforce_reopen_unlocked',
+      data: { ...d, linkUrl: `https://nuforce.nulabs.com/quote/${encodeURIComponent(d.opportunity)}` },
+    })
+  } catch (e) {
+    warn('reopen_unlocked', e)
+  }
+}
+
 /**
  * Submitter employees.id for every quote currently pending approval — the queue
  * snapshot the submit notification wants. Quotes submitted before this shipped

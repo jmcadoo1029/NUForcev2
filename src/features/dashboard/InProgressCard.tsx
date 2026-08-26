@@ -92,7 +92,7 @@ export function InProgressCard() {
       {/* ── VIEW MODE ── */}
       {!editing && !err && data && data.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Nothing in progress.</div>}
       {!editing && !err && data && data.length > 0 && (
-        <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+        <div>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-base)' }}>
             <thead>
               <tr>
