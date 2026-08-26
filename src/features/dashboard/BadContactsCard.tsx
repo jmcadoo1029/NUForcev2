@@ -3,7 +3,10 @@ import { Link } from 'react-router-dom'
 import { Card, CardLabel, useToast } from '../../components'
 import { restFetch } from '../../lib/restFetch'
 import { WRITES_ENABLED } from '../../lib/config'
-import { updateQuoteContact } from '../../lib/quoteContact'
+import { getSessionEmail } from '../../lib/auth'
+import { updateQuoteContact, resolveBounceFlag } from '../../lib/quoteContact'
+import { searchPeople, personName, type PersonRow } from '../../lib/directory'
+import { Autocomplete } from '../quote/form/Autocomplete'
 
 // "Bad contacts" — when a quote/follow-up email bounces, the resend-webhook marks
 // that contact's address invalid (contacts.email_invalid). This widget collects
@@ -40,6 +43,7 @@ const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', 
 
 export function BadContactsCard() {
   const { showToast } = useToast()
+  const me = getSessionEmail() || ''
   const [groups, setGroups] = useState<BadGroup[] | null>(null)
   const [err, setErr] = useState('')
   const [done, setDone] = useState<Set<string>>(new Set())
@@ -64,7 +68,10 @@ export function BadContactsCard() {
     setBusy(g.email)
     try {
       if (WRITES_ENABLED) {
-        for (const q of g.quotes) await updateQuoteContact(q.id, name, email)
+        for (const q of g.quotes) {
+          await updateQuoteContact(q.id, name, email)
+          await resolveBounceFlag(q.id, me).catch(() => {}) // clear the bounce flag too (best-effort)
+        }
         showToast(`Updated ${g.quotes.length} quote${g.quotes.length !== 1 ? 's' : ''} to ${email}`, 'success', 5000)
       } else {
         showToast(`Would update ${g.quotes.length} quote(s) (preview — writes off)`, 'warn', 4000)
@@ -109,7 +116,16 @@ export function BadContactsCard() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.3fr) auto', gap: 'var(--sp-2)', alignItems: 'center' }}>
-            <input value={form[g.email]?.name || ''} onChange={(e) => setField(g.email, 'name', e.target.value)} placeholder="New contact name" style={inputStyle} />
+            <Autocomplete<PersonRow>
+              value={form[g.email]?.name || ''}
+              onValueChange={(v) => setField(g.email, 'name', v)}
+              search={(t) => searchPeople(t)}
+              itemKey={(p) => p.id}
+              itemPrimary={(p) => personName(p) || '(no name)'}
+              itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
+              onPick={(p) => setForm((f) => ({ ...f, [g.email]: { name: personName(p), email: p.email || '' } }))}
+              placeholder="New contact name — type to search"
+            />
             <input value={form[g.email]?.email || ''} onChange={(e) => setField(g.email, 'email', e.target.value)} placeholder="New contact email" style={inputStyle} />
             <button onClick={() => applyGroup(g)} disabled={busy === g.email} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: busy === g.email ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{busy === g.email ? 'Updating…' : `Update ${g.quotes.length}`}</button>
           </div>

@@ -30,7 +30,7 @@ import { SpecsNotes } from './form/SpecsNotes'
 import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
-import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, fetchPendingSubmitterIds } from '../../lib/notify'
+import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, fetchPendingSubmitterIds } from '../../lib/notify'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -327,7 +327,12 @@ export function QuotePage() {
     setRow((prev) => (prev ? { ...prev, data: { ...(prev.data || {}), reopenRequest: rr } as typeof prev.data } : prev))
     if (!WRITES_ENABLED) { showToast('Reopen requested (preview)', 'info'); return }
     if (!row) return
-    try { await requestReopen(row.id, me, reason); showToast('Reopen requested — your manager will review', 'success') } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
+    try {
+      await requestReopen(row.id, me, reason)
+      showToast('Reopen requested — your manager will review', 'success')
+      // Let approvers know a reopen was requested (best-effort).
+      notifyReopenRequested({ opportunity: s(qi.opp) || row.opportunity || '', requestedByName: prettifyEmail(me), reason: reason || '' })
+    } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
   }
   const submitWon = async () => {
     const empId = await fetchMyEmployeeId()

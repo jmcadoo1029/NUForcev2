@@ -16,3 +16,12 @@ export async function updateQuoteContact(quoteId: string, contact: string, email
     body: { data: nextData, updated_at: new Date().toISOString() },
   })
 }
+
+/** Resolve the bounce flag the resend-webhook dropped on a quote (flagged_by =
+ *  resend_webhook). Used after fixing a bounced contact so the "bounced" flag
+ *  clears. Best-effort; targets only the webhook flag, never a manual one. */
+export async function resolveBounceFlag(quoteId: string, by: string): Promise<void> {
+  await restFetch('PATCH', `quote_flags?quote_id=eq.${enc(quoteId)}&flagged_by=eq.resend_webhook&resolved=eq.false`, {
+    body: { resolved: true, resolved_by: by || null, resolved_at: new Date().toISOString() },
+  })
+}

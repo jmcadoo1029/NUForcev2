@@ -50,6 +50,25 @@ export async function notifyQuoteApproved(d: QuoteApprovedData): Promise<void> {
   }
 }
 
+export interface ReopenRequestedData {
+  opportunity: string
+  requestedByName: string
+  reason: string
+}
+
+/** Notify approvers that a teammate has requested a quote be reopened for editing.
+ *  Recipients are resolved by the function (the approver group), like submissions. */
+export async function notifyReopenRequested(d: ReopenRequestedData): Promise<void> {
+  try {
+    await invokeFunction('send-notification', {
+      type: 'nuforce_reopen_requested',
+      data: { ...d, linkUrl: `https://nuforce.nulabs.com/quote/${encodeURIComponent(d.opportunity)}` },
+    })
+  } catch (e) {
+    warn('reopen_requested', e)
+  }
+}
+
 export interface ReopenUnlockedData {
   requestedBy: string // the teammate who asked for the reopen (their email)
   opportunity: string
