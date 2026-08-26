@@ -11,6 +11,7 @@ import { useCanViewManager } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { Contracting } from './features/dashboard/Contracting'
+import { MassEmails } from './features/dashboard/MassEmails'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 
@@ -36,6 +37,18 @@ function ContractingHome() {
   return (
     <DashboardShell>
       <Contracting />
+    </DashboardShell>
+  )
+}
+
+// Mass Emails — managers + accounting (view-only role) only; others go to My Work.
+function MassEmailsHome() {
+  const { canView, loading } = useCanViewManager()
+  if (loading) return null
+  if (!canView) return <Navigate to="/my-work" replace />
+  return (
+    <DashboardShell>
+      <MassEmails />
     </DashboardShell>
   )
 }
@@ -76,6 +89,7 @@ export default function App() {
           }
         />
         <Route path="/contracting" element={<ContractingHome />} />
+        <Route path="/mass-emails" element={<MassEmailsHome />} />
         <Route path="/quote/:id" element={<QuotePage />} />
         <Route path="/account/:name" element={<AccountPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />

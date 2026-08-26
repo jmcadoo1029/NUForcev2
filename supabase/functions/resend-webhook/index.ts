@@ -193,6 +193,50 @@ async function reconcileAndNotify(emailId: string, recipient: string, status: Se
 }
 // ── end NUForce addition ─────────────────────────────────────────────────────
 
+// ── NUForce Mass Emails: metrics reconcile (NEVER touches contacts) ──────────
+// A mass-email blast records each recipient in `mass_email_recipients` with the
+// Resend message id. If an incoming event's id matches one of those rows, we
+// record its delivery status for metrics and STOP — mass-email bounces must
+// never flag Bad Contacts (product requirement). Returns true when the event
+// belonged to a mass email (handled here; caller must not fall through).
+async function reconcileMassEmail(emailId: string, type: string, data: any): Promise<boolean> {
+  if (!emailId) return false;
+  try {
+    const { data: rows, error } = await sb
+      .from('mass_email_recipients')
+      .select('id, status')
+      .eq('resend_id', emailId)
+      .limit(1);
+    if (error) { console.error('resend-webhook: mass recipient lookup failed', error); return false; }
+    if (!rows || !rows.length) return false; // not a mass-email message — fall through
+
+    let newStatus = '';
+    if (type === 'email.delivered') newStatus = 'delivered';
+    else if (type === 'email.opened') newStatus = 'opened';
+    else if (type === 'email.complained') newStatus = 'complained';
+    else if (type === 'email.bounced') newStatus = data?.bounce?.type === 'Transient' ? '' : 'bounced';
+
+    if (newStatus) {
+      const cur = (rows[0].status || '').toString();
+      // Never downgrade a meaningful terminal status back to 'delivered'.
+      const keep = (cur === 'opened' || cur === 'bounced' || cur === 'complained') && newStatus === 'delivered';
+      if (!keep) {
+        const { error: uErr } = await sb
+          .from('mass_email_recipients')
+          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .eq('resend_id', emailId);
+        if (uErr) console.error('resend-webhook: mass recipient update failed', uErr);
+      }
+    }
+    console.log(`resend-webhook: mass-email event ${type} for ${emailId} → ${newStatus || 'no-op'}`);
+    return true; // handled — do NOT touch contacts or quote_sends
+  } catch (e) {
+    console.error('resend-webhook: reconcileMassEmail threw', e);
+    return false;
+  }
+}
+// ── end NUForce Mass Emails addition ─────────────────────────────────────────
+
 // ── Main handler ─────────────────────────────────────────────────────────────
 serve(async (req: Request) => {
   if (req.method !== 'POST') {
@@ -222,6 +266,10 @@ serve(async (req: Request) => {
   const recipient = (rawTo || '').toString().trim();
   // The Resend message id — matches quote_sends.resend_id (NUForce addition).
   const emailId = (data.email_id || data.id || '').toString();
+  // NUForce Mass Emails: if this id belongs to a mass-email blast, record its
+  // metric and STOP before any contacts logic — mass-email bounces must never
+  // flag Bad Contacts.
+  if (await reconcileMassEmail(emailId, type || '', data)) return ack();
   let reason = '';
   let sendStatus: SendStatus | null = null;
   if (type === 'email.bounced') {
