@@ -59,6 +59,16 @@ export async function fetchCampaignOptions(): Promise<CampaignOption[]> {
   return (rows || []).map((r) => ({ id: r.id, name: (r.name || '').trim() || '(unnamed campaign)' }))
 }
 
+/** Every contact belonging to an account (client), as recipients (deduped). */
+export async function fetchContactsByAccount(clientId: string): Promise<Recipient[]> {
+  if (!clientId) return []
+  const rows = await restFetch<Array<{ first_name: string | null; last_name: string | null; email: string | null }>>(
+    'GET',
+    `contacts?select=first_name,last_name,email&client_id=eq.${encodeURIComponent(clientId)}&order=last_name&limit=5000`,
+  )
+  return dedupe((rows || []).map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
+}
+
 /** The contacts belonging to a campaign, as email recipients (deduped). */
 export async function fetchContactsByCampaign(campaignId: string): Promise<Recipient[]> {
   if (!campaignId) return []

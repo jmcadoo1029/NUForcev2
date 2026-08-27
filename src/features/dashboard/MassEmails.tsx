@@ -5,9 +5,11 @@ import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { PCODE_OPTS } from '../../data/constants'
+import { Autocomplete } from '../quote/form/Autocomplete'
+import { searchClients, type ClientRow } from '../../lib/directory'
 import {
   fetchAllContacts, fetchContactsByProductCode, fetchCampaignOptions, fetchContactsByCampaign,
-  fetchTemplates, saveTemplate, deleteTemplate,
+  fetchContactsByAccount, fetchTemplates, saveTemplate, deleteTemplate,
   sendMassEmail, fetchMassEmails, fetchMassEmailMetrics,
   type Recipient, type EmailTemplate, type MassEmailRow, type MassEmailMetrics, type CampaignOption,
 } from '../../lib/massEmail'
@@ -56,16 +58,32 @@ We’d love the opportunity to be a testing partner for your team. If you have a
 
 Please feel free to reply here or reach out anytime. Looking forward to staying in touch!`
 
+// Starter template for the "Account" audience — a check-in with everyone at a
+// specific client/account. Fully editable; save your edits as a template.
+const ACCOUNT_SUBJECT = 'NU Laboratories — Here for your team’s testing needs'
+const ACCOUNT_BODY = `Hello, {first name}!
+
+This is [Your Name] at NU Laboratories. I’m reaching out to your team to make sure we’re a resource whenever a testing need comes up.
+
+NU Laboratories provides a full range of testing under one roof — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. If any project on your side calls for testing, we’d be glad to put together a quote and turn it around quickly.
+
+Please feel free to reach out to me directly with anything you have coming up — it would be our pleasure to support your team.
+
+Looking forward to working with you!`
+
+type AudienceMode = 'all' | 'code' | 'campaign' | 'account'
+
 // Per-audience starter content, and the set of pristine defaults. Switching
 // audiences swaps in that audience's starter ONLY when the body is still one of
 // these untouched defaults (or empty) — a customized or saved-template body is
 // never clobbered.
-const AUDIENCE_DEFAULTS: Record<'all' | 'code' | 'campaign', { subject: string; body: string }> = {
+const AUDIENCE_DEFAULTS: Record<AudienceMode, { subject: string; body: string }> = {
   all: { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY },
   code: { subject: CODE_SUBJECT, body: CODE_BODY },
   campaign: { subject: CAMPAIGN_SUBJECT, body: CAMPAIGN_BODY },
+  account: { subject: ACCOUNT_SUBJECT, body: ACCOUNT_BODY },
 }
-const DEFAULT_BODIES = new Set([DEFAULT_BODY, CODE_BODY, CAMPAIGN_BODY])
+const DEFAULT_BODIES = new Set([DEFAULT_BODY, CODE_BODY, CAMPAIGN_BODY, ACCOUNT_BODY])
 
 // Distinct product codes for the audience dropdown (same catalog quotes use).
 // Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
@@ -92,13 +110,15 @@ export function MassEmails() {
   const [subject, setSubject] = useState(DEFAULT_SUBJECT)
   const [body, setBody] = useState(DEFAULT_BODY)
 
-  const [mode, setMode] = useState<'all' | 'code' | 'campaign'>('all')
+  const [mode, setMode] = useState<AudienceMode>('all')
   const [code, setCode] = useState('')
   const [datePreset, setDatePreset] = useState<'any' | '1y' | '2y' | '3y' | '5y' | 'custom'>('any')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([])
   const [campaignId, setCampaignId] = useState('')
+  const [accountId, setAccountId] = useState('')
+  const [accountText, setAccountText] = useState('')
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [loadingRecips, setLoadingRecips] = useState(false)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
@@ -149,9 +169,11 @@ export function MassEmails() {
       if (mode === 'all') list = await fetchAllContacts()
       else if (mode === 'code') list = await fetchContactsByProductCode(code, computeRange())
       else if (mode === 'campaign') list = await fetchContactsByCampaign(campaignId)
+      else if (mode === 'account') list = await fetchContactsByAccount(accountId)
       setRecipients(list)
       if (mode === 'code' && list.length === 0) showToast(`No contacts found for product code ${code}${datePreset !== 'any' ? ' in that date range' : ''}.`, 'warn', 4000)
       if (mode === 'campaign' && campaignId && list.length === 0) showToast('That campaign has no contacts with an email address.', 'warn', 4000)
+      if (mode === 'account' && accountId && list.length === 0) showToast('That account has no contacts with an email address.', 'warn', 4000)
     } catch (e) {
       showToast('Couldn’t load recipients: ' + errMsg(e), 'error', 6000)
     } finally {
@@ -164,12 +186,13 @@ export function MassEmails() {
   const audienceLabel =
     mode === 'all' ? 'All contacts'
       : mode === 'campaign' ? `Campaign: ${campaignName || '—'}`
-        : `Quoted code ${code || '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
+        : mode === 'account' ? `Account: ${accountText || '—'}`
+          : `Quoted code ${code || '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
 
   // Switch audience: swap in that audience's starter template (only if the body
   // is still a pristine default — never overwrite custom text or a loaded
   // template), reset the recipient selection, and load where it makes sense.
-  const pickAudience = (next: 'all' | 'code' | 'campaign') => {
+  const pickAudience = (next: AudienceMode) => {
     setMode(next)
     if (DEFAULT_BODIES.has(body) || !body.trim()) {
       setSubject(AUDIENCE_DEFAULTS[next].subject)
@@ -177,8 +200,9 @@ export function MassEmails() {
     }
     setExcluded(new Set())
     if (next === 'all') { fetchAllContacts().then(setRecipients).catch(() => {}) }
-    else { setRecipients([] ) }
+    else { setRecipients([]) }
     if (next === 'campaign') setCampaignId('')
+    if (next === 'account') { setAccountId(''); setAccountText('') }
   }
 
   const applyTemplate = (id: string) => {
@@ -261,6 +285,9 @@ export function MassEmails() {
               <input type="radio" checked={mode === 'code'} onChange={() => pickAudience('code')} /> Quoted product code
             </label>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
+              <input type="radio" checked={mode === 'account'} onChange={() => pickAudience('account')} /> Account
+            </label>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
               <input type="radio" checked={mode === 'campaign'} onChange={() => pickAudience('campaign')} /> Campaign
             </label>
           </div>
@@ -288,6 +315,22 @@ export function MassEmails() {
                 </>
               )}
               <button onClick={loadRecipients} disabled={loadingRecips || !code.trim()} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: '#fff', background: code.trim() ? 'var(--accent)' : 'var(--border-strong)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: code.trim() ? 'pointer' : 'default' }}>{loadingRecips ? 'Loading…' : 'Find contacts'}</button>
+            </div>
+          )}
+
+          {mode === 'account' && (
+            <div style={{ maxWidth: 340, marginBottom: 'var(--sp-2)' }}>
+              <Autocomplete<ClientRow>
+                value={accountText}
+                onValueChange={(v) => { setAccountText(v); if (!v.trim()) { setAccountId(''); setRecipients([]) } }}
+                search={(t) => searchClients(t)}
+                itemKey={(c) => c.id}
+                itemPrimary={(c) => c.name || '(unnamed account)'}
+                itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
+                onPick={(c) => { setAccountId(c.id); setAccountText(c.name || ''); setExcluded(new Set()); fetchContactsByAccount(c.id).then(setRecipients).catch((err) => showToast('Couldn’t load account: ' + errMsg(err), 'error', 6000)) }}
+                placeholder="Search accounts…"
+                minChars={2}
+              />
             </div>
           )}
 
