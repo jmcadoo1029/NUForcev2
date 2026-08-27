@@ -5,16 +5,18 @@ import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import {
-  fetchAllContacts, fetchContactsByProductCode, fetchTemplates, saveTemplate, deleteTemplate,
+  fetchAllContacts, fetchContactsByProductCode, fetchCampaignOptions, fetchContactsByCampaign,
+  fetchTemplates, saveTemplate, deleteTemplate,
   sendMassEmail, fetchMassEmails, fetchMassEmailMetrics,
-  type Recipient, type EmailTemplate, type MassEmailRow, type MassEmailMetrics,
+  type Recipient, type EmailTemplate, type MassEmailRow, type MassEmailMetrics, type CampaignOption,
 } from '../../lib/massEmail'
 
-// Mass Emails — compose + send a personalized blast to all contacts (or everyone
-// quoted a given product code), from reusable saved templates, with a history log
-// and Resend delivery metrics. Managers only (gated at the route). Each recipient
-// gets an individual send, so nobody sees another client's address, and bounces
-// here don't touch Bad Contacts.
+// Mass Emails — compose + send a personalized blast to an audience: all contacts,
+// everyone quoted a given product code (optionally within a date window), or the
+// members of a campaign. Reusable saved templates, a history log, and Resend
+// delivery metrics. Managers only (gated at the route). Each recipient gets an
+// individual send, so nobody sees another client's address, and bounces here
+// don't touch Bad Contacts.
 
 const DEFAULT_SUBJECT = 'NU Laboratories — Our Testing Capabilities'
 const DEFAULT_BODY = `Hello, {first name}!
@@ -38,8 +40,13 @@ export function MassEmails() {
   const [subject, setSubject] = useState(DEFAULT_SUBJECT)
   const [body, setBody] = useState(DEFAULT_BODY)
 
-  const [mode, setMode] = useState<'all' | 'code'>('all')
+  const [mode, setMode] = useState<'all' | 'code' | 'campaign'>('all')
   const [code, setCode] = useState('')
+  const [datePreset, setDatePreset] = useState<'any' | '1y' | '2y' | '3y' | '5y' | 'custom'>('any')
+  const [customFrom, setCustomFrom] = useState('')
+  const [customTo, setCustomTo] = useState('')
+  const [campaigns, setCampaigns] = useState<CampaignOption[]>([])
+  const [campaignId, setCampaignId] = useState('')
   const [recipients, setRecipients] = useState<Recipient[]>([])
   const [loadingRecips, setLoadingRecips] = useState(false)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
@@ -57,17 +64,42 @@ export function MassEmails() {
 
   const loadTemplates = () => fetchTemplates().then(setTemplates).catch(() => {})
   const loadHistory = () => fetchMassEmails().then(setHistory).catch(() => {})
+  const loadCampaigns = () => fetchCampaignOptions().then(setCampaigns).catch(() => {})
 
-  useEffect(() => { loadTemplates(); loadHistory() }, [])
+  useEffect(() => { loadTemplates(); loadHistory(); loadCampaigns() }, [])
+
+  // Resolve the product-code date window from the preset (or the custom inputs).
+  // Compared against quotes.created_at; `to` is pushed to end-of-day so the whole
+  // day is inclusive. Returns a human label used in the audience line + history.
+  const computeRange = (): { from?: string; to?: string; label: string } => {
+    if (datePreset === 'any') return { label: 'any time' }
+    if (datePreset === 'custom') {
+      const from = customFrom || undefined
+      const to = customTo || undefined
+      if (!from && !to) return { label: 'any time' }
+      const label = `${from || '…'} to ${to || '…'}`
+      return { from, to: to ? `${to}T23:59:59` : undefined, label }
+    }
+    const years = datePreset === '1y' ? 1 : datePreset === '2y' ? 2 : datePreset === '3y' ? 3 : 5
+    const d = new Date()
+    d.setFullYear(d.getFullYear() - years)
+    return { from: d.toISOString().slice(0, 10), label: `last ${years} year${years > 1 ? 's' : ''}` }
+  }
+
+  const campaignName = campaigns.find((c) => c.id === campaignId)?.name || ''
 
   // Load recipients for the current audience.
   const loadRecipients = async () => {
     setLoadingRecips(true)
     setExcluded(new Set())
     try {
-      const list = mode === 'all' ? await fetchAllContacts() : await fetchContactsByProductCode(code)
+      let list: Recipient[] = []
+      if (mode === 'all') list = await fetchAllContacts()
+      else if (mode === 'code') list = await fetchContactsByProductCode(code, computeRange())
+      else if (mode === 'campaign') list = await fetchContactsByCampaign(campaignId)
       setRecipients(list)
-      if (mode === 'code' && list.length === 0) showToast(`No contacts found for product code ${code}.`, 'warn', 4000)
+      if (mode === 'code' && list.length === 0) showToast(`No contacts found for product code ${code}${datePreset !== 'any' ? ' in that date range' : ''}.`, 'warn', 4000)
+      if (mode === 'campaign' && campaignId && list.length === 0) showToast('That campaign has no contacts with an email address.', 'warn', 4000)
     } catch (e) {
       showToast('Couldn’t load recipients: ' + errMsg(e), 'error', 6000)
     } finally {
@@ -77,7 +109,10 @@ export function MassEmails() {
   useEffect(() => { if (mode === 'all') loadRecipients() }, []) // initial: all contacts
 
   const finalRecipients = useMemo(() => recipients.filter((r) => !excluded.has(r.email.toLowerCase())), [recipients, excluded])
-  const audienceLabel = mode === 'all' ? 'All contacts' : `Quoted code ${code || '—'}`
+  const audienceLabel =
+    mode === 'all' ? 'All contacts'
+      : mode === 'campaign' ? `Campaign: ${campaignName || '—'}`
+        : `Quoted code ${code || '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
 
   const applyTemplate = (id: string) => {
     const t = templates.find((x) => x.id === id)
@@ -158,13 +193,43 @@ export function MassEmails() {
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
               <input type="radio" checked={mode === 'code'} onChange={() => { setMode('code'); setRecipients([]) }} /> Quoted product code
             </label>
-            {mode === 'code' && (
-              <>
-                <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="e.g. 11" style={{ ...inputStyle, width: 100 }} />
-                <button onClick={loadRecipients} disabled={loadingRecips || !code.trim()} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: 'pointer' }}>{loadingRecips ? 'Loading…' : 'Find contacts'}</button>
-              </>
-            )}
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
+              <input type="radio" checked={mode === 'campaign'} onChange={() => { setMode('campaign'); setRecipients([]); setCampaignId('') }} /> Campaign
+            </label>
           </div>
+
+          {mode === 'code' && (
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Product code, e.g. 11" style={{ ...inputStyle, width: 150 }} />
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>quoted</span>
+              <select value={datePreset} onChange={(e) => setDatePreset(e.target.value as typeof datePreset)} style={{ ...inputStyle, width: 'auto' }}>
+                <option value="any">any time</option>
+                <option value="1y">in the last year</option>
+                <option value="2y">in the last 2 years</option>
+                <option value="3y">in the last 3 years</option>
+                <option value="5y">in the last 5 years</option>
+                <option value="custom">between specific dates…</option>
+              </select>
+              {datePreset === 'custom' && (
+                <>
+                  <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
+                  <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>to</span>
+                  <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} style={{ ...inputStyle, width: 'auto' }} />
+                </>
+              )}
+              <button onClick={loadRecipients} disabled={loadingRecips || !code.trim()} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: '#fff', background: code.trim() ? 'var(--accent)' : 'var(--border-strong)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: code.trim() ? 'pointer' : 'default' }}>{loadingRecips ? 'Loading…' : 'Find contacts'}</button>
+            </div>
+          )}
+
+          {mode === 'campaign' && (
+            <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+              <select value={campaignId} onChange={(e) => { const id = e.target.value; setCampaignId(id); setExcluded(new Set()); if (id) fetchContactsByCampaign(id).then(setRecipients).catch((err) => showToast('Couldn’t load campaign: ' + errMsg(err), 'error', 6000)); else setRecipients([]) }} style={{ ...inputStyle, width: 'auto', minWidth: 240 }}>
+                <option value="">— Choose a campaign —</option>
+                {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+              {campaigns.length === 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>No campaigns yet — create one from More ▾ → Campaigns.</span>}
+            </div>
+          )}
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)' }}>
             {loadingRecips ? 'Loading recipients…' : (
               <>

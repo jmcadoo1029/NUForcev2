@@ -32,16 +32,46 @@ export async function fetchAllContacts(): Promise<Recipient[]> {
   return dedupe((rows || []).map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
 }
 
-/** Everyone we've ever quoted a given product code to (from quote line items). */
-export async function fetchContactsByProductCode(code: string): Promise<Recipient[]> {
+/**
+ * Everyone we've ever quoted a given product code to (from quote line items),
+ * optionally narrowed to quotes created within a date window. `from`/`to` are
+ * ISO strings (YYYY-MM-DD or a full timestamp) compared against quotes.created_at
+ * — the DB-stamped date the quote was first written.
+ */
+export async function fetchContactsByProductCode(code: string, range?: { from?: string; to?: string }): Promise<Recipient[]> {
   const c = code.trim()
   if (!c) return []
   const filter = encodeURIComponent(JSON.stringify([{ code: c }]))
-  const rows = await restFetch<Array<{ em: string | null; nm: string | null }>>(
-    'GET',
-    `quotes?select=em:data->qi->>email,nm:data->qi->>contact&line_items=cs.${filter}&limit=5000`,
-  )
+  let path = `quotes?select=em:data->qi->>email,nm:data->qi->>contact&line_items=cs.${filter}`
+  if (range?.from) path += `&created_at=gte.${encodeURIComponent(range.from)}`
+  if (range?.to) path += `&created_at=lte.${encodeURIComponent(range.to)}`
+  path += `&limit=5000`
+  const rows = await restFetch<Array<{ em: string | null; nm: string | null }>>('GET', path)
   return dedupe((rows || []).map((r) => ({ email: r.em || '', name: r.nm || '' })))
+}
+
+// ── Campaigns ─────────────────────────────────────────────────────────────────
+export interface CampaignOption { id: string; name: string }
+
+/** Campaigns list for the audience dropdown (id + name only). */
+export async function fetchCampaignOptions(): Promise<CampaignOption[]> {
+  const rows = await restFetch<Array<{ id: string; name: string | null }>>('GET', `campaigns?select=id,name&order=name&limit=500`)
+  return (rows || []).map((r) => ({ id: r.id, name: (r.name || '').trim() || '(unnamed campaign)' }))
+}
+
+/** The contacts belonging to a campaign, as email recipients (deduped). */
+export async function fetchContactsByCampaign(campaignId: string): Promise<Recipient[]> {
+  if (!campaignId) return []
+  const rows = await restFetch<Array<{ contacts: { first_name: string | null; last_name: string | null; email: string | null } | null }>>(
+    'GET',
+    `campaign_contacts?select=contacts(first_name,last_name,email)&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`,
+  )
+  return dedupe(
+    (rows || [])
+      .map((r) => r.contacts)
+      .filter((c): c is { first_name: string | null; last_name: string | null; email: string | null } => !!c)
+      .map((c) => ({ email: c.email || '', name: [c.first_name, c.last_name].filter(Boolean).join(' ') })),
+  )
 }
 
 // ── Templates ────────────────────────────────────────────────────────────────
