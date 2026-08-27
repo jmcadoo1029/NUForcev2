@@ -30,9 +30,22 @@ export interface SendComposerProps {
   ccEmails?: string[] | null // related contacts → prefilled into "Cc" (quote mode)
   testItem?: string | null
   followUpId?: string | null // follow_up mode: the row whose clock we reset
+  // Combined follow-up (follow_up mode only): several quotes to the SAME contact,
+  // nudged in one email. The anchor quote (props.quoteId/opportunity/followUpId)
+  // carries the send + attachments; every row here gets rescheduled +90d and a
+  // chatter note. Length ≥ 2 switches the composer into combined mode.
+  groupItems?: { followUpId: string; quoteId: string; opportunity: string }[]
   pdfInput?: { qi: Record<string, any>; ti: Record<string, any>; lines: PdfLine[]; budget?: PdfBudget }
   onClose: () => void
   onSent?: (result: QuoteSendResult) => void
+}
+
+/** "26-100", "26-100 and 26-101", "26-100, 26-101 and 26-102". */
+function joinOpps(opps: string[]): string {
+  const a = opps.filter(Boolean)
+  if (a.length <= 1) return a[0] || ''
+  if (a.length === 2) return `${a[0]} and ${a[1]}`
+  return `${a.slice(0, -1).join(', ')} and ${a[a.length - 1]}`
 }
 
 type Source = 'quote_pdf' | 'terms_stored' | 'terms_bundled' | 'stored_doc' | 'upload'
@@ -59,8 +72,13 @@ const inputStyle: React.CSSProperties = {
 const labelStyle: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
 
 export function SendComposer(props: SendComposerProps) {
-  const { mode, quoteId, opportunity, revision, contactName, contactEmail, ccEmails, testItem, followUpId, pdfInput, onClose, onSent } = props
+  const { mode, quoteId, opportunity, revision, contactName, contactEmail, ccEmails, testItem, followUpId, groupItems, pdfInput, onClose, onSent } = props
   const { showToast } = useToast()
+
+  // Combined follow-up when 2+ quotes are bundled to one contact.
+  const isGroup = mode === 'follow_up' && !!groupItems && groupItems.length > 1
+  // The number the template's {quoteNumber} shows — a joined list for a group.
+  const quoteNumberText = isGroup ? joinOpps(groupItems!.map((g) => g.opportunity)) : opportunity
 
   const [senderName, setSenderName] = useState('')
   const [to, setTo] = useState(contactEmail || '')
@@ -78,8 +96,8 @@ export function SendComposer(props: SendComposerProps) {
   const uploadSeq = useRef(1)
 
   const vars: TemplateVars = useMemo(
-    () => ({ contactFirstName: firstNameOf(contactName), quoteNumber: opportunity, testItem: testItem || '', senderName }),
-    [contactName, opportunity, testItem, senderName],
+    () => ({ contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', senderName }),
+    [contactName, quoteNumberText, testItem, senderName],
   )
 
   // Load sender, template, and attachable documents once.
@@ -91,7 +109,7 @@ export function SendComposer(props: SendComposerProps) {
         if (!alive) return
         setSenderName(self.name)
         setRawTemplate({ subject: tpl.subject, body: tpl.body })
-        const v: TemplateVars = { contactFirstName: firstNameOf(contactName), quoteNumber: opportunity, testItem: testItem || '', senderName: self.name }
+        const v: TemplateVars = { contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', senderName: self.name }
         setSubject(fillTemplate(tpl.subject, v))
         setBody(fillTemplate(tpl.body, v))
 
@@ -199,22 +217,41 @@ export function SendComposer(props: SendComposerProps) {
       if (mode === 'quote') {
         const sent = await markQuoteSent({ quoteId: qid, opportunity, customer: '', by: me })
         followUpRowId = sent?.id || null
+      } else if (isGroup) {
+        // Combined follow-up: reschedule EVERY bundled row +90d so they all drop
+        // off the list and return together.
+        await Promise.all(groupItems!.map((g) => rescheduleFollowUp(g.followUpId, me).catch(() => {})))
       } else if (followUpId) {
         await rescheduleFollowUp(followUpId, me)
       }
       await logSentFiles({ quoteId: qid, followUpId: followUpRowId, revision: revision || null, sentBy: me, files: logFiles })
 
       // Auto-log the send to the quote's chatter as an activity note (best-effort —
-      // never fail the send over a chatter write).
+      // never fail the send over a chatter write). For a combined follow-up, note
+      // every quote in the bundle and cross-reference the others.
       try {
         const ccList = recipients(cc)
-        const note = (mode === 'quote' ? 'Quote emailed to ' : 'Follow-up email sent to ')
-          + toList.join(', ')
-          + (ccList.length ? ` (cc ${ccList.join(', ')})` : '')
-        await appendChatter(qid, { by: getSessionEmail() || me || 'system', at: new Date().toISOString(), msg: note })
+        const by = getSessionEmail() || me || 'system'
+        const at = new Date().toISOString()
+        if (isGroup) {
+          const allOpps = groupItems!.map((g) => g.opportunity)
+          await Promise.all(
+            groupItems!.map((g) => {
+              const others = allOpps.filter((o) => o !== g.opportunity)
+              const msg = `Combined follow-up email sent to ${toList.join(', ')}${ccList.length ? ` (cc ${ccList.join(', ')})` : ''}`
+                + (others.length ? ` — also covered ${joinOpps(others)}` : '')
+              return appendChatter(g.quoteId, { by, at, msg }).catch(() => {})
+            }),
+          )
+        } else {
+          const note = (mode === 'quote' ? 'Quote emailed to ' : 'Follow-up email sent to ')
+            + toList.join(', ')
+            + (ccList.length ? ` (cc ${ccList.join(', ')})` : '')
+          await appendChatter(qid, { by, at, msg: note })
+        }
       } catch { /* chatter note is best-effort */ }
 
-      showToast(mode === 'quote' ? 'Quote sent — marked sent, follow-up set for 30 days' : 'Follow-up sent — next reminder in 90 days', 'success', 5000)
+      showToast(mode === 'quote' ? 'Quote sent — marked sent, follow-up set for 30 days' : isGroup ? `Combined follow-up sent — ${groupItems!.length} quotes rescheduled 90 days` : 'Follow-up sent — next reminder in 90 days', 'success', 5000)
       onSent?.(result)
       onClose()
     } catch (e) {
@@ -223,7 +260,7 @@ export function SendComposer(props: SendComposerProps) {
     }
   }
 
-  const title = mode === 'quote' ? `Send quote ${opportunity}` : `Send follow-up — ${opportunity}`
+  const title = mode === 'quote' ? `Send quote ${opportunity}` : isGroup ? `Combined follow-up — ${groupItems!.length} quotes` : `Send follow-up — ${opportunity}`
 
   return (
     <Modal title={title} onClose={() => !busy && onClose()} width={640}>
@@ -231,6 +268,11 @@ export function SendComposer(props: SendComposerProps) {
         <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', padding: 'var(--sp-4) 0' }}>Loading…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-3)' }}>
+          {isGroup && (
+            <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '9px 12px' }}>
+              One email covering <b>{groupItems!.length}</b> quotes to this contact: {joinOpps(groupItems!.map((g) => g.opportunity))}. All {groupItems!.length} follow-ups reschedule 90 days on send.
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 'var(--sp-3)' }}>
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>To</label>

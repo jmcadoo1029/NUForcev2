@@ -11,6 +11,8 @@ export interface FollowUpRow {
   quote_id: string | null
   opportunity: string
   customer: string
+  contactName: string
+  contactEmail: string
   dueAt: number
 }
 
@@ -25,7 +27,7 @@ interface Raw {
     opportunity?: string | null
     revision?: string | null
     customer?: string | null
-    data?: { qi?: { stage?: string } }
+    data?: { qi?: { stage?: string; email?: string; contact?: string } }
   }
 }
 
@@ -102,6 +104,8 @@ async function load(): Promise<FollowUpRow[]> {
       quote_id: fu.quotes?.id || fu.quote_id || null,
       opportunity: fu.quotes?.opportunity || fu.opportunity || '',
       customer: fu.quotes?.customer || '',
+      contactName: String(fu.quotes?.data?.qi?.contact || ''),
+      contactEmail: String(fu.quotes?.data?.qi?.email || '').trim(),
       dueAt: dueAt(fu),
     }))
     .sort((a, b) => a.dueAt - b.dueAt)

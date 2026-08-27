@@ -22,6 +22,15 @@ interface ComposerTarget {
   testItem: string
 }
 
+interface GroupTarget {
+  opportunity: string
+  quoteId: string
+  followUpId: string
+  contactName: string
+  contactEmail: string
+  groupItems: { followUpId: string; quoteId: string; opportunity: string }[]
+}
+
 export function FollowUpsCard() {
   const { data, err } = useFollowUps()
   const { showToast } = useToast()
@@ -33,9 +42,12 @@ export function FollowUpsCard() {
   const [stopBusy, setStopBusy] = useState(false)
   const [delayFor, setDelayFor] = useState<string | null>(null) // row id whose Delay menu is open
   const [delayBusy, setDelayBusy] = useState(false)
+  const [sel, setSel] = useState<Set<string>>(new Set()) // row ids picked for a combined follow-up
+  const [groupTarget, setGroupTarget] = useState<GroupTarget | null>(null)
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
   const hide = (id: string) => setHidden((s) => new Set(s).add(id))
+  const toggleSel = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
 
   // Delay (snooze) a follow-up 30 / 60 / 90 days — it drops off the list now and
   // returns due on its own at the new date. No follow-up is recorded.
@@ -96,6 +108,26 @@ export function FollowUpsCard() {
   }
 
   const rows = (data || []).filter((f) => !hidden.has(f.id))
+
+  // Combined follow-up: quotes picked via checkbox that share ONE contact email
+  // can go out as a single email (the body lists them all; all reschedule +90d).
+  const selectedRows = rows.filter((f) => sel.has(f.id))
+  const selEmails = Array.from(new Set(selectedRows.map((r) => r.contactEmail.trim().toLowerCase()).filter(Boolean)))
+  const sharedEmail = selEmails.length === 1 && selectedRows.every((r) => r.contactEmail.trim()) ? selectedRows[0].contactEmail.trim() : ''
+  const combinedReady = selectedRows.length >= 2 && !!sharedEmail
+  const openCombined = () => {
+    if (!combinedReady) return
+    const anchor = selectedRows[0]
+    setGroupTarget({
+      opportunity: anchor.opportunity,
+      quoteId: anchor.quote_id || '',
+      followUpId: anchor.id,
+      contactName: anchor.contactName,
+      contactEmail: sharedEmail,
+      groupItems: selectedRows.map((r) => ({ followUpId: r.id, quoteId: r.quote_id || '', opportunity: r.opportunity })),
+    })
+  }
+
   const btn = (accent: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border-strong)'}`, background: accent ? 'var(--accent)' : '#fff', color: accent ? '#fff' : 'var(--text)', flexShrink: 0 })
 
   return (
@@ -111,11 +143,24 @@ export function FollowUpsCard() {
 
       {!err && rows.length > 0 && (
         <div>
+          {combinedReady || selectedRows.length > 0 ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap', padding: '9px 12px', marginBottom: 'var(--sp-2)', background: combinedReady ? 'var(--accent-soft, rgba(200,30,45,.06))' : 'var(--bg)', border: `1px solid ${combinedReady ? 'var(--accent)' : 'var(--border)'}`, borderRadius: 'var(--radius-sm)' }}>
+              <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 700 }}>{selectedRows.length} selected</span>
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', flex: 1, minWidth: 0 }}>
+                {combinedReady ? `One email to ${sharedEmail}` : selectedRows.length < 2 ? 'Pick another quote to the same contact to combine' : 'Selected quotes go to different contacts — a combined email needs one shared recipient'}
+              </span>
+              <button onClick={() => setSel(new Set())} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+              <button onClick={openCombined} disabled={!combinedReady} style={{ ...btn(true), opacity: combinedReady ? 1 : 0.5, cursor: combinedReady ? 'pointer' : 'default' }} title={combinedReady ? 'Send one follow-up email covering all selected quotes' : 'Select 2+ quotes that share one contact email'}>Send combined follow-up</button>
+            </div>
+          ) : (
+            <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', padding: '0 4px 8px' }}>Tip: check two or more quotes to the same contact to follow up on them in one email.</div>
+          )}
           {rows.map((f) => (
-            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', padding: '9px 4px', borderBottom: '1px solid var(--border)' }}>
+            <div key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', padding: '9px 4px', borderBottom: '1px solid var(--border)', background: sel.has(f.id) ? 'var(--bg)' : 'transparent' }}>
+              <input type="checkbox" checked={sel.has(f.id)} onChange={() => toggleSel(f.id)} title="Select for a combined follow-up" style={{ cursor: 'pointer', flexShrink: 0 }} />
               <Link to={f.quote_id ? `/quote/${f.quote_id}` : '#'} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', flex: 1, minWidth: 0, textDecoration: 'none', color: 'var(--text)' }}>
                 <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{f.opportunity}</span>
-                <span style={{ color: 'var(--muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.customer}</span>
+                <span style={{ color: 'var(--muted)', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.customer}{f.contactName || f.contactEmail ? ` · ${f.contactName || f.contactEmail}` : ''}</span>
                 <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', whiteSpace: 'nowrap' }}>due {isFinite(f.dueAt) ? fmtDate(new Date(f.dueAt).toISOString()) : '—'}</span>
               </Link>
               <button onClick={() => openFollowUp(f)} disabled={loadingId === f.id} style={btn(true)} title="Compose and send a follow-up email">{loadingId === f.id ? '…' : 'Send follow-up'}</button>
@@ -151,6 +196,20 @@ export function FollowUpsCard() {
           followUpId={target.fu.id}
           onClose={() => setTarget(null)}
           onSent={() => { hide(target.fu.id); setTarget(null) }}
+        />
+      )}
+
+      {groupTarget && (
+        <SendComposer
+          mode="follow_up"
+          quoteId={groupTarget.quoteId}
+          opportunity={groupTarget.opportunity}
+          contactName={groupTarget.contactName}
+          contactEmail={groupTarget.contactEmail}
+          followUpId={groupTarget.followUpId}
+          groupItems={groupTarget.groupItems}
+          onClose={() => setGroupTarget(null)}
+          onSent={() => { setHidden((prev) => { const n = new Set(prev); groupTarget.groupItems.forEach((g) => n.add(g.followUpId)); return n }); setSel(new Set()); setGroupTarget(null) }}
         />
       )}
 
