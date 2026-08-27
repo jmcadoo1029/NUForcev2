@@ -51,6 +51,11 @@ export function QuotePage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [calcOpen, setCalcOpen] = useState(false)
   const [convertOpen, setConvertOpen] = useState(false)
+  // Prominent mid-screen prompt shown once when opening a quote that still needs
+  // Convert-to-picker, so it can't be missed (the inline banner alone was easy to
+  // skim past). Tracked per quote id so it opens once, not on every re-render.
+  const [convertWarnOpen, setConvertWarnOpen] = useState(false)
+  const warnedForRef = useRef<string | null>(null)
   const [sendOpen, setSendOpen] = useState(false)
   // Manual follow-up from the quote page (mirrors the dashboard "Send follow-up").
   const [followUpOpen, setFollowUpOpen] = useState(false)
@@ -351,7 +356,16 @@ export function QuotePage() {
   const applyConversion = (rows: ConvertedLine[]) => {
     setLineItems(rows.map((l) => ({ key: lineSeq.current++, code: l.code || '', label: l.label, desc: l.desc, price: l.price, added: false })))
     setConverted(true)
+    setConvertWarnOpen(false)
   }
+  // Pop the prominent mid-screen prompt once per quote when it needs converting.
+  useEffect(() => {
+    const key = row?.id != null ? String(row.id) : null
+    if (needsConversion && key && warnedForRef.current !== key) {
+      warnedForRef.current = key
+      setConvertWarnOpen(true)
+    }
+  }, [needsConversion, row?.id])
   // Approved, but the approval came from an earlier revision (decided before this
   // row existed) — this revision still needs its own approval. Reflects preview
   // approval actions: once re-approved here, decidedAt is now → flag clears.
@@ -510,6 +524,7 @@ export function QuotePage() {
     // format). Block it — convert first (Convert to picker) so the lines survive.
     if (needsConversion) {
       showToast('Convert the imported line items first — saving now would drop them. Use “Convert to picker line items,” then save.', 'error', 7000)
+      setConvertWarnOpen(true)
       return
     }
     // Won-date safeguard (ported from Classic): moving a quote TO Closed Won this
@@ -950,6 +965,20 @@ export function QuotePage() {
               setup={setupEdit}
               onSetupChange={setSetupField}
             />
+          )}
+          {convertWarnOpen && (
+            <Modal title="Convert this quote before editing" onClose={() => setConvertWarnOpen(false)} width={480}>
+              <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'flex-start', marginBottom: 'var(--sp-4)' }}>
+                <div style={{ flexShrink: 0, width: 40, height: 40, borderRadius: '50%', background: 'var(--warn-soft)', color: 'var(--warn)', border: '1px solid var(--warn-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, fontWeight: 800, lineHeight: 1 }}>!</div>
+                <div style={{ fontSize: 'var(--fs-base)', color: 'var(--text)', lineHeight: 1.6 }}>
+                  This is a <b>Salesforce-imported</b> quote still in the legacy line-item format. <b>Convert it to picker line items</b> before you add, edit, reprice, or save — otherwise saving would drop the imported lines. Nothing changes until you Save.
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+                <button onClick={() => setConvertWarnOpen(false)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '9px 16px', cursor: 'pointer' }}>Not now — just viewing</button>
+                <button onClick={() => { setConvertWarnOpen(false); setConvertOpen(true) }} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '9px 18px', cursor: 'pointer' }}>Convert to picker line items</button>
+              </div>
+            </Modal>
           )}
           {convertOpen && (
             <ConvertToPicker
