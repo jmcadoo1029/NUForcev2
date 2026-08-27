@@ -29,13 +29,19 @@ interface Raw {
   }
 }
 
-// Rank a revision letter so families sort correctly: base=0, A=1, B=2, … AA=27.
-function revRank(rev: unknown): number {
-  const r = String(rev ?? '').toUpperCase().trim()
-  if (!r) return 0
+// Rank a revision for "latest wins": base=0, A=1, B=2, … AA=27. The opportunity's
+// trailing letters are the AUTHORITATIVE signal — the `revision` column is often
+// null on imported/revised quotes (e.g. "24-173D" with revision=null), which used
+// to make every revision rank 0 so none superseded and stale revs (Rev B while D
+// is current) lingered on the list. Fall back to the revision column only when the
+// opportunity carries no suffix.
+function revRank(opp?: string | null, revCol?: unknown): number {
+  const fromOpp = String(opp ?? '').toUpperCase().match(/[A-Z]+$/)?.[0] || ''
+  const letters = fromOpp || String(revCol ?? '').toUpperCase().trim()
+  if (!letters) return 0
   let n = 0
-  for (let i = 0; i < r.length; i++) {
-    const c = r.charCodeAt(i)
+  for (let i = 0; i < letters.length; i++) {
+    const c = letters.charCodeAt(i)
     if (c < 65 || c > 90) return 0 // non-letter suffix → treat as base
     n = n * 26 + (c - 64)
   }
@@ -59,7 +65,7 @@ async function load(): Promise<FollowUpRow[]> {
     const cur = familyLatest.get(key)
     if (cur === undefined || rank > cur) familyLatest.set(key, rank)
   }
-  rows.forEach((fu) => bump(baseOf(fu.quotes?.opportunity || fu.opportunity || ''), revRank(fu.quotes?.revision)))
+  rows.forEach((fu) => bump(baseOf(fu.quotes?.opportunity || fu.opportunity || ''), revRank(fu.quotes?.opportunity || fu.opportunity, fu.quotes?.revision)))
 
   const bases = Array.from(new Set(rows.map((fu) => baseOf(fu.quotes?.opportunity || fu.opportunity || '')).filter(Boolean)))
   if (bases.length) {
@@ -68,7 +74,7 @@ async function load(): Promise<FollowUpRow[]> {
       const fam = (await restFetch<Array<{ opportunity?: string | null; revision?: string | null }>>('GET', `quotes?select=opportunity,revision&or=(${orExpr})`)) || []
       fam.forEach((q) => {
         const key = baseOf(q.opportunity || '')
-        if (bases.includes(key)) bump(key, revRank(q.revision))
+        if (bases.includes(key)) bump(key, revRank(q.opportunity, q.revision))
       })
     } catch {
       // If the family lookup fails, fall back to the follow-up-derived latest.
@@ -88,7 +94,7 @@ async function load(): Promise<FollowUpRow[]> {
       if (stage === 'Closed Won' || stage === 'Closed Lost') return false
       const key = baseOf(fu.quotes?.opportunity || fu.opportunity || '')
       // Only the family's latest revision shows — supersede older ones.
-      if (revRank(fu.quotes?.revision) !== (familyLatest.get(key) ?? 0)) return false
+      if (revRank(fu.quotes?.opportunity || fu.opportunity, fu.quotes?.revision) !== (familyLatest.get(key) ?? 0)) return false
       return isDue(fu)
     })
     .map((fu) => ({
