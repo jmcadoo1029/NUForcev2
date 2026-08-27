@@ -14,22 +14,32 @@ import { fetchTemplate, saveTemplate, fillTemplate, DEFAULT_TEMPLATES, TOKENS, t
 const KEYS: Array<{ key: TemplateKey; label: string }> = [
   { key: 'quote', label: 'Quote email' },
   { key: 'follow_up', label: 'Follow-up email' },
+  { key: 'follow_up_combined', label: 'Combined follow-up' },
 ]
 
-const TOKEN_LEGEND: Array<{ token: string; desc: string }> = [
-  { token: TOKENS.contactFirstName, desc: 'Contact’s first name' },
-  { token: TOKENS.quoteNumber, desc: 'Quote number' },
-  { token: TOKENS.testItem, desc: 'Test item' },
-  { token: TOKENS.senderName, desc: 'Your full name' },
-]
+// Per-template token legend — the combined follow-up uses {Quote List} (all
+// quotes + their items) instead of the singular {Quote #}/{Test Item}.
+const legendFor = (key: TemplateKey): Array<{ token: string; desc: string }> =>
+  key === 'follow_up_combined'
+    ? [
+        { token: TOKENS.contactFirstName, desc: 'Contact’s first name' },
+        { token: TOKENS.quoteList, desc: 'List of quotes + items' },
+        { token: TOKENS.senderName, desc: 'Your full name' },
+      ]
+    : [
+        { token: TOKENS.contactFirstName, desc: 'Contact’s first name' },
+        { token: TOKENS.quoteNumber, desc: 'Quote number' },
+        { token: TOKENS.testItem, desc: 'Test item' },
+        { token: TOKENS.senderName, desc: 'Your full name' },
+      ]
 
-const SAMPLE: TemplateVars = { contactFirstName: 'John', quoteNumber: '26-1234B', testItem: 'Widget Assembly', senderName: 'Jane Tester' }
+const SAMPLE: TemplateVars = { contactFirstName: 'John', quoteNumber: '26-1234B', testItem: 'Widget Assembly', quoteList: '#26-1234B — Widget Assembly\n#26-1235 — Gearbox Housing', senderName: 'Jane Tester' }
 
 export function Templates({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
   const [active, setActive] = useState<TemplateKey>('quote')
-  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, follow_up: { subject: '', body: '' } })
+  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' } })
   const [loaded, setLoaded] = useState(false)
   const [isManager, setIsManager] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -40,9 +50,9 @@ export function Templates({ onClose }: { onClose: () => void }) {
 
   useEffect(() => {
     let alive = true
-    Promise.all([fetchTemplate('quote'), fetchTemplate('follow_up'), fetchSelf()]).then(([q, f, self]) => {
+    Promise.all([fetchTemplate('quote'), fetchTemplate('follow_up'), fetchTemplate('follow_up_combined'), fetchSelf()]).then(([q, f, fc, self]) => {
       if (!alive) return
-      setDrafts({ quote: { subject: q.subject, body: q.body }, follow_up: { subject: f.subject, body: f.body } })
+      setDrafts({ quote: { subject: q.subject, body: q.body }, follow_up: { subject: f.subject, body: f.body }, follow_up_combined: { subject: fc.subject, body: fc.body } })
       setSample((s) => ({ ...s, senderName: self.name || s.senderName }))
       setLoaded(true)
     })
@@ -121,7 +131,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
           <div style={{ marginBottom: 'var(--sp-4)' }}>
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>Placeholders {isManager && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic' }}>· click to insert</span>}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {TOKEN_LEGEND.map((t) => (
+              {legendFor(active).map((t) => (
                 <button key={t.token} onClick={() => insertToken(t.token)} disabled={!isManager} title={t.desc} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: isManager ? 'pointer' : 'default' }}>{t.desc}</button>
               ))}
             </div>

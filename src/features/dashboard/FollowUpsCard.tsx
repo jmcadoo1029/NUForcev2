@@ -28,7 +28,7 @@ interface GroupTarget {
   followUpId: string
   contactName: string
   contactEmail: string
-  groupItems: { followUpId: string; quoteId: string; opportunity: string }[]
+  groupItems: { followUpId: string; quoteId: string; opportunity: string; testItem?: string }[]
 }
 
 export function FollowUpsCard() {
@@ -44,6 +44,7 @@ export function FollowUpsCard() {
   const [delayBusy, setDelayBusy] = useState(false)
   const [sel, setSel] = useState<Set<string>>(new Set()) // row ids picked for a combined follow-up
   const [groupTarget, setGroupTarget] = useState<GroupTarget | null>(null)
+  const [groupBusy, setGroupBusy] = useState(false)
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
   const hide = (id: string) => setHidden((s) => new Set(s).add(id))
@@ -115,17 +116,32 @@ export function FollowUpsCard() {
   const selEmails = Array.from(new Set(selectedRows.map((r) => r.contactEmail.trim().toLowerCase()).filter(Boolean)))
   const sharedEmail = selEmails.length === 1 && selectedRows.every((r) => r.contactEmail.trim()) ? selectedRows[0].contactEmail.trim() : ''
   const combinedReady = selectedRows.length >= 2 && !!sharedEmail
-  const openCombined = () => {
-    if (!combinedReady) return
-    const anchor = selectedRows[0]
-    setGroupTarget({
-      opportunity: anchor.opportunity,
-      quoteId: anchor.quote_id || '',
-      followUpId: anchor.id,
-      contactName: anchor.contactName,
-      contactEmail: sharedEmail,
-      groupItems: selectedRows.map((r) => ({ followUpId: r.id, quoteId: r.quote_id || '', opportunity: r.opportunity })),
-    })
+  // Open the combined composer. Fetch each quote's test item first so the email's
+  // {Quote List} names every unit (each quote can be a different item).
+  const openCombined = async () => {
+    if (!combinedReady || groupBusy) return
+    setGroupBusy(true)
+    try {
+      const ids = selectedRows.map((r) => r.quote_id).filter(Boolean) as string[]
+      const items = new Map<string, string>()
+      if (ids.length) {
+        const qrows = await restFetch<Array<{ id: string | number; data?: Record<string, any> }>>('GET', `quotes?id=in.(${ids.join(',')})&select=id,data`)
+        ;(qrows || []).forEach((q) => items.set(String(q.id), String(q.data?.ti?.item || '')))
+      }
+      const anchor = selectedRows[0]
+      setGroupTarget({
+        opportunity: anchor.opportunity,
+        quoteId: anchor.quote_id || '',
+        followUpId: anchor.id,
+        contactName: anchor.contactName,
+        contactEmail: sharedEmail,
+        groupItems: selectedRows.map((r) => ({ followUpId: r.id, quoteId: r.quote_id || '', opportunity: r.opportunity, testItem: items.get(String(r.quote_id)) || '' })),
+      })
+    } catch (e) {
+      showToast('Couldn’t load the selected quotes: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setGroupBusy(false)
+    }
   }
 
   const btn = (accent: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border-strong)'}`, background: accent ? 'var(--accent)' : '#fff', color: accent ? '#fff' : 'var(--text)', flexShrink: 0 })
@@ -150,7 +166,7 @@ export function FollowUpsCard() {
                 {combinedReady ? `One email to ${sharedEmail}` : selectedRows.length < 2 ? 'Pick another quote to the same contact to combine' : 'Selected quotes go to different contacts — a combined email needs one shared recipient'}
               </span>
               <button onClick={() => setSel(new Set())} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
-              <button onClick={openCombined} disabled={!combinedReady} style={{ ...btn(true), opacity: combinedReady ? 1 : 0.5, cursor: combinedReady ? 'pointer' : 'default' }} title={combinedReady ? 'Send one follow-up email covering all selected quotes' : 'Select 2+ quotes that share one contact email'}>Send combined follow-up</button>
+              <button onClick={openCombined} disabled={!combinedReady || groupBusy} style={{ ...btn(true), opacity: combinedReady ? 1 : 0.5, cursor: combinedReady && !groupBusy ? 'pointer' : 'default' }} title={combinedReady ? 'Send one follow-up email covering all selected quotes' : 'Select 2+ quotes that share one contact email'}>{groupBusy ? 'Loading…' : 'Send combined follow-up'}</button>
             </div>
           ) : (
             <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', padding: '0 4px 8px' }}>Tip: check two or more quotes to the same contact to follow up on them in one email.</div>

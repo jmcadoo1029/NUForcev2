@@ -5,7 +5,7 @@ import { restFetch } from './restFetch'
 // fail soft to the defaults, so a missing table never blocks composing. The
 // client fills placeholders before send; the edge function sends final text.
 
-export type TemplateKey = 'quote' | 'follow_up'
+export type TemplateKey = 'quote' | 'follow_up' | 'follow_up_combined'
 
 export interface EmailTemplate {
   key: TemplateKey
@@ -18,6 +18,10 @@ export const TOKENS = {
   contactFirstName: '{First Name of contact}',
   quoteNumber: '{Quote #}',
   testItem: '{Test Item}',
+  // Combined follow-up only: one line per quote, "#26-100 — Widget A", built from
+  // every quote in the bundle (each with its own test item). Replaces the singular
+  // {Quote #}/{Test Item} pairing that only makes sense for a single quote.
+  quoteList: '{Quote List}',
   senderName: '{First & Last name of NU Labs person sending the quote}',
 } as const
 
@@ -58,15 +62,38 @@ Thank you, and have a great day,
 ${SIGNATURE}`,
 }
 
+// Combined follow-up — one email covering several quotes to the same contact.
+// {Quote List} expands to one "#number — test item" line per quote, so each unit
+// is named without the singular "the {Test Item}" phrasing.
+const DEFAULT_FOLLOW_UP_COMBINED: EmailTemplate = {
+  key: 'follow_up_combined',
+  subject: `Following up on your NU Labs quotes`,
+  body: `Dear {First Name of contact},
+
+I'm following up on the following NU Labs quotes:
+
+{Quote List}
+
+I wanted to check in on where things stand, and see whether there's anything we can clarify or provide to help move them forward.
+
+If it's helpful, I'm happy to walk through any of these or answer questions about scheduling and turnaround. Just let me know.
+
+Thank you, and have a great day,
+
+${SIGNATURE}`,
+}
+
 export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {
   quote: DEFAULT_QUOTE,
   follow_up: DEFAULT_FOLLOW_UP,
+  follow_up_combined: DEFAULT_FOLLOW_UP_COMBINED,
 }
 
 export interface TemplateVars {
   contactFirstName?: string
   quoteNumber?: string
   testItem?: string
+  quoteList?: string
   senderName?: string
 }
 
@@ -82,6 +109,7 @@ export function fillTemplate(text: string, vars: TemplateVars): string {
   out = sub(out, TOKENS.contactFirstName, vars.contactFirstName, '[contact first name]')
   out = sub(out, TOKENS.quoteNumber, vars.quoteNumber, '[quote #]')
   out = sub(out, TOKENS.testItem, vars.testItem, '[test item]')
+  out = sub(out, TOKENS.quoteList, vars.quoteList, '[quotes]')
   out = sub(out, TOKENS.senderName, vars.senderName, '[your name]')
   return out
 }

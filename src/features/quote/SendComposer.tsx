@@ -34,7 +34,7 @@ export interface SendComposerProps {
   // nudged in one email. The anchor quote (props.quoteId/opportunity/followUpId)
   // carries the send + attachments; every row here gets rescheduled +90d and a
   // chatter note. Length ≥ 2 switches the composer into combined mode.
-  groupItems?: { followUpId: string; quoteId: string; opportunity: string }[]
+  groupItems?: { followUpId: string; quoteId: string; opportunity: string; testItem?: string }[]
   pdfInput?: { qi: Record<string, any>; ti: Record<string, any>; lines: PdfLine[]; budget?: PdfBudget }
   onClose: () => void
   onSent?: (result: QuoteSendResult) => void
@@ -79,6 +79,10 @@ export function SendComposer(props: SendComposerProps) {
   const isGroup = mode === 'follow_up' && !!groupItems && groupItems.length > 1
   // The number the template's {quoteNumber} shows — a joined list for a group.
   const quoteNumberText = isGroup ? joinOpps(groupItems!.map((g) => g.opportunity)) : opportunity
+  // {Quote List} for the combined template: one "#number — test item" line each.
+  const quoteListText = isGroup
+    ? groupItems!.map((g) => `#${g.opportunity}${g.testItem ? ` — ${g.testItem}` : ''}`).join('\n')
+    : ''
 
   const [senderName, setSenderName] = useState('')
   const [to, setTo] = useState(contactEmail || '')
@@ -96,20 +100,20 @@ export function SendComposer(props: SendComposerProps) {
   const uploadSeq = useRef(1)
 
   const vars: TemplateVars = useMemo(
-    () => ({ contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', senderName }),
-    [contactName, quoteNumberText, testItem, senderName],
+    () => ({ contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', quoteList: quoteListText, senderName }),
+    [contactName, quoteNumberText, testItem, quoteListText, senderName],
   )
 
   // Load sender, template, and attachable documents once.
   useEffect(() => {
     let alive = true
-    const templateKey: TemplateKey = mode === 'quote' ? 'quote' : 'follow_up'
+    const templateKey: TemplateKey = mode === 'quote' ? 'quote' : isGroup ? 'follow_up_combined' : 'follow_up'
     Promise.all([fetchSelf(), fetchTemplate(templateKey), fetchAttachableDocuments(quoteId), fetchTermsDocument()]).then(
       ([self, tpl, docs, terms]) => {
         if (!alive) return
         setSenderName(self.name)
         setRawTemplate({ subject: tpl.subject, body: tpl.body })
-        const v: TemplateVars = { contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', senderName: self.name }
+        const v: TemplateVars = { contactFirstName: firstNameOf(contactName), quoteNumber: quoteNumberText, testItem: testItem || '', quoteList: quoteListText, senderName: self.name }
         setSubject(fillTemplate(tpl.subject, v))
         setBody(fillTemplate(tpl.body, v))
 
