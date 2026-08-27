@@ -5,7 +5,7 @@ import { restFetch } from '../../lib/restFetch'
 import { money } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
-import { updateQuoteContact, resolveBounceFlag } from '../../lib/quoteContact'
+import { updateQuoteContact, resolveBounceFlag, flagContactInvalid } from '../../lib/quoteContact'
 import { searchClients, fetchClientContacts, searchPeople, personName, type PersonRow, type ClientRow } from '../../lib/directory'
 import { Autocomplete } from '../quote/form/Autocomplete'
 
@@ -56,6 +56,9 @@ export function BadContactsCard() {
   const [done, setDone] = useState<Set<string>>(new Set())
   const [form, setForm] = useState<Record<string, Pick>>({})
   const [busy, setBusy] = useState<string | null>(null)
+  // Manually flag a contact we already know is bad (e.g. "no longer with us").
+  const [flagText, setFlagText] = useState('')
+  const [flagBusy, setFlagBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -77,6 +80,40 @@ export function BadContactsCard() {
       const cur = f[email] || { account: '', clientId: '', name: '', email: '' }
       return { ...f, [email]: { ...cur, ...p } }
     })
+
+  // Reload the bad-contact groups and seed any new group's picker with its account.
+  const refresh = async (): Promise<BadGroup[]> => {
+    const g = await loadBadContacts()
+    setGroups(g)
+    setForm((prev) => {
+      const seed = { ...prev }
+      g.forEach((grp) => { if (!seed[grp.email]) seed[grp.email] = { account: grp.account, clientId: grp.clientId, name: '', email: '' } })
+      return seed
+    })
+    return g
+  }
+
+  // Manually mark a contact bad (you already know they're gone). Flags the address
+  // like a bounce would, then reloads so their quotes appear here to reassign.
+  const markBad = async (p: PersonRow) => {
+    const email = (p.email || '').trim()
+    if (!email || !email.includes('@')) { showToast('That contact has no email on record.', 'warn', 4000); return }
+    setFlagBusy(true)
+    try {
+      if (!WRITES_ENABLED) { showToast('Preview — writes off, so nothing was flagged.', 'warn', 4000); setFlagText(''); return }
+      await flagContactInvalid(email, `manually flagged${me ? ' by ' + me : ''}`)
+      const g = await refresh()
+      setDone((s) => { const n = new Set(s); n.delete(email); return n })
+      setFlagText('')
+      const grp = g.find((x) => x.email.toLowerCase() === email.toLowerCase())
+      if (grp) showToast(`Marked ${email} as bad — ${grp.quotes.length} quote${grp.quotes.length !== 1 ? 's' : ''} to reassign below.`, 'success', 6000)
+      else showToast(`Marked ${email} as bad. No open quotes are addressed to them.`, 'info', 6000)
+    } catch (e) {
+      showToast('Couldn’t flag contact: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setFlagBusy(false)
+    }
+  }
 
   // Contacts come from the linked account when there is one, else a global search.
   const contactSearch = (clientId: string) => async (term: string): Promise<PersonRow[]> => {
@@ -115,8 +152,10 @@ export function BadContactsCard() {
   }
 
   const visible = (groups || []).filter((g) => !done.has(g.email))
-  // Render nothing unless there's something to fix (keeps My Work uncluttered).
-  if (!err && visible.length === 0) return null
+  // Still loading and nothing to show yet — render nothing (keeps My Work quiet
+  // until we know whether there are bad contacts). Once loaded, the card always
+  // shows so the "mark a contact bad" search is available even when the list is empty.
+  if (!err && groups === null) return null
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
@@ -125,17 +164,36 @@ export function BadContactsCard() {
         {visible.length > 0 && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 800, color: '#fff', background: 'var(--accent)', borderRadius: 20, padding: '2px 9px' }}>{visible.length}</span>}
       </div>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
-        These addresses bounced — the contact has likely left. Put the correct contact on all their quotes at once.
+        Bounced or known-bad addresses — the contact has likely left. Put the correct contact on all their quotes at once.
+      </div>
+
+      {/* Manually flag a contact you already know is bad (e.g. "no longer with us"). */}
+      <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
+        <div style={label}>Know a contact is gone? Flag them</div>
+        <Autocomplete<PersonRow>
+          value={flagText}
+          onValueChange={setFlagText}
+          search={(t) => searchPeople(t)}
+          minChars={2}
+          itemKey={(p) => p.id}
+          itemPrimary={(p) => personName(p) || '(no name)'}
+          itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
+          onPick={(p) => { if (!flagBusy) markBad(p) }}
+          placeholder={flagBusy ? 'Flagging…' : 'Search a contact by name or email…'}
+          emptyText="No matching contacts."
+        />
+        <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 4 }}>Marks the address bad and pulls their quotes below to reassign. Won’t be re-emailed.</div>
       </div>
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {err}</div>}
+      {!err && visible.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', fontStyle: 'italic' }}>No bad contacts to fix right now.</div>}
 
       {visible.map((g) => {
         const f = form[g.email] || { account: g.account, clientId: g.clientId, name: '', email: '' }
         return (
           <div key={g.email} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>Bounced</span>
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>{/bounce/i.test(g.reason) ? 'Bounced' : 'Flagged'}</span>
               <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
               <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>

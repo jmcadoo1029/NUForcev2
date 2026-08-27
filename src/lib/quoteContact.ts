@@ -25,3 +25,15 @@ export async function resolveBounceFlag(quoteId: string, by: string): Promise<vo
     body: { resolved: true, resolved_by: by || null, resolved_at: new Date().toISOString() },
   })
 }
+
+/** Manually mark a contact's address invalid (same field the resend-webhook sets
+ *  on a hard bounce), for a contact you already KNOW is bad — e.g. you heard they
+ *  left the company. Flags every contact row with that address so it lands in the
+ *  Bad Contacts widget (and won't be re-emailed). Match is by email, case-folded. */
+export async function flagContactInvalid(email: string, reason: string): Promise<void> {
+  const e = email.trim()
+  if (!e) return
+  await restFetch('PATCH', `contacts?email=eq.${enc(e)}`, {
+    body: { email_invalid: true, email_invalid_at: new Date().toISOString(), email_invalid_reason: reason || 'manually flagged' },
+  })
+}
