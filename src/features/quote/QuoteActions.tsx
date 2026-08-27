@@ -4,7 +4,7 @@ import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
 import { updateQuoteContact } from '../../lib/quoteContact'
-import { fetchClientContacts, searchPeople, personName, type PersonRow } from '../../lib/directory'
+import { fetchClientContacts, searchPeople, searchClients, personName, type PersonRow, type ClientRow } from '../../lib/directory'
 import { Autocomplete } from './form/Autocomplete'
 import { WRITES_ENABLED } from '../../lib/config'
 
@@ -117,6 +117,10 @@ export function QuoteActions({
   const [contactOpen, setContactOpen] = useState(false)
   const [cName, setCName] = useState(contactName)
   const [cEmail, setCEmail] = useState(contactEmail)
+  // The account whose contacts the picker searches. Defaults to the quote's own
+  // account, but you can type another company to pull a contact from there.
+  const [acctId, setAcctId] = useState(clientId)
+  const [acctText, setAcctText] = useState(customer || '')
   const [contactBusy, setContactBusy] = useState(false)
 
   useEffect(() => {
@@ -194,11 +198,12 @@ export function QuoteActions({
     }
   }
 
-  // Contact suggestions come from the quote's account when it's linked, else a
-  // global contact search — same behavior as the Bad-contacts widget.
+  // Contact suggestions come from the selected account (the quote's own by
+  // default, or another company you search) when one is linked, else a global
+  // contact search — same behavior as the Bad-contacts widget.
   const contactSearch = async (term: string): Promise<PersonRow[]> => {
-    if (clientId) {
-      const list = await fetchClientContacts(clientId)
+    if (acctId) {
+      const list = await fetchClientContacts(acctId)
       const t = term.toLowerCase()
       return list.filter((p) => (personName(p) + ' ' + (p.email || '')).toLowerCase().includes(t))
     }
@@ -250,24 +255,36 @@ export function QuoteActions({
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}
       </button>
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>
+        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setAcctId(clientId); setAcctText(customer || ''); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>
         {contactOpen && (
           <>
             <div onClick={() => setContactOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
             <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
               <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>Update contact</div>
               <div style={{ marginBottom: 'var(--sp-2)' }}>
+                <Autocomplete<ClientRow>
+                  value={acctText}
+                  onValueChange={(v) => { setAcctText(v); if (!v.trim()) setAcctId('') }}
+                  search={(t) => searchClients(t)}
+                  itemKey={(c) => c.id}
+                  itemPrimary={(c) => c.name || '(unnamed)'}
+                  itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
+                  onPick={(c) => { setAcctText(c.name || ''); setAcctId(c.id); setCName(''); setCEmail('') }}
+                  placeholder="Account — defaults to this quote's; type to change"
+                />
+              </div>
+              <div style={{ marginBottom: 'var(--sp-2)' }}>
                 <Autocomplete<PersonRow>
                   value={cName}
                   onValueChange={setCName}
                   search={contactSearch}
-                  minChars={clientId ? 0 : 1}
+                  minChars={acctId ? 0 : 1}
                   itemKey={(p) => p.id}
                   itemPrimary={(p) => personName(p) || '(no name)'}
                   itemSecondary={(p) => [p.email, p.client_name].filter(Boolean).join(' · ')}
                   onPick={(p) => { setCName(personName(p)); setCEmail(p.email || '') }}
-                  placeholder={clientId ? 'Choose a contact, or type' : 'Contact name'}
-                  emptyText={clientId ? 'No contacts on this account — type a name.' : 'Type a contact name.'}
+                  placeholder={acctId ? 'Choose a contact, or type' : 'Contact name'}
+                  emptyText={acctId ? 'No contacts on this account — type a name.' : 'Pick an account, or type a name.'}
                 />
               </div>
               <input value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Contact email" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
