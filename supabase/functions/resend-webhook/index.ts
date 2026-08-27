@@ -107,11 +107,40 @@ async function verifySignature(
 // ── NUForce addition: delivery-status alerts + audit reconcile ───────────────
 type SendStatus = 'delivered' | 'bounced' | 'complained' | 'delayed';
 
+// A permanent bounce can mean two very different things: the address is genuinely
+// bad (dead mailbox), OR a valid address was blocked by the recipient's mail
+// security — firewall / gateway (Proofpoint, Mimecast, Barracuda) / spam filter /
+// reputation. Many of NU's customers (defense, large manufacturers) run exactly
+// these. We only mark a contact "bad" for a genuinely bad address; a block should
+// tell the sender to follow up manually WITHOUT removing a valid contact. The SMTP
+// enhanced status code in the diagnostic is the most reliable signal:
+//   5.1.x → bad destination address     5.7.x → policy / security / reputation
+type BounceKind = 'bad_address' | 'blocked' | 'unknown';
+function classifyBounce(bounce: any): { kind: BounceKind; detail: string } {
+  const subType = String(bounce?.subType || '');
+  const message = String(bounce?.message || '');
+  const diag = Array.isArray(bounce?.diagnosticCode) ? bounce.diagnosticCode.join(' | ') : String(bounce?.diagnosticCode || '');
+  const blob = `${subType} ${message} ${diag}`.toLowerCase();
+  const detail = ([subType, message, diag].filter(Boolean).join(' — ') || 'permanent bounce').slice(0, 300);
+  // Enhanced SMTP status code is the strongest signal when present.
+  if (/\b5\.1\.[0-9]\b/.test(blob)) return { kind: 'bad_address', detail }; // bad destination mailbox/address
+  if (/\b5\.7\.[0-9]\b/.test(blob)) return { kind: 'blocked', detail };     // policy / security / reputation
+  // Address-does-not-exist subtypes / phrases → bad address.
+  if (/noemail|nonexistent|does ?not ?exist/i.test(subType)) return { kind: 'bad_address', detail };
+  if (/(no such|unknown|invalid|not found|unavailable|disabled|closed|does not exist)[^a-z]{0,20}(user|mailbox|recipient|address|account)|(user|mailbox|recipient|address|account)[^a-z]{0,20}(unknown|not found|unavailable|does not exist|invalid|rejected)/.test(blob)) return { kind: 'bad_address', detail };
+  // Blocked / policy / security / reputation phrases → valid address, delivery blocked.
+  if (/block|policy|denied|reputation|spam|quarantin|prohibit|not authori[sz]ed|access denied|greylist|content reject|attachment|firewall|barracuda|proofpoint|mimecast|\bspf\b|\bdkim\b|\bdmarc\b|blacklist|deny ?list|banned/.test(blob)) return { kind: 'blocked', detail };
+  // 'Suppressed' = Resend suppressing after prior hard bounces → treat as bad.
+  if (/suppress/i.test(subType)) return { kind: 'bad_address', detail };
+  return { kind: 'unknown', detail };
+}
+
 // Email the send's owner about a delivery-status event; problems (bounce /
 // complaint / delay) are also copied to oversight. Best-effort; needs RESEND_API_KEY.
 async function sendStatusAlert(opts: {
   opportunity: string | null; recipient: string; status: SendStatus;
   reason: string; sendKind: string | null; sentByEmail: string | null;
+  bounceKind?: BounceKind | null;
 }): Promise<void> {
   if (!RESEND_API_KEY) return;
   const isProblem = opts.status !== 'delivered';
@@ -123,17 +152,25 @@ async function sendStatusAlert(opts: {
   if (!to.length) return;
   const kind = opts.sendKind === 'follow_up' ? 'Follow-up' : 'Quote';
   const statusLabel = opts.status === 'delivered' ? 'Delivered'
-    : opts.status === 'bounced' ? 'Bounced'
+    : opts.status === 'bounced'
+      ? (opts.bounceKind === 'blocked' ? 'Blocked — follow up manually'
+        : opts.bounceKind === 'bad_address' ? 'Bounced — bad address'
+        : 'Bounced — needs review')
     : opts.status === 'complained' ? 'Marked as spam'
     : 'Delivery delayed';
   const opp = opts.opportunity || '(no number)';
   const subject = `${kind} ${opp} — ${statusLabel}: ${opts.recipient}`;
+  const interpretation = opts.status !== 'bounced' ? ''
+    : opts.bounceKind === 'blocked' ? 'The recipient’s mail server blocked this message (firewall / security gateway / spam filter). The address is likely still valid — follow up manually. This contact was NOT marked bad.'
+    : opts.bounceKind === 'bad_address' ? 'The address appears to be invalid (no such mailbox). It has been flagged in Bad Contacts to fix.'
+    : 'The reason was unclear, so the contact was left as-is. Verify the address or follow up manually.';
   const body = [
     `${kind} email status update from NUForce.`,
     ``,
     `Quote:     ${opp}`,
     `Recipient: ${opts.recipient}`,
     `Status:    ${statusLabel}`,
+    ...(interpretation ? [``, interpretation, ``] : []),
     ...(opts.reason ? [`Detail:    ${opts.reason}`] : []),
     `Time:      ${new Date().toISOString()}`,
   ].join('\n');
@@ -151,7 +188,7 @@ async function sendStatusAlert(opts: {
 // Reconcile the quote-send audit, flag the quote on hard problems, and alert the
 // sender/oversight. Only NUForce quote/follow-up sends match (email_id ↔
 // quote_sends.resend_id); anything else matches zero rows and is ignored.
-async function reconcileAndNotify(emailId: string, recipient: string, status: SendStatus, reason: string): Promise<void> {
+async function reconcileAndNotify(emailId: string, recipient: string, status: SendStatus, reason: string, bounceKind: BounceKind | null = null): Promise<void> {
   if (!emailId) return;
   try {
     type Row = { quote_id: string | null; opportunity: string | null; send_kind: string | null; sent_by_email: string | null };
@@ -172,19 +209,27 @@ async function reconcileAndNotify(emailId: string, recipient: string, status: Se
     if (!rows || !rows.length) return; // not a NUForce quote/follow-up send
     const now = new Date().toISOString();
     for (const r of rows) {
-      // Flag the quote so the sender sees it in-app — hard bounce / complaint only.
+      // Flag the quote so the sender sees it in-app — every hard bounce / complaint
+      // gets a flag (including blocks, so the sender knows to follow up manually),
+      // with wording that distinguishes a bad address from a security block.
       if ((status === 'bounced' || status === 'complained') && r.quote_id) {
         const label = r.send_kind === 'follow_up' ? 'Follow-up email' : 'Quote email';
-        const what = status === 'complained' ? 'was marked as spam' : 'bounced';
+        const note = status === 'complained'
+          ? `${label} to ${recipient} was marked as spam — ${reason}`
+          : bounceKind === 'blocked'
+            ? `${label} to ${recipient} was BLOCKED by the recipient's mail security — the address is likely valid; follow up manually (contact was not marked bad). ${reason}`
+            : bounceKind === 'bad_address'
+              ? `${label} to ${recipient} bounced — the address appears invalid. ${reason}`
+              : `${label} to ${recipient} bounced — reason unclear; verify the address or follow up manually. ${reason}`;
         const { error: fErr } = await sb.from('quote_flags').upsert({
           quote_id: r.quote_id, opportunity: r.opportunity ?? null, customer: null,
           flagged_by: 'resend_webhook', flagged_at: now,
-          note: `${label} to ${recipient} ${what} — ${reason}`,
+          note,
           resolved: false, resolved_by: null, resolved_at: null,
         }, { onConflict: 'quote_id' });
         if (fErr) console.error('resend-webhook: quote flag upsert failed', fErr);
       }
-      await sendStatusAlert({ opportunity: r.opportunity, recipient, status, reason, sendKind: r.send_kind, sentByEmail: r.sent_by_email });
+      await sendStatusAlert({ opportunity: r.opportunity, recipient, status, reason, sendKind: r.send_kind, sentByEmail: r.sent_by_email, bounceKind });
     }
     console.log(`resend-webhook: reconciled ${rows.length} quote_send(s) for email ${emailId} (${status})`);
   } catch (e) {
@@ -272,14 +317,18 @@ serve(async (req: Request) => {
   if (await reconcileMassEmail(emailId, type || '', data)) return ack();
   let reason = '';
   let sendStatus: SendStatus | null = null;
+  let bounceKind: BounceKind | null = null;
   if (type === 'email.bounced') {
     const bounceType = data?.bounce?.type as string | undefined; // Permanent | Transient | Undetermined
     if (bounceType === 'Transient') {
       console.log(`resend-webhook: transient bounce for ${recipient}, skipping`);
       return ack();
     }
-    const detail = data?.bounce?.subType || data?.bounce?.message || bounceType || 'unknown';
-    reason = `hard_bounce: ${String(detail).slice(0, 200)}`;
+    // Classify: bad address vs security block vs unclear. Only a bad address
+    // marks the contact invalid; a block leaves the (valid) contact alone.
+    const c = classifyBounce(data?.bounce);
+    bounceKind = c.kind;
+    reason = c.detail;
     sendStatus = 'bounced';
   } else if (type === 'email.complained') {
     reason = 'spam_complaint';
@@ -297,9 +346,13 @@ serve(async (req: Request) => {
     console.log(`resend-webhook: ${type} with no usable recipient, skipping`);
     return ack();
   }
-  // Hard bounce / complaint: mark the contact's address invalid (existing logic;
-  // delivered/delayed never touch contacts). Non-contact recipients match 0 rows.
-  if (sendStatus === 'bounced' || sendStatus === 'complained') {
+  // Mark the contact's address invalid ONLY for a spam complaint or a genuinely
+  // bad ADDRESS. A security BLOCK (or an unclear bounce) leaves the contact alone —
+  // the sender is told via the quote flag + alert to follow up manually — so we
+  // never remove a valid contact sitting behind a corporate firewall/gateway.
+  // (delivered/delayed never touch contacts; non-contact recipients match 0 rows.)
+  const markContactBad = sendStatus === 'complained' || (sendStatus === 'bounced' && bounceKind === 'bad_address');
+  if (markContactBad) {
     const { data: updated, error } = await sb
       .from('contacts')
       .update({
@@ -315,10 +368,12 @@ serve(async (req: Request) => {
       return new Response('db error', { status: 500 });
     }
     console.log(`resend-webhook: ${type} → flagged ${updated?.length || 0} contact(s) for ${recipient} (${reason})`);
+  } else if (sendStatus === 'bounced') {
+    console.log(`resend-webhook: ${type} (${bounceKind}) for ${recipient} — contact left as-is; sender alerted to follow up manually`);
   }
   // NUForce: reconcile the quote-send audit, flag the quote on problems, and email
   // the sender (+ oversight on problems) about the delivery status.
-  await reconcileAndNotify(emailId, recipient, sendStatus, reason);
+  await reconcileAndNotify(emailId, recipient, sendStatus, reason, bounceKind);
   return ack();
 });
 function ack(): Response {
