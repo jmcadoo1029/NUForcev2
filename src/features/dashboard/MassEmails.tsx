@@ -4,6 +4,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
+import { PCODE_OPTS } from '../../data/constants'
 import {
   fetchAllContacts, fetchContactsByProductCode, fetchCampaignOptions, fetchContactsByCampaign,
   fetchTemplates, saveTemplate, deleteTemplate,
@@ -28,6 +29,57 @@ I want to take this time to remind you of all of the great services that NU Labo
 Please contact me via phone or email to discuss any upcoming projects, it would be our pleasure to assist in your testing needs this year!
 
 Looking forward to hearing from you soon!`
+
+// Starter template for the "Quoted product code" audience — a warm re-engagement
+// of past customers. Fully editable; save your edits as a template to reuse.
+const CODE_SUBJECT = 'NU Laboratories — Let’s line up your next test'
+const CODE_BODY = `Hello, {first name}!
+
+This is [Your Name] at NU Laboratories. Our records show we’ve had the pleasure of quoting testing for you in the past, and I wanted to reach out to make sure we stay on your radar for any upcoming projects.
+
+NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly.
+
+If you have a project you’d like quoted, just reply to this email or give me a call — it would be our pleasure to support your testing needs again.
+
+Looking forward to hearing from you!`
+
+// Starter template for the "Campaign" audience — a follow-up to people met at a
+// show/event. Fully editable; save your edits as a template to reuse per event.
+const CAMPAIGN_SUBJECT = 'Great meeting you — NU Laboratories'
+const CAMPAIGN_BODY = `Hi {first name},
+
+It was a pleasure meeting you! This is [Your Name] from NU Laboratories, following up from our conversation.
+
+As a quick reminder of what we do: NU Laboratories is a full-service test lab specializing in shock, vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, and a wide range of environmental testing (temperature/humidity, salt fog, altitude, and more). You can see our full capabilities at www.nulabs.com.
+
+We’d love the opportunity to be a testing partner for your team. If you have any projects in the pipeline — now or down the road — I’d welcome the chance to put together a quote and show you what we can do.
+
+Please feel free to reply here or reach out anytime. Looking forward to staying in touch!`
+
+// Per-audience starter content, and the set of pristine defaults. Switching
+// audiences swaps in that audience's starter ONLY when the body is still one of
+// these untouched defaults (or empty) — a customized or saved-template body is
+// never clobbered.
+const AUDIENCE_DEFAULTS: Record<'all' | 'code' | 'campaign', { subject: string; body: string }> = {
+  all: { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY },
+  code: { subject: CODE_SUBJECT, body: CODE_BODY },
+  campaign: { subject: CAMPAIGN_SUBJECT, body: CAMPAIGN_BODY },
+}
+const DEFAULT_BODIES = new Set([DEFAULT_BODY, CODE_BODY, CAMPAIGN_BODY])
+
+// Distinct product codes for the audience dropdown (same catalog quotes use).
+// Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
+const CODE_OPTIONS: { code: string; label: string }[] = (() => {
+  const byCode = new Map<string, string[]>()
+  for (const p of PCODE_OPTS) {
+    const arr = byCode.get(p.code) || []
+    if (!arr.includes(p.label)) arr.push(p.label)
+    byCode.set(p.code, arr)
+  }
+  return Array.from(byCode.entries())
+    .map(([code, labels]) => ({ code, label: labels.join(' / ') }))
+    .sort((a, b) => Number(a.code) - Number(b.code))
+})()
 
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
@@ -114,6 +166,21 @@ export function MassEmails() {
       : mode === 'campaign' ? `Campaign: ${campaignName || '—'}`
         : `Quoted code ${code || '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
 
+  // Switch audience: swap in that audience's starter template (only if the body
+  // is still a pristine default — never overwrite custom text or a loaded
+  // template), reset the recipient selection, and load where it makes sense.
+  const pickAudience = (next: 'all' | 'code' | 'campaign') => {
+    setMode(next)
+    if (DEFAULT_BODIES.has(body) || !body.trim()) {
+      setSubject(AUDIENCE_DEFAULTS[next].subject)
+      setBody(AUDIENCE_DEFAULTS[next].body)
+    }
+    setExcluded(new Set())
+    if (next === 'all') { fetchAllContacts().then(setRecipients).catch(() => {}) }
+    else { setRecipients([] ) }
+    if (next === 'campaign') setCampaignId('')
+  }
+
   const applyTemplate = (id: string) => {
     const t = templates.find((x) => x.id === id)
     if (t) { setSubject(t.subject); setBody(t.body) }
@@ -188,19 +255,22 @@ export function MassEmails() {
           <label style={label}>Audience</label>
           <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
-              <input type="radio" checked={mode === 'all'} onChange={() => { setMode('all'); fetchAllContacts().then((l) => { setRecipients(l); setExcluded(new Set()) }) }} /> All contacts
+              <input type="radio" checked={mode === 'all'} onChange={() => pickAudience('all')} /> All contacts
             </label>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
-              <input type="radio" checked={mode === 'code'} onChange={() => { setMode('code'); setRecipients([]) }} /> Quoted product code
+              <input type="radio" checked={mode === 'code'} onChange={() => pickAudience('code')} /> Quoted product code
             </label>
             <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', cursor: 'pointer' }}>
-              <input type="radio" checked={mode === 'campaign'} onChange={() => { setMode('campaign'); setRecipients([]); setCampaignId('') }} /> Campaign
+              <input type="radio" checked={mode === 'campaign'} onChange={() => pickAudience('campaign')} /> Campaign
             </label>
           </div>
 
           {mode === 'code' && (
             <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Product code, e.g. 11" style={{ ...inputStyle, width: 150 }} />
+              <select value={code} onChange={(e) => setCode(e.target.value)} style={{ ...inputStyle, width: 'auto', minWidth: 230 }}>
+                <option value="">— Product code —</option>
+                {CODE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.code} — {o.label}</option>)}
+              </select>
               <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>quoted</span>
               <select value={datePreset} onChange={(e) => setDatePreset(e.target.value as typeof datePreset)} style={{ ...inputStyle, width: 'auto' }}>
                 <option value="any">any time</option>
