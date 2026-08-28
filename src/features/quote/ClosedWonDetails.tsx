@@ -29,7 +29,6 @@ export function ClosedWonDetails({
   wonInfo,
   onChange,
   projectId,
-  loadedJobNum = '',
   isApprover = false,
   busy = false,
   onCreateProject,
@@ -52,8 +51,12 @@ export function ClosedWonDetails({
   const [locked, setLocked] = useState(() => hasAny(wonInfo))
   const linked = !!projectId
   const curJob = wonInfo.jobNum.trim()
-  // "Open" when linked, or when the Job # is a previously-saved one (unchanged).
-  const showOpen = linked || (!!curJob && curJob === (loadedJobNum || '').trim())
+  // "Open in Workspace" shows ONLY when actually linked. Previously it also showed
+  // when the Job # matched what loaded — but that made a quote that was NEVER linked
+  // look linked (masking a failed/ skipped project creation). Not-linked quotes now
+  // always show "Create project" (+ a self-heal "Open by Job #" for Classic projects).
+  const showOpen = linked
+  const notLinked = hasAny(wonInfo) && !linked
   const canUnlock = isApprover
 
   const inputStyle = (): React.CSSProperties => ({
@@ -73,6 +76,7 @@ export function ClosedWonDetails({
       <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', marginBottom: 'var(--sp-1)' }}>
         <CardLabel>Closed-Won details</CardLabel>
         {linked && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', background: 'var(--pos-soft, #e6f4ea)', borderRadius: 20, padding: '2px 10px' }}>Linked to Workspace</span>}
+        {notLinked && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: 'var(--accent)', borderRadius: 20, padding: '2px 10px' }}>Not linked to Workspace</span>}
         <Button variant="secondary" small onClick={toggleLock} disabled={lockDisabled} style={{ marginLeft: 'auto' }} title={locked ? (canUnlock ? 'Unlock to edit' : 'Locked — only approvers can unlock') : 'Lock to prevent changes'}>{locked ? 'Locked' : 'Unlocked'}</Button>
       </div>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
@@ -95,13 +99,16 @@ export function ClosedWonDetails({
           <Button variant="primary" small onClick={onCreateProject} disabled={busy || !WRITES_ENABLED}>{busy ? 'Working…' : 'Create Workspace project'}</Button>
         )}
         {!linked && <Button variant="secondary" small onClick={onAddToExisting} disabled={busy || !WRITES_ENABLED}>Add to existing project</Button>}
+        {!linked && !!curJob && <Button variant="ghost" small onClick={onOpenInWorkspace} disabled={busy} title="Already built in Workspace (e.g. in Classic)? Look it up by Job # and link it here.">Open by Job #</Button>}
         {linked && <Button variant="ghost" small onClick={onUnlink} disabled={busy}>Unlink</Button>}
         {!WRITES_ENABLED && !showOpen && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn)', fontStyle: 'italic' }}>Preview — writes are off, so project creation is disabled.</span>}
       </div>
-      <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>
+      <div style={{ fontSize: 'var(--fs-caption)', color: notLinked ? 'var(--accent)' : 'var(--dim)', marginTop: 'var(--sp-3)' }}>
         {showOpen
           ? 'This quote is tied to a Workspace project — Open resolves it by Job #. Change the Job # to create a new project instead.'
-          : 'Create saves the quote, then builds a Workspace project from its Job #, line items, budget, and contacts. Add to existing appends this quote to a project that already has this Job #.'}
+          : notLinked
+            ? 'This won quote is not yet in Workspace. Click Create Workspace project to build it (needs a linked account). If it already exists — e.g. built in Classic — use Open by Job # to link it here, or Add to existing.'
+            : 'Create saves the quote, then builds a Workspace project from its Job #, line items, budget, and contacts. Add to existing appends this quote to a project that already has this Job #.'}
       </div>
     </Card>
   )

@@ -532,6 +532,14 @@ export function QuotePage() {
     // Already-Closed-Won quotes loaded from the DB skip this — no friction on edits.
     if (s(qiEdit.stage) === 'Closed Won' && row.stage !== 'Closed Won') {
       if (!wonInfo.wonDate.trim()) { showToast('Enter the Won Date first.', 'warn', 4000); return }
+      // Account-link guardrail: a won job becomes a Workspace project, which needs a
+      // linked account (client_id — set by PICKING the account from the list, not
+      // typing it). Without it the project can't link, and the quote looks "done"
+      // while nothing reached Workspace. Block the close-won until the account is linked.
+      if (!s(qiEdit.client_id).trim()) {
+        showToast('Link the account before closing won — the Workspace project needs it. Edit the quote and pick the Account from the list (Quote Info) so it links to a client record, then close won.', 'error', 10000)
+        return
+      }
       if (!wonConfirmedRef.current) { setWonConfirmOpen(true); return }
     }
     // A brand-new quote (no row id yet) just inserts — no rev/opp-change prompts.
