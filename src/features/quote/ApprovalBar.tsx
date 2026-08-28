@@ -47,6 +47,7 @@ const EVENT_META: Record<string, { label: string; tone: string }> = {
   won_rejected: { label: 'Won rejected', tone: 'var(--accent)' },
   reopen_requested: { label: 'Reopen requested', tone: 'var(--info)' },
   reopened: { label: 'Reopened for editing', tone: 'var(--warn)' },
+  closed_lost: { label: 'Marked Closed Lost', tone: 'var(--accent)' },
 }
 const stamp = (iso: string) => {
   try {
@@ -98,6 +99,7 @@ export function ApprovalBar({
   onReject,
   onUnlock,
   onRequestReopen,
+  onMarkLost,
   onSubmitWon,
   onWonApprove,
   onWonReject,
@@ -118,6 +120,9 @@ export function ApprovalBar({
   onReject: (comments: string) => void
   onUnlock: () => void
   onRequestReopen?: (reason: string) => void
+  // Mark the quote Closed Lost (any user, even when locked). Requires a note.
+  // Absent while the quote is being edited (use the stage field there instead).
+  onMarkLost?: (note: string) => void
   onSubmitWon: () => void
   onWonApprove: (comments: string) => void
   onWonReject: (comments: string) => void
@@ -126,6 +131,8 @@ export function ApprovalBar({
   const [historyOpen, setHistoryOpen] = useState(false)
   const [reopenOpen, setReopenOpen] = useState(false)
   const [reopenReason, setReopenReason] = useState('')
+  const [lostOpen, setLostOpen] = useState(false)
+  const [lostNote, setLostNote] = useState('')
 
   const allHistory = [...(approval.history || []), ...(wonApproval.history || [])].sort((a, b) => String(a.at).localeCompare(String(b.at)))
 
@@ -143,11 +150,15 @@ export function ApprovalBar({
   const pendingApprovalMine = aStatus === 'pending'
   const pendingWon = wStatus === 'pending_won'
   const canSubmitWon = stage === 'Closed Won' && wStatus === 'none'
+  // Recording a loss is an outcome, not a re-price — any user can do it directly,
+  // even on a locked/approved quote, without a reopen. Not offered on a quote
+  // that's already closed, or one mid-approval decision.
+  const canMarkLost = !!onMarkLost && stage !== 'Closed Lost' && stage !== 'Closed Won' && aStatus !== 'pending' && wStatus !== 'pending_won'
 
   const textarea: React.CSSProperties = { width: '100%', minHeight: 56, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }
 
   const nothingToShow = aStatus === 'none' && wStatus === 'none' && !canSubmitWon && !isSalesforce
-  if (nothingToShow && !canSubmit && !canRequestReopen && !(isApprover && locked)) return null
+  if (nothingToShow && !canSubmit && !canRequestReopen && !(isApprover && locked) && !canMarkLost) return null
 
   return (
     <Card style={{ padding: 'var(--sp-4) var(--sp-5)', marginBottom: 'var(--sp-4)' }}>
@@ -162,6 +173,7 @@ export function ApprovalBar({
           {canSubmit && <Button small onClick={onSubmit}>{aStatus === 'approved' && !needsReapproval ? 'Re-submit for approval' : 'Submit for approval'}</Button>}
           {canSubmitWon && <Button small onClick={onSubmitWon}>Submit Closed-Won</Button>}
           {canRequestReopen && <Button variant="secondary" small onClick={() => { setReopenReason(''); setReopenOpen(true) }}>Request reopen</Button>}
+          {canMarkLost && <Button variant="secondary" small onClick={() => { setLostNote(''); setLostOpen(true) }}>Mark Closed Lost</Button>}
           {isApprover && locked && aStatus !== 'pending' && <Button variant="secondary" small onClick={onUnlock}>Reopen to edit</Button>}
         </div>
       </div>
@@ -236,6 +248,19 @@ export function ApprovalBar({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <Button variant="ghost" small onClick={() => setReopenOpen(false)}>Cancel</Button>
             <Button small onClick={() => { onRequestReopen?.(reopenReason.trim()); setReopenOpen(false) }}>Send request</Button>
+          </div>
+        </Modal>
+      )}
+
+      {lostOpen && (
+        <Modal title="Mark Closed Lost" onClose={() => setLostOpen(false)} width={480}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', lineHeight: 1.55, marginBottom: 'var(--sp-3)' }}>
+            Record why this quote was lost. Your note is added to the quote's chatter and the approvers are notified — no reopen needed. If the customer comes back, the quote can still be reopened. Imported quotes don't need to be converted first.
+          </div>
+          <textarea value={lostNote} onChange={(e) => setLostNote(e.target.value)} rows={3} placeholder="Why was it lost? (required — e.g. went with a competitor, project cancelled, budget)" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+            <Button variant="ghost" small onClick={() => setLostOpen(false)}>Cancel</Button>
+            <Button small disabled={!lostNote.trim()} onClick={() => { onMarkLost?.(lostNote.trim()); setLostOpen(false) }}>Mark Closed Lost</Button>
           </div>
         </Modal>
       )}

@@ -89,6 +89,29 @@ export async function notifyReopenUnlocked(d: ReopenUnlockedData): Promise<void>
   }
 }
 
+export interface QuoteLostData {
+  opportunity: string
+  customer: string
+  lostByName: string
+  note: string
+}
+
+/** Notify approvers that a quote was marked Closed Lost by the owner (no reopen
+ *  needed — it's an outcome, not a re-price). Recipients are resolved by the
+ *  function (the approver group), like submissions/reopen requests. Best-effort:
+ *  needs the shared send-notification function to handle `nuforce_quote_lost`;
+ *  until it does, this no-ops quietly while chatter + history still record it. */
+export async function notifyQuoteLost(d: QuoteLostData): Promise<void> {
+  try {
+    await invokeFunction('send-notification', {
+      type: 'nuforce_quote_lost',
+      data: { ...d, linkUrl: `https://nuforce.nulabs.com/quote/${encodeURIComponent(d.opportunity)}` },
+    })
+  } catch (e) {
+    warn('quote_lost', e)
+  }
+}
+
 /**
  * Submitter employees.id for every quote currently pending approval — the queue
  * snapshot the submit notification wants. Quotes submitted before this shipped

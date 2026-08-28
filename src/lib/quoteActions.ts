@@ -84,6 +84,35 @@ export async function appendChatter(quoteId: string, entry: ChatterEntry): Promi
   return next
 }
 
+/**
+ * Mark a quote Closed Lost — recording an outcome, NOT a pricing edit, so it does
+ * NOT need an approver or a reopen. Targeted write: sets the stage (column +
+ * data.qi.stage), appends the required "why it was lost" note to chatter, and
+ * stamps the approval history for audit. It never resets approval_status, never
+ * touches line items, and never requires picker conversion — a lost deal builds no
+ * Workspace project. The quote stays reopenable through the normal reopen path if
+ * the customer comes back. Callers gate on WRITES_ENABLED. Returns the new chatter.
+ */
+export async function markClosedLost(quoteId: string, note: string, by: string): Promise<ChatterEntry[]> {
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data&limit=1`)
+  const data = (rows?.[0]?.data || {}) as Record<string, any>
+  const at = new Date().toISOString()
+  const prev: ChatterEntry[] = Array.isArray(data.chatterEntries) ? data.chatterEntries : []
+  const next = [...prev, { by, at, msg: `Marked Closed Lost — ${note}` }]
+  const approval = (data.approval || {}) as Record<string, any>
+  const history = [...((approval.history as unknown[]) || []), { event: 'closed_lost', by, at, comments: note }]
+  const nextData = {
+    ...data,
+    qi: { ...(data.qi || {}), stage: 'Closed Lost' },
+    chatterEntries: next,
+    approval: { ...approval, history },
+  }
+  await restFetch('PATCH', `quotes?id=eq.${encodeURIComponent(quoteId)}`, {
+    body: { stage: 'Closed Lost', data: nextData, updated_at: at },
+  })
+  return next
+}
+
 /** Resolve (remove) an active flag by its row id. */
 export async function unflagQuote(flagId: string, by: string): Promise<void> {
   await restFetch('PATCH', `quote_flags?id=eq.${encodeURIComponent(flagId)}`, {

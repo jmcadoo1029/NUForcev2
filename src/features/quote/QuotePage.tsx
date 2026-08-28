@@ -32,7 +32,8 @@ import { SpecsNotes } from './form/SpecsNotes'
 import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
-import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, fetchPendingSubmitterIds } from '../../lib/notify'
+import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
+import { markClosedLost } from '../../lib/quoteActions'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -56,9 +57,8 @@ export function QuotePage() {
   const [convertOpen, setConvertOpen] = useState(false)
   // Prominent mid-screen prompt shown once when opening a quote that still needs
   // Convert-to-picker, so it can't be missed (the inline banner alone was easy to
-  // skim past). Tracked per quote id so it opens once, not on every re-render.
+  // skim past). Re-opens on every load of an unconverted imported quote.
   const [convertWarnOpen, setConvertWarnOpen] = useState(false)
-  const warnedForRef = useRef<string | null>(null)
   // Inline "Link account" at close-won when the account isn't linked to a client.
   const [linkAcctOpen, setLinkAcctOpen] = useState(false)
   const [linkAcctText, setLinkAcctText] = useState('')
@@ -350,6 +350,29 @@ export function QuotePage() {
       notifyReopenRequested({ opportunity: s(qi.opp) || row.opportunity || '', requestedByName: prettifyEmail(me), reason: reason || '' })
     } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
   }
+  // Mark Closed Lost — any user, even on a locked/approved quote, no reopen and no
+  // picker conversion. Records the required note to chatter, stamps history, sets the
+  // stage, and emails approvers (best-effort). Targeted write: approval + line items
+  // are untouched, so the quote stays reopenable if the customer comes back.
+  const markLostNow = async (note: string) => {
+    if (!row) return
+    const at = now()
+    const prevChatter = ((row.data?.chatterEntries as ChatterEntry[]) || [])
+    const nextChatter = [...prevChatter, { by: me, at, msg: `Marked Closed Lost — ${note}` }]
+    setQiEdit((q) => ({ ...q, stage: 'Closed Lost' }))
+    setRow((prev) => {
+      if (!prev) return prev
+      const pd = (prev.data || {}) as Record<string, any>
+      return { ...prev, stage: 'Closed Lost', data: { ...pd, qi: { ...(pd.qi || {}), stage: 'Closed Lost' }, chatterEntries: nextChatter } as typeof prev.data }
+    })
+    setSendNonce((n) => n + 1)
+    if (!WRITES_ENABLED) { showToast('Marked Closed Lost (preview)', 'info'); return }
+    try {
+      await markClosedLost(row.id, note, me)
+      showToast('Marked Closed Lost', 'success')
+      notifyQuoteLost({ opportunity: s(qiEdit.opp) || row.opportunity || '', customer: s(qiEdit.account) || row.customer || '', lostByName: prettifyEmail(me), note })
+    } catch (e) { showToast('Couldn’t mark lost: ' + errMsg(e), 'error', 6000) }
+  }
   const submitWon = async () => {
     const empId = await fetchMyEmployeeId()
     await applyWon({ status: 'pending_won', submittedBy: me, submittedById: empId || '', submittedAt: now(), decidedBy: '', decidedAt: '', comments: '', history: hist(wonApproval, 'submitted_won', '') }, true, 'Submitted Closed-Won')
@@ -369,13 +392,11 @@ export function QuotePage() {
     setConverted(true)
     setConvertWarnOpen(false)
   }
-  // Pop the prominent mid-screen prompt once per quote when it needs converting.
+  // Pop the prominent mid-screen prompt EVERY time an unconverted imported quote is
+  // opened (each load / navigation to it), until it's actually converted. The user
+  // can dismiss it for that viewing ("Not now — just viewing"); it returns next open.
   useEffect(() => {
-    const key = row?.id != null ? String(row.id) : null
-    if (needsConversion && key && warnedForRef.current !== key) {
-      warnedForRef.current = key
-      setConvertWarnOpen(true)
-    }
+    if (needsConversion) setConvertWarnOpen(true)
   }, [needsConversion, row?.id])
   // Approved, but the approval came from an earlier revision (decided before this
   // row existed) — this revision still needs its own approval. Reflects preview
@@ -859,6 +880,7 @@ export function QuotePage() {
                 onReject={rejectQuote}
                 onUnlock={unlockQuote}
                 onRequestReopen={requestReopenNow}
+                onMarkLost={!editing ? markLostNow : undefined}
                 onSubmitWon={submitWon}
                 onWonApprove={approveWon}
                 onWonReject={rejectWon}
