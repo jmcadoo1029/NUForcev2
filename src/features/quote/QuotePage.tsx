@@ -528,6 +528,11 @@ export function QuotePage() {
     // picker lines would be saved with NO line items (the save drops the legacy
     // format). Block it — convert first (Convert to picker) so the lines survive.
     if (needsConversion) {
+      const closingWon = s(qiEdit.stage) === 'Closed Won' && row.stage !== 'Closed Won'
+      if (closingWon) {
+        showToast('This quote’s line items still need to be converted to picker lines — have Sales fix and convert this quote before it can be closed won.', 'error', 9000)
+        return
+      }
       showToast('Convert the imported line items first — saving now would drop them. Use “Convert to picker line items,” then save.', 'error', 7000)
       setConvertWarnOpen(true)
       return

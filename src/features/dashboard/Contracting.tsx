@@ -128,7 +128,7 @@ export function Contracting() {
   const doMarkClosedWon = async () => {
     if (!quote || busy) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
-    if (quote.needsConversion) { showToast('Convert the imported line items to picker lines first — open the quote and use “Convert to picker.” Close-won is blocked until then.', 'error', 9000); return }
+    if (quote.needsConversion) { showToast('This quote’s line items aren’t converted to picker lines — have Sales fix and convert this quote before it can be closed won.', 'error', 9000); return }
     if (!quote.clientId) { showToast('Link the account first (below) — the Workspace project needs it.', 'error', 7000); return }
     setBusy(true)
     try {
@@ -246,7 +246,7 @@ export function Contracting() {
 
               {needsConv && (
                 <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', background: 'var(--warn-soft)', border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-sm)', padding: '9px 13px', marginBottom: 'var(--sp-3)' }}>
-                  This is a Salesforce-imported quote whose line items haven’t been converted. <Link to={`/quote/${encodeURIComponent(quote.opportunity || quote.id)}`} style={{ color: 'var(--accent)', fontWeight: 700 }}>Open the quote</Link> and use “Convert to picker” before closing won.
+                  <b>Line items need to be converted.</b> This quote’s items are still in the imported format — have Sales fix and convert this quote before it’s closed won. <Link to={`/quote/${encodeURIComponent(quote.opportunity || quote.id)}`} style={{ color: 'var(--accent)', fontWeight: 700 }}>Open the quote →</Link>
                 </div>
               )}
               {accountNotLinked && (
