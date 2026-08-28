@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { sf, money } from '../../lib/format'
 import { type SetupInputs, SETUP_DEFAULTS, drillFab, smartSetup, PQ_SR, DCM_SR, EMI_SR, OT_DEFAULTS } from '../../data/calcPricing'
 import { getEmi461fTestDefinitions, getEmi461gTestDefinitions } from '../../data/emiSpecDefs'
@@ -169,9 +169,17 @@ export function PricingCalculator({
     if (valid.length) onSend(valid)
   }
 
+  // Close only when the press STARTS and ENDS on the backdrop itself. Without this,
+  // dragging to select text inside an input and releasing over the backdrop fires a
+  // click on the backdrop and wrongly closes the calculator.
+  const downOnBackdrop = useRef(false)
   return (
     <>
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(20,30,45,0.45)', display: 'flex', justifyContent: 'flex-end' }}>
+    <div
+      onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget }}
+      onClick={(e) => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose() }}
+      style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(20,30,45,0.45)', display: 'flex', justifyContent: 'flex-end' }}
+    >
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--card)', width: 'min(480px, 96vw)', height: '100%', overflowY: 'auto', boxShadow: 'var(--shadow-lg)', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ position: 'sticky', top: 0, background: 'var(--card)', borderBottom: '1px solid var(--border)', padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', zIndex: 3 }}>

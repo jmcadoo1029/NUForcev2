@@ -10,6 +10,11 @@ export function NoiseTab({ noise, setNoise, ti, sendItems }: { noise: NoiseState
   const noisePia = sf(noise.pia, 1)
   const noiseSetupSug = Math.round((NOISE_CHAMBERS[noise.chamber] || 1000) * noisePia)
   const noiseTestSug = Math.round(noiseTest * noisePia)
+  // The compressor cost (marked up 25%) is baked into the testing price. Split it
+  // out for the breakdown so it's itemized, while keeping the total unchanged:
+  // Testing (ex-compressor) + Compressor = the same Testing suggestion as before.
+  const noiseCompSug = Math.round(noiseComp * 1.25 * noisePia)
+  const noiseTestExCompSug = noiseTestSug - noiseCompSug
   const noiseFit = noiseChamberFit(sf(ti?.dimL), sf(ti?.dimW), sf(ti?.dimH), noise.level, noise.chamber)
   return (
     <>
@@ -39,8 +44,8 @@ export function NoiseTab({ noise, setNoise, ti, sendItems }: { noise: NoiseState
           {noiseFit.ok ? `✓ ${noise.chamber} fits this unit` : `Recommended: ${noiseFit.rec} — ${noise.chamber} may not fit`}
         </div>
       )}
-      {noiseComp > 0 && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', marginBottom: 'var(--sp-3)' }}>Compressor {money(noiseComp)} → {money(Math.round(noiseComp * 1.25))} marked up (folded into testing)</div>}
-      <Suggest rows={[['Setup', noiseSetupSug], ['Testing', noiseTestSug]]} />
+      {noiseComp > 0 && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', marginBottom: 'var(--sp-3)' }}>Compressor {money(noiseComp)} → {money(Math.round(noiseComp * 1.25))} marked up (itemized in testing below)</div>}
+      <Suggest rows={noiseComp > 0 ? [['Setup', noiseSetupSug], ['Testing (ex. compressor)', noiseTestExCompSug], ['Compressor (25% markup)', noiseCompSug]] : [['Setup', noiseSetupSug], ['Testing', noiseTestSug]]} />
       <AddButton onClick={() => sendItems([{ key: 'noise_setup', price: noiseSetupSug }, { key: 'noise_test', price: noiseTestSug }])} />
     </>
   )
