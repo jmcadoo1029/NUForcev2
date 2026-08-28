@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, StatTile } from '../../components'
 import { money, moneyShort } from '../../lib/format'
+import { baseOpp } from '../../lib/opp'
 import { fetchCodeEntries, codeReportLabel, type CodeEntry } from './codeReport'
 
 // Product-code deep dive — drilldown (metrics, trend, per-quote table) and a
@@ -11,14 +12,47 @@ import { fetchCodeEntries, codeReportLabel, type CodeEntry } from './codeReport'
 const round = (n: number) => Math.round(n)
 const pct = (part: number, whole: number) => (whole ? round((part / whole) * 100) : 0)
 
+// Rank a revision from the opportunity's trailing letters (base=0, A=1, B=2, …) so
+// the quote list can keep only the latest revision per family. The letter is read
+// from the opportunity string, which is always present (the revision column can be
+// null on imported quotes).
+function revRankOfOpp(opp: string): number {
+  const s = (opp || '').toUpperCase().match(/[A-Z]+$/)?.[0] || ''
+  if (!s) return 0
+  let n = 0
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c < 65 || c > 90) return 0; n = n * 26 + (c - 64) }
+  return n
+}
+
+interface CodeQuoteRow { id: string; opp: string; customer: string; stage: string; price: number; year: string }
+
+// A code's quotes as one row per quote (that code's lines summed), collapsed to
+// the LATEST revision per family — so a quote revised B→D counts once (D), not
+// every revision. Every metric below is derived from this so the tiles, the list,
+// and the compare view all count each family a single time.
+function latestRevRows(entries: CodeEntry[], code: string): CodeQuoteRow[] {
+  const map = new Map<string, CodeQuoteRow>()
+  entries.filter((e) => e.code === code).forEach((e) => {
+    const g = map.get(e.quoteId) || { id: e.quoteId, opp: e.opp, customer: e.customer, stage: e.stage, price: 0, year: e.year }
+    g.price += e.price
+    map.set(e.quoteId, g)
+  })
+  const byFamily = new Map<string, CodeQuoteRow>()
+  for (const r of map.values()) {
+    const base = baseOpp(r.opp) || r.opp
+    const cur = byFamily.get(base)
+    if (!cur || revRankOfOpp(r.opp) > revRankOfOpp(cur.opp)) byFamily.set(base, r)
+  }
+  return Array.from(byFamily.values())
+}
+
 function metricsFor(entries: CodeEntry[], code: string) {
-  const sel = entries.filter((e) => e.code === code)
-  const won = sel.filter((e) => e.stage === 'Closed Won')
-  const uniqueQuotes = new Set(sel.map((e) => e.quoteId)).size
-  const uniqueWon = new Set(won.map((e) => e.quoteId)).size
-  const totalValue = sel.reduce((a, e) => a + e.price, 0)
-  const wonValue = won.reduce((a, e) => a + e.price, 0)
-  return { uniqueQuotes, totalValue, wonValue, winRate: pct(uniqueWon, uniqueQuotes), wonValueRate: pct(wonValue, totalValue) }
+  const rows = latestRevRows(entries, code)
+  const won = rows.filter((r) => r.stage === 'Closed Won')
+  const uniqueQuotes = rows.length
+  const totalValue = rows.reduce((a, r) => a + r.price, 0)
+  const wonValue = won.reduce((a, r) => a + r.price, 0)
+  return { uniqueQuotes, totalValue, wonValue, winRate: pct(won.length, uniqueQuotes), wonValueRate: pct(wonValue, totalValue) }
 }
 
 function codesByTotal(entries: CodeEntry[]): string[] {
@@ -27,34 +61,28 @@ function codesByTotal(entries: CodeEntry[]): string[] {
   return Array.from(totals.entries()).sort((a, b) => b[1] - a[1]).map(([c]) => c)
 }
 
-// Per-quote rows for a code (aggregate that code's lines per quote).
+// The quote list — latest revision per family, newest opportunity first.
 function quoteRowsFor(entries: CodeEntry[], code: string) {
-  const map = new Map<string, { opp: string; customer: string; stage: string; price: number }>()
-  entries.filter((e) => e.code === code).forEach((e) => {
-    const g = map.get(e.quoteId) || { opp: e.opp, customer: e.customer, stage: e.stage, price: 0 }
-    g.price += e.price
-    map.set(e.quoteId, g)
-  })
-  return Array.from(map.entries())
-    .map(([id, g]) => ({ id, ...g }))
-    .sort((a, b) => (b.opp || '').localeCompare(a.opp || '', undefined, { numeric: true }))
+  return latestRevRows(entries, code).sort((a, b) => (b.opp || '').localeCompare(a.opp || '', undefined, { numeric: true }))
 }
 
-// Won-value-rate per year for a code (for the compare trend line).
+// Won-value-rate per year for a code (compare trend line). Within each year,
+// families collapse to the latest revision quoted that year.
 function perYearRate(entries: CodeEntry[], code: string): { year: string; rate: number }[] {
-  const map = new Map<string, { total: number; won: number }>()
-  entries.filter((e) => e.code === code && e.year !== 'unknown').forEach((e) => {
-    const g = map.get(e.year) || { total: 0, won: 0 }
-    g.total += e.price
-    if (e.stage === 'Closed Won') g.won += e.price
-    map.set(e.year, g)
-  })
-  return Array.from(map.entries()).map(([year, g]) => ({ year, rate: pct(g.won, g.total) })).sort((a, b) => a.year.localeCompare(b.year))
+  const years = Array.from(new Set(entries.filter((e) => e.code === code && e.year !== 'unknown').map((e) => e.year)))
+  return years
+    .map((year) => {
+      const rows = latestRevRows(entries.filter((e) => e.year === year), code)
+      const total = rows.reduce((a, r) => a + r.price, 0)
+      const won = rows.filter((r) => r.stage === 'Closed Won').reduce((a, r) => a + r.price, 0)
+      return { year, rate: pct(won, total) }
+    })
+    .sort((a, b) => a.year.localeCompare(b.year))
 }
 
 function lifetimeRate(entries: CodeEntry[], code: string): number {
-  const all = entries.filter((e) => e.code === code)
-  return pct(all.filter((e) => e.stage === 'Closed Won').reduce((a, e) => a + e.price, 0), all.reduce((a, e) => a + e.price, 0))
+  const rows = latestRevRows(entries, code)
+  return pct(rows.filter((r) => r.stage === 'Closed Won').reduce((a, r) => a + r.price, 0), rows.reduce((a, r) => a + r.price, 0))
 }
 
 function stageTone(stage: string): string {
@@ -125,9 +153,11 @@ export function ProductCodeDeepDive() {
     if (!entries || code) return
     const codes = codesByTotal(entries)
     if (codes.length) {
-      setCode(codes[0])
-      setCodeA(codes[0])
-      setCodeB(codes[1] || codes[0])
+      // Default the drilldown to product code 11 when present, else the top code.
+      const def = codes.includes('11') ? '11' : codes[0]
+      setCode(def)
+      setCodeA(def)
+      setCodeB(codes.find((c) => c !== def) || def)
     }
   }, [entries, code])
 
