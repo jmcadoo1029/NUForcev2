@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 
 interface ModalProps {
   title: ReactNode
@@ -9,10 +9,15 @@ interface ModalProps {
 
 // Centered overlay dialog. Click the scrim or the × to close.
 export function Modal({ title, onClose, children, width = 700 }: ModalProps) {
+  // Close only when the press STARTS and ENDS on the scrim. Without tracking the
+  // mousedown, dragging to select text inside a field and releasing over the scrim
+  // fires a click whose target is the scrim, wrongly closing the dialog.
+  const downOnScrim = useRef(false)
   return (
     <div
+      onMouseDown={(e) => { downOnScrim.current = e.target === e.currentTarget }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
+        if (downOnScrim.current && e.target === e.currentTarget) onClose()
       }}
       style={{ position: 'fixed', inset: 0, zIndex: 2000, background: 'rgba(20,30,45,0.45)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '48px 16px' }}
     >

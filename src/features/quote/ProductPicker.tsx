@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useRef, useState, type CSSProperties } from 'react'
 import { PCODE_OPTS, codeLabel } from '../../data/constants'
 import { buildCatalog, sortCatalog, isActive, TH_PRICES, type CatalogCtx } from '../../data/catalog'
 import { sf, money } from '../../lib/format'
@@ -49,6 +49,9 @@ export function ProductPicker({
   const [descs, setDescs] = useState<Record<string, string>>({})
   const [sortMode, setSortMode] = useState<'code' | 'name'>('name')
   const [showDormant, setShowDormant] = useState(false)
+  // Close only on a press that starts and ends on the backdrop — so drag-selecting
+  // text in the price/description fields doesn't close the picker.
+  const downOnBackdrop = useRef(false)
   const [thDur, setThDur] = useState('0 to 1 Day')
   // Pre-filled custom rows (handed over so the quoter can pick the code before
   // adding). Plain snapshots — no live link back to wherever they came from.
@@ -112,7 +115,7 @@ export function ProductPicker({
   )
 
   return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', overflowY: 'auto', padding: '24px 0' }}>
+    <div onMouseDown={(e) => { downOnBackdrop.current = e.target === e.currentTarget }} onClick={(e) => { if (downOnBackdrop.current && e.target === e.currentTarget) onClose() }} style={{ position: 'fixed', inset: 0, zIndex: 2000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', background: 'rgba(0,0,0,0.4)', overflowY: 'auto', padding: '24px 0' }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--card)', borderRadius: 12, width: 'min(720px, 96vw)', boxShadow: '0 8px 40px rgba(0,0,0,0.2)' }}>
         {/* Header */}
         <div style={{ padding: '15px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--card)', borderBottom: '1px solid var(--border)', borderRadius: '12px 12px 0 0' }}>

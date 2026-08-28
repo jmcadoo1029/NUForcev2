@@ -242,7 +242,7 @@ export function PricingCalculator({
 
           {tab === 'vib' && <VibTab vib={vib} setVib={setVib} su={su} sendItems={sendItems} />}
           {tab === 'shock' && <ShockTab shock={shock} setShock={setShock} su={su} vibSetup={vibSetup} sendItems={sendItems} />}
-          {tab === 'noise' && <NoiseTab noise={noise} setNoise={setNoise} ti={ti} sendItems={sendItems} />}
+          {tab === 'noise' && <NoiseTab noise={noise} setNoise={setNoise} ti={ti} sendItems={sendItems} onAddBudget={onAddBudget} />}
           {tab === 'env' && <EnvTab env={env} setEnv={setEnv} su={su} sendItems={sendItems} />}
           {tab === 'hfv' && <HfvTab hfv={hfv} setHfv={setHfv} su={su} sendItems={sendItems} />}
           {tab === 'sho' && <ShoTab sho={sho} setSho={setSho} su={su} sendItems={sendItems} />}

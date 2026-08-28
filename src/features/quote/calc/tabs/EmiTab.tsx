@@ -1,6 +1,7 @@
 import { type Dispatch, type SetStateAction } from 'react'
-import { sf } from '../../../../lib/format'
+import { sf, money } from '../../../../lib/format'
 import { EMI_SR, r25 } from '../../../../data/calcPricing'
+import { ceil5 } from '../../../../data/budget'
 import { calcEmiShifts, emiTestList, EMI_TEST_LABELS, emiTestFlags, EMI_PLATS, EMI_LOCS_CAN, EMI_LOCS_TBD, EMI_LOCS_CANT } from '../../../../data/emiShifts'
 import { Labeled, Suggest, Chk, LocGroup, Warnings, AddButton, input, grid2, sectionLabel } from '../ui'
 import type { EmiState, EmiBudgetState, CalcBudgetRow, CalcSelection } from '../types'
@@ -55,6 +56,11 @@ export function EmiTab({
     if (emi440Applies && emiBudget.v440On) rows.push({ desc: '440V AC power source rental', qty: '1', unitCost: String(sf(emiBudget.v440Amt)) })
     return rows
   }
+  // Budget items mark up 25% and round up to the nearest $5 (same as the Budget
+  // list). Itemize the marked-up figure here so it's visible, like the compressor.
+  const upv = (amt: string | number) => ceil5(sf(amt) * 1.25)
+  const emiAddonRawTotal = (emiRs103Applies && emiBudget.rs103On ? sf(emiBudget.rs103Amt) : 0) + (emi440Applies && emiBudget.v440On ? sf(emiBudget.v440Amt) : 0)
+  const emiAddonMarkedTotal = (emiRs103Applies && emiBudget.rs103On ? upv(emiBudget.rs103Amt) : 0) + (emi440Applies && emiBudget.v440On ? upv(emiBudget.v440Amt) : 0)
   return (
     <>
       <CrrStrip workup={crrWorkup} specs={EMI_SPECS} rate={emiRate} pia={emiPia} />
@@ -123,12 +129,13 @@ export function EmiTab({
 
       {(emiRs103Applies || emi440Applies) && (
         <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
-          <div style={sectionLabel}>Budget add-ons <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--dim)' }}>· raw cost → Budget list</span></div>
+          <div style={sectionLabel}>Budget add-ons <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--dim)' }}>· raw cost → Budget list (+25% markup)</span></div>
           {emiRs103Applies && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
               <div style={{ flex: 1 }}><Chk label="RS103 amplifier rental" checked={emiBudget.rs103On} onChange={(v) => setEmiBudget((b) => ({ ...b, rs103On: v }))} /></div>
               <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>$</span>
               <input value={emiBudget.rs103Amt} onChange={(e) => setEmiBudget((b) => ({ ...b, rs103Amt: e.target.value }))} inputMode="decimal" style={{ ...input, width: 92, textAlign: 'right' }} />
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', whiteSpace: 'nowrap', minWidth: 92, textAlign: 'right' }}>→ {money(upv(emiBudget.rs103Amt))}</span>
             </div>
           )}
           {emi440Applies && (
@@ -136,9 +143,16 @@ export function EmiTab({
               <div style={{ flex: 1 }}><Chk label="440V AC power source" checked={emiBudget.v440On} onChange={(v) => setEmiBudget((b) => ({ ...b, v440On: v }))} /></div>
               <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>$</span>
               <input value={emiBudget.v440Amt} onChange={(e) => setEmiBudget((b) => ({ ...b, v440Amt: e.target.value }))} inputMode="decimal" style={{ ...input, width: 92, textAlign: 'right' }} />
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', whiteSpace: 'nowrap', minWidth: 92, textAlign: 'right' }}>→ {money(upv(emiBudget.v440Amt))}</span>
             </div>
           )}
-          <button onClick={() => { const rows = emiBudgetRows(); if (rows.length) onAddBudget(rows) }} disabled={emiBudgetRows().length === 0} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: emiBudgetRows().length ? 'var(--accent)' : 'var(--dim)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '6px 14px', cursor: emiBudgetRows().length ? 'pointer' : 'default', marginTop: 4 }}>+ Add checked to Budget</button>
+          {emiAddonMarkedTotal > 0 && (
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 6, paddingTop: 6, borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Budget subtotal</span>
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{money(emiAddonRawTotal)} → <b>{money(emiAddonMarkedTotal)}</b> marked up</span>
+            </div>
+          )}
+          <button onClick={() => { const rows = emiBudgetRows(); if (rows.length) onAddBudget(rows) }} disabled={emiBudgetRows().length === 0} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: emiBudgetRows().length ? 'var(--accent)' : 'var(--dim)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '6px 14px', cursor: emiBudgetRows().length ? 'pointer' : 'default', marginTop: 8 }}>+ Add checked to Budget</button>
         </div>
       )}
 
