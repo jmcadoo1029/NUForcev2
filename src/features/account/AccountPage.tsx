@@ -8,9 +8,11 @@ import { fetchClientContactInfo } from '../../lib/directory'
 import { codeLabel } from '../../data/constants'
 
 // Codes excluded from the testing-history recap — deliverables/paperwork/subcontract
-// and teardown, not NU testing capabilities: Report/CoC, Procedure, EMI/DCM/PQ
-// report+proc, Tear Down, Subcontract.
-const NON_TEST_CODES = new Set(['41', '42', '43', '44', '96', '98'])
+// and teardown, plus the support/utility lines that aren't the account's testing
+// story: Instrumentation (33), Report/CoC (41), Procedure (42), EMI/DCM/PQ report+
+// proc (43/44), Insulation Resistance / dielectric (59), Hydrostatic (95), Tear
+// Down (96), Subcontract (98).
+const NON_TEST_CODES = new Set(['33', '41', '42', '43', '44', '59', '95', '96', '98'])
 const OPEN_HIDDEN = new Set(['Closed Won', 'Closed Lost'])
 
 // Canonical test-type name for a line item. Code 51 covers EMI / Power Quality /
@@ -207,7 +209,7 @@ export function AccountPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
-      <Link to="/" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>← Back to dashboard</Link>
+      <Link to="/" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>← Home</Link>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', margin: 'var(--sp-3) 0 var(--sp-5)', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>{name}</div>
@@ -269,31 +271,36 @@ export function AccountPage() {
 
           {years.length === 0 && <div style={{ color: 'var(--muted)' }}>No quotes for this account.</div>}
           {years.length > 0 && (() => {
-            const activeYear = years.find((y) => y.year === selectedYear) || years[0]
+            // No year is expanded until one is clicked — the page opens showing only
+            // the year chips, so nothing auto-expands.
+            const activeYear = years.find((y) => y.year === selectedYear) || null
             return (
               <div>
                 <div style={{ fontSize: 'var(--fs-md)', fontWeight: 800, letterSpacing: '-.01em', marginBottom: 'var(--sp-3)' }}>Quote history</div>
-                {/* Year picker — one year's quotes at a time, instead of every year listed. */}
+                {/* Year picker — one year's quotes at a time, none open until picked. */}
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
                   {years.map((y) => {
-                    const on = activeYear.year === y.year
+                    const on = activeYear?.year === y.year
                     return (
-                      <button key={y.year} onClick={() => setSelectedYear(y.year)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 13px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border-strong)'), background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' }}>
+                      <button key={y.year} onClick={() => setSelectedYear((cur) => (cur === y.year ? '' : y.year))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 13px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border-strong)'), background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' }}>
                         {y.year} <span style={{ fontWeight: 500, opacity: 0.75 }}>({y.rows.length})</span>
                       </button>
                     )
                   })}
                 </div>
-                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
-                  <div style={{ background: 'var(--accent-soft)', padding: '10px 14px', display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'baseline', fontSize: 'var(--fs-sm)' }}>
-                    <span style={{ fontWeight: 800, fontSize: 'var(--fs-md)', color: activeYear.year === 'Unknown' ? 'var(--dim)' : 'var(--text)' }}>{activeYear.year}</span>
-                    <span style={{ color: 'var(--muted)' }}>{activeYear.rows.length} quote{activeYear.rows.length !== 1 ? 's' : ''}</span>
-                    {!customerView && <span style={{ color: 'var(--muted)' }}>Total <b style={{ color: 'var(--text)' }}>{money(activeYear.total)}</b></span>}
-                    <span style={{ color: 'var(--pos)', fontWeight: 700 }}>{activeYear.wonCount} won{!customerView ? ` · ${money(activeYear.wonTotal)}` : ''}</span>
-                    {!customerView && <span style={{ color: activeYear.winPct >= 50 ? 'var(--pos)' : 'var(--muted)', fontWeight: 700 }}>Win {activeYear.winPct}%</span>}
+                {!activeYear && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>Pick a year to see its quotes.</div>}
+                {activeYear && (
+                  <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                    <div style={{ background: 'var(--accent-soft)', padding: '10px 14px', display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'baseline', fontSize: 'var(--fs-sm)' }}>
+                      <span style={{ fontWeight: 800, fontSize: 'var(--fs-md)', color: activeYear.year === 'Unknown' ? 'var(--dim)' : 'var(--text)' }}>{activeYear.year}</span>
+                      <span style={{ color: 'var(--muted)' }}>{activeYear.rows.length} quote{activeYear.rows.length !== 1 ? 's' : ''}</span>
+                      {!customerView && <span style={{ color: 'var(--muted)' }}>Total <b style={{ color: 'var(--text)' }}>{money(activeYear.total)}</b></span>}
+                      <span style={{ color: 'var(--pos)', fontWeight: 700 }}>{activeYear.wonCount} won{!customerView ? ` · ${money(activeYear.wonTotal)}` : ''}</span>
+                      {!customerView && <span style={{ color: activeYear.winPct >= 50 ? 'var(--pos)' : 'var(--muted)', fontWeight: 700 }}>Win {activeYear.winPct}%</span>}
+                    </div>
+                    {activeYear.rows.map((r) => <QuoteLine key={r.id} r={r} showContact />)}
                   </div>
-                  {activeYear.rows.map((r) => <QuoteLine key={r.id} r={r} showContact />)}
-                </div>
+                )}
               </div>
             )
           })()}

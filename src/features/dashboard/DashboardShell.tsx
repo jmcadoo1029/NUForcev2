@@ -53,7 +53,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 4 }}>{subtitle}</div>
           </div>
           <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 9, overflow: 'hidden' }}>
-            {canView && <Link to="/" style={seg(view === 'manager', true)}>Manager</Link>}
+            {canView && <Link to="/dashboard" style={seg(view === 'manager', true)}>Manager</Link>}
             <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
             {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}

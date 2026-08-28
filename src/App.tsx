@@ -14,6 +14,7 @@ import { Contracting } from './features/dashboard/Contracting'
 import { MassEmails } from './features/dashboard/MassEmails'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
+import { HomeLauncher } from './features/home/HomeLauncher'
 
 // The Manager dashboard is for managers + view-only roles (Accounting). Everyone
 // else who lands on "/" is sent to their own worklist. While the role resolves we
@@ -71,7 +72,8 @@ export default function App() {
       <AppHeader />
       <DevAuthGate>
         <Routes>
-        <Route path="/" element={<ManagerHome />} />
+        <Route path="/" element={<HomeLauncher />} />
+        <Route path="/dashboard" element={<ManagerHome />} />
         <Route
           path="/my-work"
           element={
