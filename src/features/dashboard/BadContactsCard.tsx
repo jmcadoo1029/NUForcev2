@@ -45,6 +45,42 @@ async function loadBadContacts(): Promise<BadGroup[]> {
   return groups.filter((g) => g.quotes.length > 0)
 }
 
+// Orphaned POCs: open quotes whose contact (data.qi.email) is no longer in the
+// contacts table — e.g. someone deleted the contact but quotes still point at
+// them, so they no longer surface in search. Scans open quotes, diffs their POC
+// emails against contacts, and groups the leftovers so they can be reassigned like
+// a bounced contact. On-demand (heavier scan), so it's behind a button.
+async function loadOrphanContacts(): Promise<BadGroup[]> {
+  const rows = await restFetch<Array<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; poc: string | null; email: string | null; clientId: string | null }>>(
+    'GET',
+    `quotes?select=id,opportunity,customer,total,stage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&data->qi->>stage=not.in.("Closed Won","Closed Lost")&limit=5000`,
+  ).catch(() => [])
+  const quotes = rows || []
+  const emails = Array.from(new Set(quotes.map((r) => (r.email || '').trim().toLowerCase()).filter((e) => e.includes('@'))))
+  if (!emails.length) return []
+  // Which POC emails still exist as contacts?
+  const existing = new Set<string>()
+  for (let i = 0; i < emails.length; i += 80) {
+    const chunk = emails.slice(i, i + 80)
+    const inList = '(' + chunk.map((e) => '"' + e.replace(/"/g, '') + '"').join(',') + ')'
+    const c = await restFetch<Array<{ email: string | null }>>('GET', `contacts?select=email&email=in.${enc(inList)}`).catch(() => [])
+    ;(c || []).forEach((x) => existing.add((x.email || '').trim().toLowerCase()))
+  }
+  const byEmail = new Map<string, BadGroup>()
+  for (const r of quotes) {
+    const email = (r.email || '').trim()
+    const key = email.toLowerCase()
+    if (!email.includes('@') || existing.has(key)) continue
+    const g = byEmail.get(key) || { email, name: (r.poc || '').trim(), reason: 'orphaned — contact not in your list', quotes: [], account: (r.customer || '').trim(), clientId: (r.clientId || '').trim() }
+    if (!g.name && r.poc) g.name = r.poc.trim()
+    if (!g.account && r.customer) g.account = r.customer.trim()
+    if (!g.clientId && r.clientId) g.clientId = (r.clientId || '').trim()
+    g.quotes.push({ id: r.id, opportunity: r.opportunity, customer: r.customer, total: r.total, stage: r.stage, clientId: r.clientId })
+    byEmail.set(key, g)
+  }
+  return Array.from(byEmail.values()).sort((a, b) => b.quotes.length - a.quotes.length)
+}
+
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 3 }
 
@@ -59,6 +95,8 @@ export function BadContactsCard() {
   // Manually flag a contact we already know is bad (e.g. "no longer with us").
   const [flagText, setFlagText] = useState('')
   const [flagBusy, setFlagBusy] = useState(false)
+  // Scan for orphaned POCs (contact deleted, quotes still point at them).
+  const [scanBusy, setScanBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -74,6 +112,32 @@ export function BadContactsCard() {
       .catch((e) => alive && setErr(String(e?.message || e)))
     return () => { alive = false }
   }, [])
+
+  // Merge freshly-found groups into the list without duplicating an email.
+  const mergeGroups = (incoming: BadGroup[]) => {
+    setGroups((prev) => {
+      const have = new Set((prev || []).map((g) => g.email.toLowerCase()))
+      const add = incoming.filter((g) => !have.has(g.email.toLowerCase()))
+      setForm((f) => { const seed = { ...f }; add.forEach((g) => { if (!seed[g.email]) seed[g.email] = { account: g.account, clientId: g.clientId, name: '', email: '' } }); return seed })
+      return [...(prev || []), ...add]
+    })
+  }
+
+  // Scan open quotes for POCs no longer in the contact list, surface them to fix.
+  const scanOrphans = async () => {
+    if (scanBusy) return
+    setScanBusy(true)
+    try {
+      const found = await loadOrphanContacts()
+      mergeGroups(found)
+      const n = found.reduce((a, g) => a + g.quotes.length, 0)
+      showToast(found.length ? `Found ${found.length} contact${found.length !== 1 ? 's' : ''} no longer in your list, on ${n} open quote${n !== 1 ? 's' : ''}.` : 'No orphaned contacts — every open quote’s POC is a known contact.', found.length ? 'info' : 'success', 6000)
+    } catch (e) {
+      showToast('Couldn’t scan: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setScanBusy(false)
+    }
+  }
 
   const patch = (email: string, p: Partial<Pick>) =>
     setForm((f) => {
@@ -183,6 +247,10 @@ export function BadContactsCard() {
           emptyText="No matching contacts."
         />
         <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 4 }}>Marks the address bad and pulls their quotes below to reassign. Won’t be re-emailed.</div>
+        <div style={{ marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
+          <button onClick={scanOrphans} disabled={scanBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: scanBusy ? 'default' : 'pointer' }}>{scanBusy ? 'Scanning…' : 'Scan for deleted contacts'}</button>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds open quotes whose POC was deleted from your contacts (so they don’t show in search) and lists them to reassign.</span>
+        </div>
       </div>
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {err}</div>}
@@ -193,7 +261,7 @@ export function BadContactsCard() {
         return (
           <div key={g.email} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>{/bounce/i.test(g.reason) ? 'Bounced' : 'Flagged'}</span>
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>{/bounce/i.test(g.reason) ? 'Bounced' : /orphan/i.test(g.reason) ? 'Deleted' : 'Flagged'}</span>
               <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
               <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
