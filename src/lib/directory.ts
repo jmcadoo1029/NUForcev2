@@ -45,6 +45,22 @@ export async function searchClients(term: string, limit = 20): Promise<ClientRow
   }
 }
 
+export interface ContactInfoRow { email: string; phone: string; title: string; name: string }
+
+/** Contact detail (phone/title) for a client's people — for the account view. */
+export async function fetchClientContactInfo(clientId: string): Promise<ContactInfoRow[]> {
+  if (!clientId) return []
+  try {
+    const rows = await restFetch<Array<{ first_name: string | null; last_name: string | null; email: string | null; phone: string | null; title: string | null }>>(
+      'GET',
+      `contacts?select=first_name,last_name,email,phone,title&client_id=eq.${enc(clientId)}&order=last_name&limit=1000`,
+    )
+    return (rows || []).map((r) => ({ email: (r.email || '').trim(), phone: (r.phone || '').trim(), title: (r.title || '').trim(), name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim() }))
+  } catch {
+    return []
+  }
+}
+
 /** All contacts for a linked client (the account's contact list). */
 export async function fetchClientContacts(clientId: string): Promise<PersonRow[]> {
   if (!clientId) return []

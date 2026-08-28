@@ -1,14 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, StatTile } from '../../components'
-import { money } from '../../lib/format'
+import { money, fmtDate } from '../../lib/format'
+import { baseOpp } from '../../lib/opp'
 import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow } from '../../lib/accounts'
+import { fetchClientContactInfo } from '../../lib/directory'
 import { codeLabel } from '../../data/constants'
 
 // Codes that are deliverables/paperwork or subcontract, not NU testing — excluded
 // from the testing-history recap: Report/CoC, Procedure, EMI/DCM/PQ report+proc,
 // Subcontract.
 const NON_TEST_CODES = new Set(['41', '42', '43', '44', '98'])
+
+const OPEN_HIDDEN = new Set(['Closed Won', 'Closed Lost'])
+// Rank a revision from the opportunity's trailing letters (base=0, A=1…) so open
+// quotes collapse to the family's latest revision.
+function revRankOpp(opp: string | null): number {
+  const s = (opp || '').toUpperCase().match(/[A-Z]+$/)?.[0] || ''
+  if (!s) return 0
+  let n = 0
+  for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); if (c < 65 || c > 90) return 0; n = n * 26 + (c - 64) }
+  return n
+}
 
 // Account history page (/account/:name) — all of one account's quotes grouped by
 // year in an aligned table (quotes / total / closed won / won value / win %),
@@ -37,6 +50,8 @@ export function AccountPage() {
   const [address, setAddress] = useState('')
   const [openYears, setOpenYears] = useState<Set<string>>(new Set())
   const [openContacts, setOpenContacts] = useState<Set<string>>(new Set())
+  // Phone/title per contact email (lowercased), loaded from the contacts table.
+  const [contactInfo, setContactInfo] = useState<Record<string, { phone: string; title: string }>>({})
   const initedFor = useRef<string | null>(null)
 
   useEffect(() => {
@@ -129,6 +144,40 @@ export function AccountPage() {
       .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
   }, [rows])
 
+  // Activity + open items.
+  const accountClientId = useMemo(() => (rows || []).map((r) => (r.clientId || '').trim()).find(Boolean) || '', [rows])
+  const activity = useMemo(() => {
+    const list = rows || []
+    const maxDate = (arr: AccountRow[], f: (r: AccountRow) => string | null | undefined) =>
+      arr.reduce<string>((m, r) => { const d = (f(r) || '').toString(); return d && d > m ? d : m }, '')
+    return { lastQuoted: maxDate(list, (r) => r.created_at), lastAwarded: maxDate(list.filter((r) => r.stage === 'Closed Won'), (r) => r.won_date || r.created_at) }
+  }, [rows])
+  const openQuotes = useMemo(() => {
+    const open = (rows || []).filter((r) => r.stage && !OPEN_HIDDEN.has(r.stage))
+    const byFam = new Map<string, AccountRow>()
+    for (const r of open) {
+      const base = baseOpp(r.opportunity || '') || String(r.id)
+      const cur = byFam.get(base)
+      if (!cur || revRankOpp(r.opportunity) > revRankOpp(cur.opportunity)) byFam.set(base, r)
+    }
+    return Array.from(byFam.values()).sort((a, b) => (b.opportunity || '').localeCompare(a.opportunity || '', undefined, { numeric: true }))
+  }, [rows])
+
+  // Load phone/title for the account's contacts once we know the client id.
+  useEffect(() => {
+    if (!accountClientId) { setContactInfo({}); return }
+    let alive = true
+    fetchClientContactInfo(accountClientId)
+      .then((list) => {
+        if (!alive) return
+        const map: Record<string, { phone: string; title: string }> = {}
+        list.forEach((c) => { const e = c.email.toLowerCase(); if (e) map[e] = { phone: c.phone, title: c.title } })
+        setContactInfo(map)
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [accountClientId])
+
   // Default the newest year open — once per account load, so collapsing it sticks.
   useEffect(() => {
     if (years.length && initedFor.current !== name) {
@@ -180,6 +229,27 @@ export function AccountPage() {
 
       {!err && rows != null && (
         <>
+          {(activity.lastQuoted || activity.lastAwarded) && (
+            <div style={{ display: 'flex', gap: 'var(--sp-5)', flexWrap: 'wrap', fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-4)' }}>
+              {activity.lastQuoted && <span>Last quoted <b style={{ color: 'var(--text)' }}>{fmtDate(activity.lastQuoted)}</b></span>}
+              {activity.lastAwarded && <span>Last awarded <b style={{ color: 'var(--pos)' }}>{fmtDate(activity.lastAwarded)}</b></span>}
+              <span>Active quotes <b style={{ color: 'var(--text)' }}>{openQuotes.length}</b></span>
+            </div>
+          )}
+
+          {openQuotes.length > 0 && (
+            <div style={{ marginBottom: 'var(--sp-5)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+              <div style={{ background: 'var(--accent-soft)', padding: '9px 14px', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--accent)' }}>Active quotes ({openQuotes.length})</div>
+              {openQuotes.map((r) => (
+                <Link key={r.id} to={`/quote/${encodeURIComponent(r.opportunity || String(r.id))}`} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.5fr 1fr', gap: 8, alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{r.opportunity || '—'}</span>
+                  <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: stageTone(r.stage) }}>{r.stage || '—'}</span>
+                  <span style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(Number(r.total) || 0)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
           {!customerView && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-5)' }}>
               <StatTile label="Quotes (lifetime)" value={lifetime.count} />
@@ -263,12 +333,15 @@ export function AccountPage() {
               </div>
               {byContact.map((c) => {
                 const isOpen = openContacts.has(c.key)
+                const info = contactInfo[(c.email || '').toLowerCase()] || { phone: '', title: '' }
                 return (
                   <div key={c.key} style={{ marginBottom: 6 }}>
                     <div onClick={() => toggleContact(c.key)} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '11px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: isOpen ? 'var(--accent-soft)' : 'var(--card)', border: '1px solid ' + (isOpen ? 'var(--accent)' : 'var(--border)') }}>
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700 }}>{c.name}</div>
-                        {c.email && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>}
+                        <div style={{ fontWeight: 700 }}>{c.name}{info.title && <span style={{ fontWeight: 500, color: 'var(--muted)' }}> · {info.title}</span>}</div>
+                        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {c.email}{c.email && info.phone ? ' · ' : ''}{info.phone}
+                        </div>
                       </div>
                       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{c.count} quote{c.count !== 1 ? 's' : ''}{c.won ? ` · ${c.won} won` : ''}</div>
                       {!customerView && <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' }}>{money(c.total)}</div>}
