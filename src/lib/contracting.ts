@@ -19,6 +19,10 @@ export interface ContractingQuote {
   revision: string | null
   wonApprovalStatus: string | null // none | pending_won | won_approved | won_rejected
   workspaceProjectId: string | null
+  clientId: string // data.qi.client_id — empty means the account isn't linked
+  // A Salesforce import whose legacy lines haven't been converted to picker lines.
+  // Must be converted (on the quote page) before close-won so the project gets tasks.
+  needsConversion: boolean
   wonInfo: ContractingWonInfo
   // Pieces used to build the Workspace project payload (from the saved blob).
   qi: Record<string, unknown>
@@ -43,7 +47,7 @@ function toYMD(d?: string): string | null {
 export async function loadContractingQuote(id: string): Promise<ContractingQuote | null> {
   const rows = await restFetch<Array<Record<string, any>>>(
     'GET',
-    `quotes?select=id,opportunity,customer,stage,total,revision,won_approval_status,job_number,po_number,won_date,workspace_project_id,data&id=eq.${enc(id)}&limit=1`,
+    `quotes?select=id,opportunity,customer,stage,total,revision,won_approval_status,job_number,po_number,won_date,workspace_project_id,source,data&id=eq.${enc(id)}&limit=1`,
   )
   const r = rows?.[0]
   if (!r) return null
@@ -52,6 +56,9 @@ export async function loadContractingQuote(id: string): Promise<ContractingQuote
   const ti = (d.ti || {}) as Record<string, any>
   const b = (d.budget || {}) as Record<string, any>
   const won = (d.wonInfo || {}) as Partial<ContractingWonInfo>
+  const source = s(d.source) || s(r.source)
+  const hasLegacy = Array.isArray(d.summary?.lines) && d.summary.lines.length > 0
+  const hasPicker = Array.isArray(d.pickerLines) && d.pickerLines.length > 0
   return {
     id: r.id,
     opportunity: r.opportunity ?? null,
@@ -61,6 +68,8 @@ export async function loadContractingQuote(id: string): Promise<ContractingQuote
     revision: r.revision ?? null,
     wonApprovalStatus: r.won_approval_status ?? null,
     workspaceProjectId: (d.workspace_project_id as string) ?? r.workspace_project_id ?? null,
+    clientId: s(qi.client_id),
+    needsConversion: source === 'salesforce' && hasLegacy && !hasPicker,
     wonInfo: {
       wonDate: won.wonDate || r.won_date || '',
       jobNum: won.jobNum || r.job_number || '',

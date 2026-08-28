@@ -26,6 +26,20 @@ export async function resolveBounceFlag(quoteId: string, by: string): Promise<vo
   })
 }
 
+/** Link a quote to a client/account: targeted write of data.qi.client_id + account
+ *  (and the customer column, so search/account views align). Used by the inline
+ *  "Link account" at close-won. Never touches approval, line items, or won state. */
+export async function linkQuoteAccount(quoteId: string, clientId: string, accountName: string, billTo?: string, billToCity?: string): Promise<void> {
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?select=data&id=eq.${enc(quoteId)}&limit=1`)
+  const data = (rows?.[0]?.data || {}) as Record<string, any>
+  const qi = { ...(data.qi || {}), client_id: clientId, account: accountName }
+  if (billTo !== undefined) qi.billTo = billTo
+  if (billToCity !== undefined) qi.billToCity = billToCity
+  await restFetch('PATCH', `quotes?id=eq.${enc(quoteId)}`, {
+    body: { data: { ...data, qi }, customer: accountName, updated_at: new Date().toISOString() },
+  })
+}
+
 /** Manually mark a contact's address invalid (same field the resend-webhook sets
  *  on a hard bounce), for a contact you already KNOW is bad — e.g. you heard they
  *  left the company. Flags every contact row with that address so it lands in the

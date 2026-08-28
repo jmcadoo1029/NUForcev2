@@ -108,6 +108,9 @@ export function ApprovalsCard() {
   const [selQuote, setSelQuote] = useState<Set<string>>(new Set())
   const [massOpen, setMassOpen] = useState(false)
   const [massComment, setMassComment] = useState('')
+  const [selWon, setSelWon] = useState<Set<string>>(new Set())
+  const [massWonOpen, setMassWonOpen] = useState(false)
+  const [massWonComment, setMassWonComment] = useState('')
   const me = getSessionEmail() || ''
 
   useEffect(() => { let alive = true; fetchIsApprover().then((v) => alive && setIsApprover(v)); return () => { alive = false } }, [])
@@ -141,6 +144,10 @@ export function ApprovalsCard() {
   const toggleAllQuotes = () => setSelQuote((s) => (quoteRows.length > 0 && quoteRows.every((r) => s.has(r.id)) ? new Set() : new Set(quoteRows.map((r) => r.id))))
   const selectedCount = quoteRows.filter((r) => selQuote.has(r.id)).length
 
+  const toggleSelWon = (id: string) => setSelWon((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const toggleAllWon = () => setSelWon((s) => (wonRows.length > 0 && wonRows.every((r) => s.has(r.id)) ? new Set() : new Set(wonRows.map((r) => r.id))))
+  const selectedWonCount = wonRows.filter((r) => selWon.has(r.id)).length
+
   // Mass-approve every selected quote (best-effort per row; a failure skips just that one).
   const confirmMass = async () => {
     if (busy) return
@@ -160,6 +167,26 @@ export function ApprovalsCard() {
       setDecidedIds((s) => { const n = new Set(s); targets.forEach((r) => n.add(r.id)); return n })
       showToast(WRITES_ENABLED ? `${ok} quote${ok !== 1 ? 's' : ''} approved` : `${targets.length} approved (preview)`, WRITES_ENABLED ? 'success' : 'info')
       setSelQuote(new Set()); setMassOpen(false); setMassComment('')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Mass-approve every selected Closed-Won (best-effort per row).
+  const confirmMassWon = async () => {
+    if (busy) return
+    const targets = wonRows.filter((r) => selWon.has(r.id))
+    if (targets.length === 0) return
+    setBusy(true)
+    let ok = 0
+    try {
+      for (const row of targets) {
+        if (!WRITES_ENABLED) { ok++; continue }
+        try { await decideWon(row.id, 'won_approved', massWonComment.trim(), me); ok++ } catch { /* skip individual failures */ }
+      }
+      setDecidedIds((s) => { const n = new Set(s); targets.forEach((r) => n.add(r.id)); return n })
+      showToast(WRITES_ENABLED ? `${ok} Closed-Won${ok !== 1 ? 's' : ''} approved` : `${targets.length} approved (preview)`, WRITES_ENABLED ? 'success' : 'info')
+      setSelWon(new Set()); setMassWonOpen(false); setMassWonComment('')
     } finally {
       setBusy(false)
     }
@@ -222,7 +249,14 @@ export function ApprovalsCard() {
             </div>
           )}
           <Section title="Quote approvals pending" rows={quoteRows} tone="var(--accent)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'quote', decision }) }} selectedIds={selQuote} onToggle={toggleSel} onSelectAll={toggleAllQuotes} />
-          <Section title="Won approvals pending" rows={wonRows} tone="var(--info)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'won', decision }) }} />
+          {isApprover && selectedWonCount > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', background: 'var(--pos-soft)', border: '1px solid var(--pos-border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', marginBottom: 'var(--sp-3)' }}>
+              <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)' }}>{selectedWonCount} selected</span>
+              <button onClick={() => setSelWon(new Set())} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+              <button onClick={() => { setMassWonComment(''); setMassWonOpen(true) }} style={{ marginLeft: 'auto', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 20, padding: '6px 16px', cursor: 'pointer' }}>Approve {selectedWonCount} Closed-Won</button>
+            </div>
+          )}
+          <Section title="Won approvals pending" rows={wonRows} tone="var(--info)" isApprover={isApprover} onDecide={(row, decision) => { setComment(''); setTarget({ row, kind: 'won', decision }) }} selectedIds={selWon} onToggle={toggleSelWon} onSelectAll={toggleAllWon} />
           <ReopenSection rows={reopenRows} isApprover={isApprover} busyId={reopenBusyId} onResolve={resolveReopenNow} />
         </>
       )}
@@ -235,6 +269,18 @@ export function ApprovalsCard() {
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <button onClick={() => setMassOpen(false)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>
             <button onClick={confirmMass} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Approving…' : `Approve ${selectedCount}`}</button>
+          </div>
+        </Modal>
+      )}
+
+      {massWonOpen && (
+        <Modal title={`Approve ${selectedWonCount} Closed-Won?`} onClose={() => !busy && setMassWonOpen(false)} width={460}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Approves all {selectedWonCount} selected Closed-Won quote{selectedWonCount !== 1 ? 's' : ''} at once. Decision comment (optional) — applied to each.</div>
+          <textarea value={massWonComment} onChange={(e) => setMassWonComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>Preview — writes are off, so this only clears them from your view.</div>}
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+            <button onClick={() => setMassWonOpen(false)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>
+            <button onClick={confirmMassWon} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--pos)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Approving…' : `Approve ${selectedWonCount}`}</button>
           </div>
         </Modal>
       )}

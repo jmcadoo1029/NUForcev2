@@ -14,6 +14,9 @@ import {
   createProjectFromNuforce, appendToProject, lookupProjectByJobNumber, setWorkspaceLink,
   workspaceProjectUrl, describeWorkspaceError, notifyClosedWon,
 } from '../../lib/workspace'
+import { linkQuoteAccount } from '../../lib/quoteContact'
+import { searchClients, type ClientRow } from '../../lib/directory'
+import { Autocomplete } from '../quote/form/Autocomplete'
 
 // Contracting workspace — for managers + accounting (gated with the Manager view).
 // Search any quote, then close it won (which submits for won-approval, the SAME
@@ -85,10 +88,29 @@ export function Contracting() {
 
   const refresh = async () => { if (selectedId) await select(selectedId) }
 
+  const [linkText, setLinkText] = useState('')
+
   const wonStatus = quote?.wonApprovalStatus || 'none'
   const isClosedWon = (quote?.stage || '') === 'Closed Won'
   const canSubmitWon = wonStatus === 'none' || wonStatus === 'won_rejected'
   const linked = !!wsProjectId
+  // Close-won guardrails: the account must be linked (for the Workspace project), and
+  // a Salesforce import's lines must be converted to picker lines first.
+  const accountNotLinked = !!quote && !quote.clientId
+  const needsConv = !!quote?.needsConversion
+
+  // Link the account inline (targeted write), then reload so the guardrail clears.
+  const doLinkAccount = async (c: ClientRow) => {
+    if (!quote || busy) return
+    if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    setBusy(true)
+    try {
+      await linkQuoteAccount(quote.id, c.id, c.name || '', c.address || '', [c.city, c.state, c.zip].filter(Boolean).join(', '))
+      showToast(`Account linked to ${c.name || 'client'}.`, 'success')
+      setLinkText('')
+      await refresh()
+    } catch (e) { showToast('Couldn’t link the account: ' + errMsg(e), 'error', 6000) } finally { setBusy(false) }
+  }
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const doSaveDetails = async () => {
@@ -106,6 +128,8 @@ export function Contracting() {
   const doMarkClosedWon = async () => {
     if (!quote || busy) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    if (quote.needsConversion) { showToast('Convert the imported line items to picker lines first — open the quote and use “Convert to picker.” Close-won is blocked until then.', 'error', 9000); return }
+    if (!quote.clientId) { showToast('Link the account first (below) — the Workspace project needs it.', 'error', 7000); return }
     setBusy(true)
     try {
       await saveWonDetails(quote.id, won)
@@ -220,9 +244,31 @@ export function Contracting() {
                 <div><div style={label}>PO #</div><input value={won.poNum} onChange={(e) => setWon({ ...won, poNum: e.target.value })} placeholder="e.g. PO-98765" style={inputStyle} /></div>
               </div>
 
+              {needsConv && (
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', background: 'var(--warn-soft)', border: '1px solid var(--warn-border)', borderRadius: 'var(--radius-sm)', padding: '9px 13px', marginBottom: 'var(--sp-3)' }}>
+                  This is a Salesforce-imported quote whose line items haven’t been converted. <Link to={`/quote/${encodeURIComponent(quote.opportunity || quote.id)}`} style={{ color: 'var(--accent)', fontWeight: 700 }}>Open the quote</Link> and use “Convert to picker” before closing won.
+                </div>
+              )}
+              {accountNotLinked && (
+                <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
+                  <div style={label}>Account not linked — link it to close won / create the project</div>
+                  <Autocomplete<ClientRow>
+                    value={linkText}
+                    onValueChange={setLinkText}
+                    search={(t) => searchClients(t)}
+                    itemKey={(c) => c.id}
+                    itemPrimary={(c) => c.name || '(unnamed)'}
+                    itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
+                    onPick={(c) => doLinkAccount(c)}
+                    placeholder={busy ? 'Linking…' : 'Search accounts to link…'}
+                    minChars={2}
+                  />
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
                 {canSubmitWon ? (
-                  <Button small disabled={busy || !WRITES_ENABLED} onClick={() => setConfirmOpen(true)}>{busy ? 'Working…' : 'Mark Closed Won & submit for approval'}</Button>
+                  <Button small disabled={busy || !WRITES_ENABLED || needsConv || accountNotLinked} onClick={() => setConfirmOpen(true)}>{busy ? 'Working…' : 'Mark Closed Won & submit for approval'}</Button>
                 ) : (
                   <Button variant="secondary" small disabled={busy || !WRITES_ENABLED} onClick={doSaveDetails}>{busy ? 'Saving…' : 'Save won details'}</Button>
                 )}

@@ -20,6 +20,8 @@ import { QuoteActions, type ChatterEntry } from './QuoteActions'
 import { SendComposer } from './SendComposer'
 import { SentFiles } from './SentFiles'
 import { ConvertToPicker, type ConvertedLine } from './ConvertToPicker'
+import { Autocomplete } from './form/Autocomplete'
+import { searchClients, type ClientRow } from '../../lib/directory'
 import { ClosedWonDetails, type WonInfo } from './ClosedWonDetails'
 import { cleanNotes, regInput } from './form/fields'
 import { cleanSpecText } from '../../lib/specText'
@@ -56,6 +58,9 @@ export function QuotePage() {
   // skim past). Tracked per quote id so it opens once, not on every re-render.
   const [convertWarnOpen, setConvertWarnOpen] = useState(false)
   const warnedForRef = useRef<string | null>(null)
+  // Inline "Link account" at close-won when the account isn't linked to a client.
+  const [linkAcctOpen, setLinkAcctOpen] = useState(false)
+  const [linkAcctText, setLinkAcctText] = useState('')
   const [sendOpen, setSendOpen] = useState(false)
   // Manual follow-up from the quote page (mirrors the dashboard "Send follow-up").
   const [followUpOpen, setFollowUpOpen] = useState(false)
@@ -537,7 +542,8 @@ export function QuotePage() {
       // typing it). Without it the project can't link, and the quote looks "done"
       // while nothing reached Workspace. Block the close-won until the account is linked.
       if (!s(qiEdit.client_id).trim()) {
-        showToast('Link the account before closing won — the Workspace project needs it. Edit the quote and pick the Account from the list (Quote Info) so it links to a client record, then close won.', 'error', 10000)
+        setLinkAcctText(s(qiEdit.account))
+        setLinkAcctOpen(true)
         return
       }
       if (!wonConfirmedRef.current) { setWonConfirmOpen(true); return }
@@ -973,6 +979,24 @@ export function QuotePage() {
               setup={setupEdit}
               onSetupChange={setSetupField}
             />
+          )}
+          {linkAcctOpen && (
+            <Modal title="Link an account to close won" onClose={() => setLinkAcctOpen(false)} width={460}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', lineHeight: 1.6, marginBottom: 'var(--sp-3)' }}>
+                This quote's account isn't linked to a client record, so the Workspace project can't link. Pick the account below, then click Close won again to finish.
+              </div>
+              <Autocomplete<ClientRow>
+                value={linkAcctText}
+                onValueChange={(v) => { setLinkAcctText(v); if (!v.trim()) setQi({ client_id: '' }) }}
+                search={(t) => searchClients(t)}
+                itemKey={(c) => c.id}
+                itemPrimary={(c) => c.name || '(unnamed)'}
+                itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
+                onPick={(c) => { setQi({ account: c.name || '', client_id: c.id, billTo: c.address || '', billToCity: [c.city, c.state, c.zip].filter(Boolean).join(', ') }); setLinkAcctText(c.name || ''); setLinkAcctOpen(false); showToast('Account linked — click Close won again to finish.', 'success', 6000) }}
+                placeholder="Search accounts…"
+                minChars={2}
+              />
+            </Modal>
           )}
           {convertWarnOpen && (
             <Modal title="Convert this quote before editing" onClose={() => setConvertWarnOpen(false)} width={480}>
