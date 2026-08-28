@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useCanViewManager } from '../../lib/perms'
+import { WORKSPACE_URL } from '../../lib/config'
 import { Campaigns } from '../dashboard/Campaigns'
 import { CustomerLookup } from '../account/CustomerLookup'
 
@@ -49,6 +50,7 @@ export function HomeLauncher() {
     { key: 'campaigns', label: 'Campaigns', desc: 'Outreach campaigns and their contacts.', onClick: () => setModal('campaigns'), icon: iconMegaphone },
     { key: 'lookup', label: 'Customer Lookup', desc: 'Open an account in Customer View — no financials on screen.', onClick: () => setModal('lookup'), icon: iconSearch },
     { key: 'newquote', label: 'Create A Quote', desc: 'Start a brand new quote.', onClick: () => navigate('/quote/new'), icon: iconPlus },
+    { key: 'workspace', label: 'Open Workspace', desc: 'Jump to NUWorkspace in a new tab.', onClick: () => window.open(WORKSPACE_URL, '_blank', 'noopener,noreferrer'), icon: iconExternal },
   ]
 
   const visible = tiles.filter((t) => !t.managerOnly || canView)
@@ -95,3 +97,4 @@ const iconCheck = <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11
 const iconMegaphone = <svg width="22" height="22" viewBox="0 0 22 22"><path d="M4 9v4h3l8 4V5L7 9H4z" {...stroke} /><path d="M17 8.5a3 3 0 010 5" {...stroke} /></svg>
 const iconSearch = <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="9.5" cy="9.5" r="5.5" {...stroke} /><path d="M13.8 13.8L18 18" {...stroke} /></svg>
 const iconPlus = <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" {...stroke} /><path d="M11 7.5v7M7.5 11h7" {...stroke} /></svg>
+const iconExternal = <svg width="22" height="22" viewBox="0 0 22 22"><path d="M12 4h6v6M18 4l-7 7" {...stroke} /><path d="M15.5 12.5V17a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 17V8A1.5 1.5 0 015 6.5h4.5" {...stroke} /></svg>
