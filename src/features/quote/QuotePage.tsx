@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useParams, useNavigate } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { Card, CardLabel, Button, Modal, menuItemStyle, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { serializeQuote, saveQuote, type QuoteSaveModel } from '../../lib/quoteSave'
@@ -43,6 +43,7 @@ import { needsReapproval } from '../../lib/approval'
 export function QuotePage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const location = useLocation()
   const { showToast } = useToast()
   const [row, setRow] = useState<QuoteRow | null>(null)
   // Unified editable line items (existing + calculator/picker additions).
@@ -120,10 +121,15 @@ export function QuotePage() {
     let alive = true
     // New quote: start blank in-memory (no DB row until first Save). id '' → insert.
     if (id === 'new') {
-      setRow({ id: '', opportunity: null, customer: null, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
+      // Optional pre-linked account, passed from the account page's "+ New Quote".
+      // Seeds account + client_id (so the quote is linked from the start) plus the
+      // bill-to address, exactly as picking the account in the form would.
+      const pre = (location.state as { prefillAccount?: Record<string, string> } | null)?.prefillAccount
+      const preQi = pre ? { account: pre.account || '', client_id: pre.client_id || '', billTo: pre.billTo || '', billToCity: pre.billToCity || '' } : {}
+      setRow({ id: '', opportunity: null, customer: pre?.account || null, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
       setLineItems([])
       setTiEdit({ ...TI_DEFAULTS })
-      setQiEdit({ ...QI_DEFAULTS, date: new Date().toLocaleDateString('en-US'), stage: 'Proposal/Price Quote' })
+      setQiEdit({ ...QI_DEFAULTS, date: new Date().toLocaleDateString('en-US'), stage: 'Proposal/Price Quote', ...preQi })
       setSetupEdit({ ...SETUP_FORM_DEFAULTS })
       setBudgetEdit({ on: false, rows: [], markup: '25' })
       setApproval({ status: 'none', history: [] })

@@ -53,16 +53,17 @@ export async function fetchAccountQuotes(name: string): Promise<AccountRow[]> {
 export { yearOfOpp } from './opp'
 
 export interface ClientInfo {
+  id?: string | null
   address: string | null
   city: string | null
   state: string | null
   zip: string | null
 }
 
-/** Client address for an account name, or null if there's no matching client. */
+/** Client (id + address) for an account name, or null if there's no matching client. */
 export async function fetchClient(name: string): Promise<ClientInfo | null> {
   const rows =
-    (await restFetch<ClientInfo[]>('GET', `clients?select=address,city,state,zip&name=eq.${encodeURIComponent(name)}&limit=1`)) || []
+    (await restFetch<ClientInfo[]>('GET', `clients?select=id,address,city,state,zip&name=eq.${encodeURIComponent(name)}&limit=1`)) || []
   return rows[0] || null
 }
 

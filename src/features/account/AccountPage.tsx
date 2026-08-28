@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Button, StatTile } from '../../components'
 import { money, fmtDate } from '../../lib/format'
 import { baseOpp } from '../../lib/opp'
-import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow } from '../../lib/accounts'
+import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow, type ClientInfo } from '../../lib/accounts'
 import { fetchClientContactInfo } from '../../lib/directory'
 import { codeLabel } from '../../data/constants'
 
@@ -70,9 +70,11 @@ export function AccountPage() {
   const toggleCustomerView = () =>
     setSp((prev) => { const n = new URLSearchParams(prev); customerView ? n.delete('view') : n.set('view', 'customer'); return n }, { replace: true })
 
+  const navigate = useNavigate()
   const [rows, setRows] = useState<AccountRow[] | null>(null)
   const [err, setErr] = useState('')
   const [address, setAddress] = useState('')
+  const [client, setClient] = useState<ClientInfo | null>(null)
   const [selectedYear, setSelectedYear] = useState('')
   const [openContacts, setOpenContacts] = useState<Set<string>>(new Set())
   const [openTests, setOpenTests] = useState<Set<string>>(new Set())
@@ -83,9 +85,9 @@ export function AccountPage() {
 
   useEffect(() => {
     let alive = true
-    setRows(null); setAddress(''); setSelectedYear(''); setOpenContacts(new Set()); setOpenTests(new Set()); setOpenSections(new Set(['active']))
+    setRows(null); setAddress(''); setClient(null); setSelectedYear(''); setOpenContacts(new Set()); setOpenTests(new Set()); setOpenSections(new Set(['active']))
     fetchAccountQuotes(name).then((r) => alive && setRows(r)).catch((e) => alive && setErr(String(e?.message || e)))
-    fetchClient(name).then((c) => alive && setAddress(formatClientAddress(c))).catch(() => {})
+    fetchClient(name).then((c) => { if (alive) { setAddress(formatClientAddress(c)); setClient(c) } }).catch(() => {})
     return () => { alive = false }
   }, [name])
 
@@ -224,7 +226,22 @@ export function AccountPage() {
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: customerView ? '#fff' : 'var(--border-strong)' }} />
             Customer View{customerView ? ' · on' : ''}
           </button>
-          <Button>+ New Quote</Button>
+          <Button
+            onClick={() =>
+              navigate('/quote/new', {
+                state: {
+                  prefillAccount: {
+                    account: name,
+                    client_id: (client?.id || accountClientId || '') as string,
+                    billTo: client?.address || '',
+                    billToCity: [client?.city, client?.state, client?.zip].filter(Boolean).join(', '),
+                  },
+                },
+              })
+            }
+          >
+            + New Quote
+          </Button>
         </div>
       </div>
 
