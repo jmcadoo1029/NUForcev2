@@ -21,6 +21,8 @@ export interface AccountRow {
   revision: string | null
   stage: string | null
   total: number | null
+  contact?: string | null
+  email?: string | null
 }
 
 /** Every quote for one exact account name (paginated). */
@@ -33,7 +35,7 @@ export async function fetchAccountQuotes(name: string): Promise<AccountRow[]> {
     const rows =
       (await restFetch<AccountRow[]>(
         'GET',
-        `quotes?select=id,opportunity,revision,stage,total&customer=eq.${encodeURIComponent(name)}&order=opportunity.desc&limit=${batch}&offset=${from}`,
+        `quotes?select=id,opportunity,revision,stage,total,contact:data->qi->>contact,email:data->qi->>email&customer=eq.${encodeURIComponent(name)}&order=opportunity.desc&limit=${batch}&offset=${from}`,
       )) || []
     all = all.concat(rows)
     if (rows.length < batch) break

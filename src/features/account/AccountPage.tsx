@@ -30,6 +30,7 @@ export function AccountPage() {
   const [err, setErr] = useState('')
   const [address, setAddress] = useState('')
   const [openYears, setOpenYears] = useState<Set<string>>(new Set())
+  const [openContacts, setOpenContacts] = useState<Set<string>>(new Set())
   const initedFor = useRef<string | null>(null)
 
   useEffect(() => {
@@ -68,6 +69,35 @@ export function AccountPage() {
     const wonCount = (rows || []).filter((r) => r.stage === 'Closed Won').length
     return { years, lifetime: { count, total, wonCount, winRate: count ? Math.round((wonCount / count) * 100) : 0 } }
   }, [rows])
+
+  // Group the account's quotes by their point of contact (POC on each quote —
+  // data.qi.email, falling back to the contact name), then by year within each
+  // contact. This is the "quotes per year by contact" view.
+  const byContact = useMemo(() => {
+    const map = new Map<string, { name: string; email: string; rows: AccountRow[] }>()
+    ;(rows || []).forEach((r) => {
+      const email = (r.email || '').trim()
+      const nm = (r.contact || '').trim()
+      const key = email.toLowerCase() || nm.toLowerCase() || '__none'
+      const g = map.get(key) || { name: nm, email, rows: [] }
+      if (!g.name && nm) g.name = nm
+      if (!g.email && email) g.email = email
+      g.rows.push(r)
+      map.set(key, g)
+    })
+    return Array.from(map.entries())
+      .map(([key, g]) => {
+        const ym = new Map<string, AccountRow[]>()
+        g.rows.forEach((r) => { const y = yearOfOpp(r.opportunity); const arr = ym.get(y) || []; arr.push(r); ym.set(y, arr) })
+        const years = Array.from(ym.entries())
+          .map(([year, rr]) => ({ year, rows: rr, total: rr.reduce((a, r) => a + (Number(r.total) || 0), 0), won: rr.filter((r) => r.stage === 'Closed Won').length }))
+          .sort((a, b) => (a.year === 'Unknown' ? 1 : b.year === 'Unknown' ? -1 : b.year.localeCompare(a.year)))
+        return { key, name: g.name || (key === '__none' ? 'No contact on file' : g.email || 'Unknown'), email: g.email, count: g.rows.length, total: g.rows.reduce((a, r) => a + (Number(r.total) || 0), 0), won: g.rows.filter((r) => r.stage === 'Closed Won').length, years }
+      })
+      .sort((a, b) => b.count - a.count)
+  }, [rows])
+
+  const toggleContact = (k: string) => setOpenContacts((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
 
   // Default the newest year open — once per account load, so collapsing it sticks.
   useEffect(() => {
@@ -177,6 +207,46 @@ export function AccountPage() {
                 )
               })}
             </>
+          )}
+
+          {byContact.length > 0 && (
+            <div style={{ marginTop: 'var(--sp-6)' }}>
+              <div style={{ fontSize: 'var(--fs-md)', fontWeight: 800, letterSpacing: '-.01em', marginBottom: 'var(--sp-3)' }}>
+                Contacts <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--muted)' }}>({byContact.length})</span>
+              </div>
+              {byContact.map((c) => {
+                const isOpen = openContacts.has(c.key)
+                return (
+                  <div key={c.key} style={{ marginBottom: 6 }}>
+                    <div onClick={() => toggleContact(c.key)} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '11px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: isOpen ? 'var(--accent-soft)' : 'var(--card)', border: '1px solid ' + (isOpen ? 'var(--accent)' : 'var(--border)') }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontWeight: 700 }}>{c.name}</div>
+                        {c.email && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.email}</div>}
+                      </div>
+                      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', whiteSpace: 'nowrap' }}>{c.count} quote{c.count !== 1 ? 's' : ''}{c.won ? ` · ${c.won} won` : ''}</div>
+                      {!customerView && <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', minWidth: 80, textAlign: 'right' }}>{money(c.total)}</div>}
+                      <span style={{ width: 7, height: 7, borderRight: '2px solid var(--dim)', borderBottom: '2px solid var(--dim)', transform: isOpen ? 'rotate(45deg)' : 'rotate(-45deg)', flexShrink: 0 }} />
+                    </div>
+                    {isOpen && (
+                      <div style={{ margin: '4px 0 0 14px', borderLeft: '2px solid var(--accent)', paddingLeft: 12 }}>
+                        {c.years.map((y) => (
+                          <div key={y.year} style={{ marginBottom: 'var(--sp-2)' }}>
+                            <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '6px 8px 2px' }}>{y.year} · {y.rows.length} quote{y.rows.length !== 1 ? 's' : ''}{!customerView ? ` · ${money(y.total)}` : ''}</div>
+                            {y.rows.map((r) => (
+                              <Link key={r.id} to={`/quote/${encodeURIComponent(r.opportunity || String(r.id))}`} style={{ display: 'grid', gridTemplateColumns: '2fr 1.5fr 1fr', gap: 8, alignItems: 'center', padding: '8px 8px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
+                                <span style={{ fontWeight: 600, color: 'var(--accent)' }}>{r.opportunity || '—'}</span>
+                                <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: stageTone(r.stage) }}>{r.stage || '—'}</span>
+                                <span style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(Number(r.total) || 0)}</span>
+                              </Link>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
           )}
         </>
       )}
