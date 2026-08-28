@@ -3,6 +3,12 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, StatTile } from '../../components'
 import { money } from '../../lib/format'
 import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow } from '../../lib/accounts'
+import { codeLabel } from '../../data/constants'
+
+// Codes that are deliverables/paperwork or subcontract, not NU testing — excluded
+// from the testing-history recap: Report/CoC, Procedure, EMI/DCM/PQ report+proc,
+// Subcontract.
+const NON_TEST_CODES = new Set(['41', '42', '43', '44', '98'])
 
 // Account history page (/account/:name) — all of one account's quotes grouped by
 // year in an aligned table (quotes / total / closed won / won value / win %),
@@ -98,6 +104,30 @@ export function AccountPage() {
   }, [rows])
 
   const toggleContact = (k: string) => setOpenContacts((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
+
+  // Testing history — the test types (product codes) this account has been quoted,
+  // counting each quote once per code. A capabilities recap for the account/customer
+  // view. Deliverable/subcontract codes are excluded (see NON_TEST_CODES).
+  const testing = useMemo(() => {
+    const map = new Map<string, { code: string; label: string; quotes: Set<string>; won: Set<string> }>()
+    ;(rows || []).forEach((r) => {
+      const items = Array.isArray(r.line_items) ? r.line_items : []
+      const seen = new Set<string>()
+      items.forEach((li) => {
+        const code = String(li?.code ?? '').trim()
+        if (!code || NON_TEST_CODES.has(code) || seen.has(code)) return
+        seen.add(code)
+        const label = codeLabel(code) || String(li?.label ?? '').trim() || `Code ${code}`
+        const g = map.get(code) || { code, label, quotes: new Set<string>(), won: new Set<string>() }
+        g.quotes.add(r.id)
+        if (r.stage === 'Closed Won') g.won.add(r.id)
+        map.set(code, g)
+      })
+    })
+    return Array.from(map.values())
+      .map((g) => ({ code: g.code, label: g.label, count: g.quotes.size, won: g.won.size }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+  }, [rows])
 
   // Default the newest year open — once per account load, so collapsing it sticks.
   useEffect(() => {
@@ -207,6 +237,23 @@ export function AccountPage() {
                 )
               })}
             </>
+          )}
+
+          {testing.length > 0 && (
+            <div style={{ marginTop: 'var(--sp-6)' }}>
+              <div style={{ fontSize: 'var(--fs-md)', fontWeight: 800, letterSpacing: '-.01em', marginBottom: 'var(--sp-1)' }}>
+                Testing history <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--muted)' }}>({testing.length} test type{testing.length !== 1 ? 's' : ''})</span>
+              </div>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', margin: '4px 0 var(--sp-3)' }}>The testing NU Laboratories has quoted for this account.</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--sp-2)' }}>
+                {testing.map((t) => (
+                  <div key={t.code} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '7px 13px', borderRadius: 20, border: '1px solid var(--border-strong)', background: 'var(--card)', fontSize: 'var(--fs-sm)' }}>
+                    <span style={{ fontWeight: 700 }}>{t.label}</span>
+                    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>{t.count} quote{t.count !== 1 ? 's' : ''}{t.won ? ` · ${t.won} won` : ''}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
 
           {byContact.length > 0 && (
