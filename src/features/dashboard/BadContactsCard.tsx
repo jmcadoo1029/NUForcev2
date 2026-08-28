@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardLabel, useToast } from '../../components'
-import { restFetch } from '../../lib/restFetch'
+import { restFetch, restFetchAll } from '../../lib/restFetch'
 import { money } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
@@ -51,24 +51,18 @@ async function loadBadContacts(): Promise<BadGroup[]> {
 // emails against contacts, and groups the leftovers so they can be reassigned like
 // a bounced contact. On-demand (heavier scan), so it's behind a button.
 async function loadOrphanContacts(): Promise<BadGroup[]> {
-  const rows = await restFetch<Array<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; poc: string | null; email: string | null; clientId: string | null }>>(
-    'GET',
-    `quotes?select=id,opportunity,customer,total,stage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&data->qi->>stage=not.in.("Closed Won","Closed Lost")&limit=5000`,
+  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
+    `quotes?select=id,opportunity,customer,total,stage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&data->qi->>stage=not.in.("Closed Won","Closed Lost")&order=id`,
   ).catch(() => [])
-  const quotes = rows || []
   const emails = Array.from(new Set(quotes.map((r) => (r.email || '').trim().toLowerCase()).filter((e) => e.includes('@'))))
   if (!emails.length) return []
   // Build the full set of contact emails (lowercased) so the match is
   // case-insensitive AND complete. PostgREST caps a response at 1000 rows, so we
   // page through with offset — a single fetch would silently truncate and flag
   // real contacts (whose stored email may be mixed-case) as orphans.
+  const contactRows = await restFetchAll<{ email: string | null }>(`contacts?select=email&email=not.is.null&order=email,id`).catch(() => [])
   const existing = new Set<string>()
-  for (let off = 0; off <= 50000; off += 1000) {
-    const page = await restFetch<Array<{ email: string | null }>>('GET', `contacts?select=email&email=not.is.null&order=email&limit=1000&offset=${off}`).catch(() => [])
-    const arr = page || []
-    arr.forEach((x) => { const e = (x.email || '').trim().toLowerCase(); if (e) existing.add(e) })
-    if (arr.length < 1000) break
-  }
+  contactRows.forEach((x) => { const e = (x.email || '').trim().toLowerCase(); if (e) existing.add(e) })
   const byEmail = new Map<string, BadGroup>()
   for (const r of quotes) {
     const email = (r.email || '').trim()

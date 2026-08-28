@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { restFetch } from '../../lib/restFetch'
+import { restFetch, restFetchAll } from '../../lib/restFetch'
 import { baseOpp as baseOf } from '../../lib/opp'
 import { approvalInherited } from '../../lib/approval'
 
@@ -27,11 +27,9 @@ interface Raw {
 }
 
 async function load(): Promise<ReadyRow[]> {
-  const approved =
-    (await restFetch<Raw[]>(
-      'GET',
-      `quotes?select=id,opportunity,revision,customer,total,data,created_at,ready_to_send_dismissed_at&approval_status=eq.approved&ready_to_send_dismissed_at=is.null&stage=not.in.(${encodeURIComponent('Closed Won')},${encodeURIComponent('Closed Lost')})&limit=2000`,
-    )) || []
+  const approved = await restFetchAll<Raw>(
+    `quotes?select=id,opportunity,revision,customer,total,data,created_at,ready_to_send_dismissed_at&approval_status=eq.approved&ready_to_send_dismissed_at=is.null&stage=not.in.(${encodeURIComponent('Closed Won')},${encodeURIComponent('Closed Lost')})&order=id`,
+  )
 
   const familyMap = new Map<string, Raw>()
   approved.forEach((r) => {

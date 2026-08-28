@@ -70,3 +70,20 @@ export async function restFetch<T = unknown>(
     clearTimeout(timer)
   }
 }
+
+/**
+ * GET every row for a query, paging past PostgREST's 1000-row response cap
+ * (a plain limit=5000 still returns at most 1000 and silently truncates).
+ * `path` MUST include a stable `order=…` (unique, or tie-broken with id) —
+ * otherwise offset paging can skip or repeat rows. Stops on the first short page.
+ */
+export async function restFetchAll<T = unknown>(path: string, pageSize = 1000): Promise<T[]> {
+  const sep = path.includes('?') ? '&' : '?'
+  const out: T[] = []
+  for (let off = 0; off <= 500000; off += pageSize) {
+    const page = (await restFetch<T[]>('GET', `${path}${sep}limit=${pageSize}&offset=${off}`)) || []
+    out.push(...page)
+    if (page.length < pageSize) break
+  }
+  return out
+}

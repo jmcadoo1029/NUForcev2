@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { restFetch } from '../../lib/restFetch'
+import { restFetchAll } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
 
 // Year-to-date metrics, net of revisions. Quotes created this year vs. closed-won
@@ -44,8 +44,8 @@ async function load(): Promise<YtdMetrics> {
   const end = new Date(year + 1, 0, 1).toISOString()
 
   const [createdRaw, wonRaw] = await Promise.all([
-    restFetch<Row[]>('GET', `quotes?select=id,opportunity,revision,total,created_at&created_at=gte.${encodeURIComponent(start)}&created_at=lt.${encodeURIComponent(end)}`),
-    restFetch<Row[]>('GET', `quotes?select=id,opportunity,revision,total,won_date,data&stage=eq.Closed%20Won&won_date=gte.${start.slice(0, 10)}&won_date=lt.${end.slice(0, 10)}`),
+    restFetchAll<Row>(`quotes?select=id,opportunity,revision,total,created_at&created_at=gte.${encodeURIComponent(start)}&created_at=lt.${encodeURIComponent(end)}&order=id`),
+    restFetchAll<Row>(`quotes?select=id,opportunity,revision,total,won_date,data&stage=eq.Closed%20Won&won_date=gte.${start.slice(0, 10)}&won_date=lt.${end.slice(0, 10)}&order=id`),
   ])
 
   const quotedNet = latestPerBase(createdRaw || [])
