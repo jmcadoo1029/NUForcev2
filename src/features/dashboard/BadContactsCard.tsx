@@ -58,13 +58,16 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
   const quotes = rows || []
   const emails = Array.from(new Set(quotes.map((r) => (r.email || '').trim().toLowerCase()).filter((e) => e.includes('@'))))
   if (!emails.length) return []
-  // Which POC emails still exist as contacts?
+  // Build the full set of contact emails (lowercased) so the match is
+  // case-insensitive AND complete. PostgREST caps a response at 1000 rows, so we
+  // page through with offset — a single fetch would silently truncate and flag
+  // real contacts (whose stored email may be mixed-case) as orphans.
   const existing = new Set<string>()
-  for (let i = 0; i < emails.length; i += 80) {
-    const chunk = emails.slice(i, i + 80)
-    const inList = '(' + chunk.map((e) => '"' + e.replace(/"/g, '') + '"').join(',') + ')'
-    const c = await restFetch<Array<{ email: string | null }>>('GET', `contacts?select=email&email=in.${enc(inList)}`).catch(() => [])
-    ;(c || []).forEach((x) => existing.add((x.email || '').trim().toLowerCase()))
+  for (let off = 0; off <= 50000; off += 1000) {
+    const page = await restFetch<Array<{ email: string | null }>>('GET', `contacts?select=email&email=not.is.null&order=email&limit=1000&offset=${off}`).catch(() => [])
+    const arr = page || []
+    arr.forEach((x) => { const e = (x.email || '').trim().toLowerCase(); if (e) existing.add(e) })
+    if (arr.length < 1000) break
   }
   const byEmail = new Map<string, BadGroup>()
   for (const r of quotes) {
