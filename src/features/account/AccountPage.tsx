@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { Button, StatTile } from '../../components'
 import { money } from '../../lib/format'
 import { fetchAccountQuotes, fetchClient, formatClientAddress, yearOfOpp, type AccountRow } from '../../lib/accounts'
@@ -19,6 +19,13 @@ function stageTone(stage: string | null): string {
 export function AccountPage() {
   const { name: rawName } = useParams<{ name: string }>()
   const name = decodeURIComponent(rawName || '')
+  // Customer View — a screen-safe mode (?view=customer) that hides internal
+  // metrics (lifetime totals, win rate) so you can turn the screen to a customer.
+  // Driven by the URL so the header lookup can deep-link straight into it.
+  const [sp, setSp] = useSearchParams()
+  const customerView = sp.get('view') === 'customer'
+  const toggleCustomerView = () =>
+    setSp((prev) => { const n = new URLSearchParams(prev); customerView ? n.delete('view') : n.set('view', 'customer'); return n }, { replace: true })
   const [rows, setRows] = useState<AccountRow[] | null>(null)
   const [err, setErr] = useState('')
   const [address, setAddress] = useState('')
@@ -89,20 +96,38 @@ export function AccountPage() {
           <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>{name}</div>
           {address && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 3 }}>{address}</div>}
         </div>
-        <Button>+ New Quote</Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+          <button
+            onClick={toggleCustomerView}
+            title={customerView ? 'Internal metrics are hidden — click to show them' : 'Hide internal metrics (lifetime totals, win rate) so you can turn the screen to a customer'}
+            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '8px 14px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${customerView ? 'var(--pos)' : 'var(--border-strong)'}`, background: customerView ? 'var(--pos)' : '#fff', color: customerView ? '#fff' : 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 7 }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: customerView ? '#fff' : 'var(--border-strong)' }} />
+            Customer View{customerView ? ' · on' : ''}
+          </button>
+          <Button>+ New Quote</Button>
+        </div>
       </div>
+
+      {customerView && (
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--pos)', background: 'var(--pos-soft)', border: '1px solid var(--pos-border)', borderRadius: 'var(--radius-sm)', padding: '8px 13px', marginBottom: 'var(--sp-4)' }}>
+          Customer View is on — lifetime totals and win rate are hidden. Individual quotes and prices stay visible.
+        </div>
+      )}
 
       {err && <div style={{ color: 'var(--accent)' }}>Couldn’t load account: {err}</div>}
       {!err && rows == null && <div style={{ color: 'var(--muted)' }}>Loading…</div>}
 
       {!err && rows != null && (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-5)' }}>
-            <StatTile label="Quotes (lifetime)" value={lifetime.count} />
-            <StatTile label="Total quoted" value={money(lifetime.total)} />
-            <StatTile label="Closed Won" value={lifetime.wonCount} tone="pos" />
-            <StatTile label="Win rate" value={`${lifetime.winRate}%`} tone="pos" />
-          </div>
+          {!customerView && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-5)' }}>
+              <StatTile label="Quotes (lifetime)" value={lifetime.count} />
+              <StatTile label="Total quoted" value={money(lifetime.total)} />
+              <StatTile label="Closed Won" value={lifetime.wonCount} tone="pos" />
+              <StatTile label="Win rate" value={`${lifetime.winRate}%`} tone="pos" />
+            </div>
+          )}
 
           {years.length === 0 && <div style={{ color: 'var(--muted)' }}>No quotes for this account.</div>}
           {years.length > 0 && (
@@ -113,7 +138,7 @@ export function AccountPage() {
                 <div style={hCol}>Total value</div>
                 <div style={hCol}>Closed won</div>
                 <div style={hCol}>Won value</div>
-                <div style={{ ...hCol, textAlign: 'right' }}>Win %</div>
+                <div style={{ ...hCol, textAlign: 'right' }}>{customerView ? '' : 'Win %'}</div>
               </div>
               {years.map((y) => {
                 const isOpen = openYears.has(y.year)
@@ -129,7 +154,7 @@ export function AccountPage() {
                       <div style={{ fontWeight: 600, color: 'var(--pos)' }}>{y.wonCount}</div>
                       <div style={{ fontWeight: 600, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{money(y.wonTotal)}</div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, fontWeight: 700, color: y.winPct >= 50 ? 'var(--pos)' : 'var(--muted)' }}>
-                        {y.winPct}%
+                        {!customerView && `${y.winPct}%`}
                         <span style={{ width: 7, height: 7, borderRight: '2px solid var(--dim)', borderBottom: '2px solid var(--dim)', transform: isOpen ? 'rotate(45deg)' : 'rotate(-45deg)' }} />
                       </div>
                     </div>
