@@ -43,8 +43,6 @@ function stageTone(stage: string | null): string {
   return 'var(--info)'
 }
 
-const GRID = '64px 1fr 1.1fr 0.9fr 1.1fr 68px'
-
 // One quote line — shows the unit (test item) and, where useful, the contact, so a
 // row is legible at a glance. Prices always show (Customer View keeps them).
 function QuoteLine({ r, showContact }: { r: AccountRow; showContact: boolean }) {
@@ -73,7 +71,7 @@ export function AccountPage() {
   const [rows, setRows] = useState<AccountRow[] | null>(null)
   const [err, setErr] = useState('')
   const [address, setAddress] = useState('')
-  const [openYears, setOpenYears] = useState<Set<string>>(new Set())
+  const [selectedYear, setSelectedYear] = useState('')
   const [openContacts, setOpenContacts] = useState<Set<string>>(new Set())
   const [openTests, setOpenTests] = useState<Set<string>>(new Set())
   // Section-level collapse. Default: only Active quotes open, so the page opens
@@ -83,7 +81,7 @@ export function AccountPage() {
 
   useEffect(() => {
     let alive = true
-    setRows(null); setAddress(''); setOpenYears(new Set()); setOpenContacts(new Set()); setOpenTests(new Set()); setOpenSections(new Set(['active']))
+    setRows(null); setAddress(''); setSelectedYear(''); setOpenContacts(new Set()); setOpenTests(new Set()); setOpenSections(new Set(['active']))
     fetchAccountQuotes(name).then((r) => alive && setRows(r)).catch((e) => alive && setErr(String(e?.message || e)))
     fetchClient(name).then((c) => alive && setAddress(formatClientAddress(c))).catch(() => {})
     return () => { alive = false }
@@ -91,7 +89,6 @@ export function AccountPage() {
 
   const toggleIn = (set: React.Dispatch<React.SetStateAction<Set<string>>>) => (k: string) =>
     set((prev) => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })
-  const toggleYear = toggleIn(setOpenYears)
   const toggleContact = toggleIn(setOpenContacts)
   const toggleTest = toggleIn(setOpenTests)
   const toggleSection = toggleIn(setOpenSections)
@@ -194,8 +191,7 @@ export function AccountPage() {
     return () => { alive = false }
   }, [accountClientId])
 
-  const hCol: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }
-  const chev = (open: boolean, sz = 8): React.CSSProperties => ({ width: sz, height: sz, borderRight: '2px solid var(--dim)', borderBottom: '2px solid var(--dim)', transform: open ? 'rotate(45deg)' : 'rotate(-45deg)', flexShrink: 0 })
+  const chev =(open: boolean, sz = 8): React.CSSProperties => ({ width: sz, height: sz, borderRight: '2px solid var(--dim)', borderBottom: '2px solid var(--dim)', transform: open ? 'rotate(45deg)' : 'rotate(-45deg)', flexShrink: 0 })
 
   // Collapsible section header.
   const SectionHead = ({ id, title, sub }: { id: string; title: string; sub?: string }) => {
@@ -272,41 +268,35 @@ export function AccountPage() {
           )}
 
           {years.length === 0 && <div style={{ color: 'var(--muted)' }}>No quotes for this account.</div>}
-          {years.length > 0 && (
-            <>
-              <div style={{ display: 'grid', gridTemplateColumns: GRID, gap: 8, padding: '0 14px 8px' }}>
-                <div style={hCol}>Year</div>
-                <div style={hCol}>Quotes</div>
-                <div style={hCol}>Total value</div>
-                <div style={hCol}>Closed won</div>
-                <div style={hCol}>Won value</div>
-                <div style={{ ...hCol, textAlign: 'right' }}>{customerView ? '' : 'Win %'}</div>
-              </div>
-              {years.map((y) => {
-                const isOpen = openYears.has(y.year)
-                return (
-                  <div key={y.year} style={{ marginBottom: 6 }}>
-                    <div onClick={() => toggleYear(y.year)} style={{ display: 'grid', gridTemplateColumns: GRID, gap: 8, alignItems: 'center', padding: '12px 14px', borderRadius: 'var(--radius-sm)', cursor: 'pointer', background: isOpen ? 'var(--accent-soft)' : 'var(--card)', border: '1px solid ' + (isOpen ? 'var(--accent)' : 'var(--border)') }}>
-                      <div style={{ fontWeight: 800, fontSize: 'var(--fs-md)', color: y.year === 'Unknown' ? 'var(--dim)' : 'var(--text)' }}>{y.year}</div>
-                      <div style={{ fontWeight: 600 }}>{y.rows.length}</div>
-                      <div style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{money(y.total)}</div>
-                      <div style={{ fontWeight: 600, color: 'var(--pos)' }}>{y.wonCount}</div>
-                      <div style={{ fontWeight: 600, color: 'var(--pos)', fontVariantNumeric: 'tabular-nums' }}>{money(y.wonTotal)}</div>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, fontWeight: 700, color: y.winPct >= 50 ? 'var(--pos)' : 'var(--muted)' }}>
-                        {!customerView && `${y.winPct}%`}
-                        <span style={chev(isOpen, 7)} />
-                      </div>
-                    </div>
-                    {isOpen && (
-                      <div style={{ margin: '4px 0 0 14px', borderLeft: '2px solid var(--accent)', paddingLeft: 12 }}>
-                        {y.rows.map((r) => <QuoteLine key={r.id} r={r} showContact />)}
-                      </div>
-                    )}
+          {years.length > 0 && (() => {
+            const activeYear = years.find((y) => y.year === selectedYear) || years[0]
+            return (
+              <div>
+                <div style={{ fontSize: 'var(--fs-md)', fontWeight: 800, letterSpacing: '-.01em', marginBottom: 'var(--sp-3)' }}>Quote history</div>
+                {/* Year picker — one year's quotes at a time, instead of every year listed. */}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
+                  {years.map((y) => {
+                    const on = activeYear.year === y.year
+                    return (
+                      <button key={y.year} onClick={() => setSelectedYear(y.year)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 13px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border-strong)'), background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' }}>
+                        {y.year} <span style={{ fontWeight: 500, opacity: 0.75 }}>({y.rows.length})</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                  <div style={{ background: 'var(--accent-soft)', padding: '10px 14px', display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'baseline', fontSize: 'var(--fs-sm)' }}>
+                    <span style={{ fontWeight: 800, fontSize: 'var(--fs-md)', color: activeYear.year === 'Unknown' ? 'var(--dim)' : 'var(--text)' }}>{activeYear.year}</span>
+                    <span style={{ color: 'var(--muted)' }}>{activeYear.rows.length} quote{activeYear.rows.length !== 1 ? 's' : ''}</span>
+                    {!customerView && <span style={{ color: 'var(--muted)' }}>Total <b style={{ color: 'var(--text)' }}>{money(activeYear.total)}</b></span>}
+                    <span style={{ color: 'var(--pos)', fontWeight: 700 }}>{activeYear.wonCount} won{!customerView ? ` · ${money(activeYear.wonTotal)}` : ''}</span>
+                    {!customerView && <span style={{ color: activeYear.winPct >= 50 ? 'var(--pos)' : 'var(--muted)', fontWeight: 700 }}>Win {activeYear.winPct}%</span>}
                   </div>
-                )
-              })}
-            </>
-          )}
+                  {activeYear.rows.map((r) => <QuoteLine key={r.id} r={r} showContact />)}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Testing history — collapsible; each type drills into its quotes. */}
           {testing.length > 0 && (
