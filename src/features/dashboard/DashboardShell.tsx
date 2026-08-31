@@ -6,6 +6,7 @@ import { useCanViewManager } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
 import { CustomerLookup } from '../account/CustomerLookup'
+import { Campaigns } from './Campaigns'
 
 // Shared dashboard frame: the streamlined top bar (title, Live pill, the
 // Manager / My Work / In Progress view switch, New Quote) wrapping whichever
@@ -37,6 +38,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [lookupOpen, setLookupOpen] = useState(false)
+  const [campaignsOpen, setCampaignsOpen] = useState(false)
   const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/mass-emails') ? 'massemails' : 'manager'
   const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'massemails' ? 'Compose and send email to clients' : monthLabel
 
@@ -60,6 +62,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
             <button onClick={() => setLookupOpen(true)} style={{ ...seg(false, false), fontFamily: 'inherit' }}>Customer Lookup</button>
             {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}
+            <button onClick={() => setCampaignsOpen(true)} style={{ ...seg(false, false), fontFamily: 'inherit' }}>Campaigns</button>
             {canView && <Link to="/mass-emails" style={seg(view === 'massemails', false)}>Mass Emails</Link>}
           </div>
         </div>
@@ -86,6 +89,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         {children}
       </div>
       {lookupOpen && <CustomerLookup onClose={() => setLookupOpen(false)} />}
+      {campaignsOpen && <Campaigns onClose={() => setCampaignsOpen(false)} />}
     </div>
   )
 }

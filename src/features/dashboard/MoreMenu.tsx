@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { MonthlySnapshot } from './MonthlySnapshot'
-import { Campaigns } from './Campaigns'
 import { RecentlyApproved } from './RecentlyApproved'
 import { ProductCatalog } from './ProductCatalog'
 import { Templates } from './Templates'
 
-// Overflow menu for the occasional dashboard tools: Monthly snapshot, Campaigns,
-// Product catalog, and the Privacy-mode toggle. Keeps the top bar uncluttered.
+// Overflow menu for the occasional dashboard tools: Monthly snapshot, Recently
+// approved, Product catalog, Email templates, and the Privacy-mode toggle. Keeps
+// the top bar uncluttered. (Campaigns is a top-list tab, not in here.)
 export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTogglePrivacy: () => void }) {
   const [open, setOpen] = useState(false)
-  const [modal, setModal] = useState<null | 'snapshot' | 'campaigns' | 'recent' | 'catalog' | 'templates'>(null)
+  const [modal, setModal] = useState<null | 'snapshot' | 'recent' | 'catalog' | 'templates'>(null)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -55,9 +55,6 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('recent'); setOpen(false) }}>
             Recently approved
           </button>
-          <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('campaigns'); setOpen(false) }}>
-            Campaigns
-          </button>
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('catalog'); setOpen(false) }}>
             Product catalog
           </button>
@@ -72,7 +69,6 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
       )}
       {modal === 'snapshot' && <MonthlySnapshot onClose={() => setModal(null)} />}
       {modal === 'recent' && <RecentlyApproved onClose={() => setModal(null)} />}
-      {modal === 'campaigns' && <Campaigns onClose={() => setModal(null)} />}
       {modal === 'catalog' && <ProductCatalog onClose={() => setModal(null)} />}
       {modal === 'templates' && <Templates onClose={() => setModal(null)} />}
     </div>
