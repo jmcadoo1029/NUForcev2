@@ -23,13 +23,36 @@ const dedupe = (rows: Recipient[]): Recipient[] => {
   return out
 }
 
-/** Every contact in the shared directory with a usable email. */
-export async function fetchAllContacts(): Promise<Recipient[]> {
-  const rows = await restFetch<Array<{ first_name: string | null; last_name: string | null; email: string | null }>>(
-    'GET',
-    `contacts?select=first_name,last_name,email&email=not.is.null&order=last_name&limit=5000`,
+// PostgREST caps a response at 1000 rows, so any query that can exceed that (e.g.
+// "all contacts" — there are 1600+) must page with offset or it silently
+// truncates. `basePath` must already include a stable `order=…`; we append
+// limit/offset and stop when a short page comes back.
+async function fetchAllPages<T>(basePath: string, pageSize = 1000): Promise<T[]> {
+  const out: T[] = []
+  const sep = basePath.includes('?') ? '&' : '?'
+  for (let off = 0; off <= 200000; off += pageSize) {
+    const page = (await restFetch<T[]>('GET', `${basePath}${sep}limit=${pageSize}&offset=${off}`)) || []
+    out.push(...page)
+    if (page.length < pageSize) break
+  }
+  return out
+}
+
+export interface ContactLoad {
+  recipients: Recipient[] // distinct, valid-email recipients (what actually gets sent)
+  scanned: number // contact rows fetched (with a non-null email) — before dedupe
+}
+
+/** Every contact in the shared directory with a usable email (all pages). Returns
+ *  the deduped recipient list AND the raw count of contact rows scanned, so the UI
+ *  can show why the recipient count is lower than the raw contact count (duplicate
+ *  or malformed addresses are collapsed — you can only email an address once). */
+export async function fetchAllContacts(): Promise<ContactLoad> {
+  const rows = await fetchAllPages<{ first_name: string | null; last_name: string | null; email: string | null }>(
+    `contacts?select=first_name,last_name,email&email=not.is.null&order=last_name,id`,
   )
-  return dedupe((rows || []).map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
+  const recipients = dedupe(rows.map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
+  return { recipients, scanned: rows.length }
 }
 
 /**
@@ -45,9 +68,9 @@ export async function fetchContactsByProductCode(code: string, range?: { from?: 
   let path = `quotes?select=em:data->qi->>email,nm:data->qi->>contact&line_items=cs.${filter}`
   if (range?.from) path += `&created_at=gte.${encodeURIComponent(range.from)}`
   if (range?.to) path += `&created_at=lte.${encodeURIComponent(range.to)}`
-  path += `&limit=5000`
-  const rows = await restFetch<Array<{ em: string | null; nm: string | null }>>('GET', path)
-  return dedupe((rows || []).map((r) => ({ email: r.em || '', name: r.nm || '' })))
+  path += `&order=id`
+  const rows = await fetchAllPages<{ em: string | null; nm: string | null }>(path)
+  return dedupe(rows.map((r) => ({ email: r.em || '', name: r.nm || '' })))
 }
 
 // ── Campaigns ─────────────────────────────────────────────────────────────────
@@ -62,22 +85,20 @@ export async function fetchCampaignOptions(): Promise<CampaignOption[]> {
 /** Every contact belonging to an account (client), as recipients (deduped). */
 export async function fetchContactsByAccount(clientId: string): Promise<Recipient[]> {
   if (!clientId) return []
-  const rows = await restFetch<Array<{ first_name: string | null; last_name: string | null; email: string | null }>>(
-    'GET',
-    `contacts?select=first_name,last_name,email&client_id=eq.${encodeURIComponent(clientId)}&order=last_name&limit=5000`,
+  const rows = await fetchAllPages<{ first_name: string | null; last_name: string | null; email: string | null }>(
+    `contacts?select=first_name,last_name,email&client_id=eq.${encodeURIComponent(clientId)}&order=last_name,id`,
   )
-  return dedupe((rows || []).map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
+  return dedupe(rows.map((r) => ({ email: r.email || '', name: [r.first_name, r.last_name].filter(Boolean).join(' ') })))
 }
 
 /** The contacts belonging to a campaign, as email recipients (deduped). */
 export async function fetchContactsByCampaign(campaignId: string): Promise<Recipient[]> {
   if (!campaignId) return []
-  const rows = await restFetch<Array<{ contacts: { first_name: string | null; last_name: string | null; email: string | null } | null }>>(
-    'GET',
-    `campaign_contacts?select=contacts(first_name,last_name,email)&campaign_id=eq.${encodeURIComponent(campaignId)}&limit=5000`,
+  const rows = await fetchAllPages<{ contacts: { first_name: string | null; last_name: string | null; email: string | null } | null }>(
+    `campaign_contacts?select=contacts(first_name,last_name,email)&campaign_id=eq.${encodeURIComponent(campaignId)}&order=id`,
   )
   return dedupe(
-    (rows || [])
+    rows
       .map((r) => r.contacts)
       .filter((c): c is { first_name: string | null; last_name: string | null; email: string | null } => !!c)
       .map((c) => ({ email: c.email || '', name: [c.first_name, c.last_name].filter(Boolean).join(' ') })),
@@ -122,11 +143,12 @@ export async function fetchMassEmails(): Promise<MassEmailRow[]> {
   return (await restFetch<MassEmailRow[]>('GET', `mass_emails?select=id,subject,audience,sent_by,sent_at,recipient_count,sent_count,failed_count&order=sent_at.desc&limit=100`)) || []
 }
 
-/** Delivery metrics for one blast, tallied from its recipient rows. */
+/** Delivery metrics for one blast, tallied from its recipient rows (all pages —
+ *  a large blast has more than the 1000-row response cap). */
 export async function fetchMassEmailMetrics(massId: string): Promise<MassEmailMetrics> {
-  const rows = await restFetch<Array<{ status: string | null }>>('GET', `mass_email_recipients?select=status&mass_email_id=eq.${encodeURIComponent(massId)}&limit=10000`)
+  const rows = await fetchAllPages<{ status: string | null }>(`mass_email_recipients?select=status&mass_email_id=eq.${encodeURIComponent(massId)}&order=id`)
   const m: MassEmailMetrics = { delivered: 0, bounced: 0, complained: 0, opened: 0, sent: 0, failed: 0, total: 0 }
-  for (const r of rows || []) {
+  for (const r of rows) {
     m.total++
     const s = r.status || ''
     if (s === 'delivered') m.delivered++

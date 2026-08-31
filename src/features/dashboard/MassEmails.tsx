@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardLabel, Modal, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
@@ -13,6 +13,7 @@ import {
   sendMassEmail, fetchMassEmails, fetchMassEmailMetrics,
   type Recipient, type EmailTemplate, type MassEmailRow, type MassEmailMetrics, type CampaignOption,
 } from '../../lib/massEmail'
+import { fetchTemplate, DEFAULT_TEMPLATES, type MassTemplateKey } from '../../lib/emailTemplates'
 
 // Mass Emails — compose + send a personalized blast to an audience: all contacts,
 // everyone quoted a given product code (optionally within a date window), or the
@@ -21,69 +22,21 @@ import {
 // individual send, so nobody sees another client's address, and bounces here
 // don't touch Bad Contacts.
 
-const DEFAULT_SUBJECT = 'NU Laboratories — Our Testing Capabilities'
-const DEFAULT_BODY = `Hello, {first name}!
-
-This is [Your Name], Sales Manager, from NU Laboratories wanting to thank you for all of the fantastic opportunities! It has been an absolute pleasure working with you, and I hope that we can continue to meet your testing needs for many years to come!
-
-I want to take this time to remind you of all of the great services that NU Laboratories has to offer, including (but not limited to) medium weight and lightweight shock, acoustic noise, including high intensity noise susceptibility with OASPL's reaching upwards of 170 dB, as well as noise emissions testing, Type I and II vibration, EMI, Power Quality, temperature/humidity, salt/fog, etc. Please take a few minutes to visit our website at www.nulabs.com to see the wide range of our capabilities.
-
-Please contact me via phone or email to discuss any upcoming projects, it would be our pleasure to assist in your testing needs this year!
-
-Looking forward to hearing from you soon!`
-
-// Starter template for the "Quoted product code" audience — a warm re-engagement
-// of past customers. Fully editable; save your edits as a template to reuse.
-const CODE_SUBJECT = 'NU Laboratories — Let’s line up your next test'
-const CODE_BODY = `Hello, {first name}!
-
-This is [Your Name] at NU Laboratories. Our records show we’ve had the pleasure of quoting testing for you in the past, and I wanted to reach out to make sure we stay on your radar for any upcoming projects.
-
-NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly.
-
-If you have a project you’d like quoted, just reply to this email or give me a call — it would be our pleasure to support your testing needs again.
-
-Looking forward to hearing from you!`
-
-// Starter template for the "Campaign" audience — a follow-up to people met at a
-// show/event. Fully editable; save your edits as a template to reuse per event.
-const CAMPAIGN_SUBJECT = 'Great meeting you — NU Laboratories'
-const CAMPAIGN_BODY = `Hi {first name},
-
-It was a pleasure meeting you! This is [Your Name] from NU Laboratories, following up from our conversation.
-
-As a quick reminder of what we do: NU Laboratories is a full-service test lab specializing in shock, vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, and a wide range of environmental testing (temperature/humidity, salt fog, altitude, and more). You can see our full capabilities at www.nulabs.com.
-
-We’d love the opportunity to be a testing partner for your team. If you have any projects in the pipeline — now or down the road — I’d welcome the chance to put together a quote and show you what we can do.
-
-Please feel free to reply here or reach out anytime. Looking forward to staying in touch!`
-
-// Starter template for the "Account" audience — a check-in with everyone at a
-// specific client/account. Fully editable; save your edits as a template.
-const ACCOUNT_SUBJECT = 'NU Laboratories — Here for your team’s testing needs'
-const ACCOUNT_BODY = `Hello, {first name}!
-
-This is [Your Name] at NU Laboratories. I’m reaching out to your team to make sure we’re a resource whenever a testing need comes up.
-
-NU Laboratories provides a full range of testing under one roof — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. If any project on your side calls for testing, we’d be glad to put together a quote and turn it around quickly.
-
-Please feel free to reach out to me directly with anything you have coming up — it would be our pleasure to support your team.
-
-Looking forward to working with you!`
-
 type AudienceMode = 'all' | 'code' | 'campaign' | 'account'
 
-// Per-audience starter content, and the set of pristine defaults. Switching
-// audiences swaps in that audience's starter ONLY when the body is still one of
-// these untouched defaults (or empty) — a customized or saved-template body is
-// never clobbered.
-const AUDIENCE_DEFAULTS: Record<AudienceMode, { subject: string; body: string }> = {
-  all: { subject: DEFAULT_SUBJECT, body: DEFAULT_BODY },
-  code: { subject: CODE_SUBJECT, body: CODE_BODY },
-  campaign: { subject: CAMPAIGN_SUBJECT, body: CAMPAIGN_BODY },
-  account: { subject: ACCOUNT_SUBJECT, body: ACCOUNT_BODY },
+// Each audience's starter email lives in the Email Templates manager (keys
+// mass_*), so the wording is edited in one place and this composer seeds from it.
+// DEFAULT_TEMPLATES holds the in-code fallback; fetchTemplate returns any saved
+// override. Switching audiences swaps in that audience's starter ONLY when the
+// body is still one of the current defaults (or empty) — a customized or loaded
+// template body is never clobbered.
+const MASS_KEY: Record<AudienceMode, MassTemplateKey> = {
+  all: 'mass_all',
+  code: 'mass_code',
+  campaign: 'mass_campaign',
+  account: 'mass_account',
 }
-const DEFAULT_BODIES = new Set([DEFAULT_BODY, CODE_BODY, CAMPAIGN_BODY, ACCOUNT_BODY])
+const seedTpl = (m: AudienceMode) => ({ subject: DEFAULT_TEMPLATES[MASS_KEY[m]].subject, body: DEFAULT_TEMPLATES[MASS_KEY[m]].body })
 
 // Distinct product codes for the audience dropdown (same catalog quotes use).
 // Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
@@ -103,12 +56,21 @@ const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', 
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+// Review-list A→Z index. Recipients are grouped/sorted by LAST name; anything
+// without an alphabetic last name lands in the "#" bucket at the end.
+const AZ = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '#']
+const lastNameOf = (name: string) => { const t = (name || '').trim().split(/\s+/).filter(Boolean); return t.length ? t[t.length - 1] : '' }
+const bucketOf = (name: string) => { const c = (lastNameOf(name)[0] || '').toUpperCase(); return c >= 'A' && c <= 'Z' ? c : '#' }
+
 export function MassEmails() {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
 
-  const [subject, setSubject] = useState(DEFAULT_SUBJECT)
-  const [body, setBody] = useState(DEFAULT_BODY)
+  const [subject, setSubject] = useState(DEFAULT_TEMPLATES.mass_all.subject)
+  const [body, setBody] = useState(DEFAULT_TEMPLATES.mass_all.body)
+  // Live per-audience starters (from the Email Templates manager). Seeded from the
+  // in-code defaults, then refreshed with any saved overrides on mount.
+  const [audienceTpl, setAudienceTpl] = useState<Record<AudienceMode, { subject: string; body: string }>>({ all: seedTpl('all'), code: seedTpl('code'), campaign: seedTpl('campaign'), account: seedTpl('account') })
 
   const [mode, setMode] = useState<AudienceMode>('all')
   const [code, setCode] = useState('')
@@ -120,6 +82,7 @@ export function MassEmails() {
   const [accountId, setAccountId] = useState('')
   const [accountText, setAccountText] = useState('')
   const [recipients, setRecipients] = useState<Recipient[]>([])
+  const [scanned, setScanned] = useState<number | null>(null) // 'all' audience: raw contacts scanned before dedupe
   const [loadingRecips, setLoadingRecips] = useState(false)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [reviewOpen, setReviewOpen] = useState(false)
@@ -139,6 +102,26 @@ export function MassEmails() {
   const loadCampaigns = () => fetchCampaignOptions().then(setCampaigns).catch(() => {})
 
   useEffect(() => { loadTemplates(); loadHistory(); loadCampaigns() }, [])
+
+  // Load the saved per-audience starters (Email Templates → Mass: …). If the
+  // composer is still showing the pristine "All contacts" starter (untouched),
+  // refresh it to the saved version so edits made in the manager show up here.
+  useEffect(() => {
+    let alive = true
+    Promise.all((['all', 'code', 'campaign', 'account'] as AudienceMode[]).map((m) => fetchTemplate(MASS_KEY[m])))
+      .then(([a, c, cp, ac]) => {
+        if (!alive) return
+        setAudienceTpl({ all: { subject: a.subject, body: a.body }, code: { subject: c.subject, body: c.body }, campaign: { subject: cp.subject, body: cp.body }, account: { subject: ac.subject, body: ac.body } })
+        setBody((b) => (b === DEFAULT_TEMPLATES.mass_all.body ? a.body : b))
+        setSubject((s) => (s === DEFAULT_TEMPLATES.mass_all.subject ? a.subject : s))
+      })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  // The set of current audience-starter bodies — switching audiences only swaps
+  // the text when the body still matches one of these (i.e. hasn't been edited).
+  const defaultBodies = useMemo(() => new Set(Object.values(audienceTpl).map((t) => t.body)), [audienceTpl])
 
   // Resolve the product-code date window from the preset (or the custom inputs).
   // Compared against quotes.created_at; `to` is pushed to end-of-day so the whole
@@ -166,10 +149,10 @@ export function MassEmails() {
     setExcluded(new Set())
     try {
       let list: Recipient[] = []
-      if (mode === 'all') list = await fetchAllContacts()
-      else if (mode === 'code') list = await fetchContactsByProductCode(code, computeRange())
-      else if (mode === 'campaign') list = await fetchContactsByCampaign(campaignId)
-      else if (mode === 'account') list = await fetchContactsByAccount(accountId)
+      if (mode === 'all') { const load = await fetchAllContacts(); list = load.recipients; setScanned(load.scanned) }
+      else if (mode === 'code') { list = await fetchContactsByProductCode(code, computeRange()); setScanned(null) }
+      else if (mode === 'campaign') { list = await fetchContactsByCampaign(campaignId); setScanned(null) }
+      else if (mode === 'account') { list = await fetchContactsByAccount(accountId); setScanned(null) }
       setRecipients(list)
       if (mode === 'code' && list.length === 0) showToast(`No contacts found for product code ${code}${datePreset !== 'any' ? ' in that date range' : ''}.`, 'warn', 4000)
       if (mode === 'campaign' && campaignId && list.length === 0) showToast('That campaign has no contacts with an email address.', 'warn', 4000)
@@ -183,6 +166,22 @@ export function MassEmails() {
   useEffect(() => { if (mode === 'all') loadRecipients() }, []) // initial: all contacts
 
   const finalRecipients = useMemo(() => recipients.filter((r) => !excluded.has(r.email.toLowerCase())), [recipients, excluded])
+
+  // Review list grouped by last-name initial (A→Z, then "#"), each group sorted
+  // by last then full name — so the jump index lands where you'd expect.
+  const reviewGroups = useMemo(() => {
+    const withKey = recipients.map((r) => ({ r, ln: lastNameOf(r.name), bucket: bucketOf(r.name) }))
+    withKey.sort((a, b) => {
+      if (a.bucket !== b.bucket) return a.bucket === '#' ? 1 : b.bucket === '#' ? -1 : a.bucket < b.bucket ? -1 : 1
+      return a.ln.toLowerCase().localeCompare(b.ln.toLowerCase()) || (a.r.name || '').localeCompare(b.r.name || '')
+    })
+    const map = new Map<string, Recipient[]>()
+    for (const w of withKey) { const arr = map.get(w.bucket) || []; arr.push(w.r); map.set(w.bucket, arr) }
+    return map
+  }, [recipients])
+  const reviewScrollRef = useRef<HTMLDivElement>(null)
+  const letterRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const jumpToLetter = (L: string) => { const el = letterRefs.current[L]; const sc = reviewScrollRef.current; if (el && sc) sc.scrollTop = el.offsetTop }
   const audienceLabel =
     mode === 'all' ? 'All contacts'
       : mode === 'campaign' ? `Campaign: ${campaignName || '—'}`
@@ -194,13 +193,13 @@ export function MassEmails() {
   // template), reset the recipient selection, and load where it makes sense.
   const pickAudience = (next: AudienceMode) => {
     setMode(next)
-    if (DEFAULT_BODIES.has(body) || !body.trim()) {
-      setSubject(AUDIENCE_DEFAULTS[next].subject)
-      setBody(AUDIENCE_DEFAULTS[next].body)
+    if (defaultBodies.has(body) || !body.trim()) {
+      setSubject(audienceTpl[next].subject)
+      setBody(audienceTpl[next].body)
     }
     setExcluded(new Set())
-    if (next === 'all') { fetchAllContacts().then(setRecipients).catch(() => {}) }
-    else { setRecipients([]) }
+    if (next === 'all') { fetchAllContacts().then((l) => { setRecipients(l.recipients); setScanned(l.scanned) }).catch(() => {}) }
+    else { setRecipients([]); setScanned(null) }
     if (next === 'campaign') setCampaignId('')
     if (next === 'account') { setAccountId(''); setAccountText('') }
   }
@@ -340,30 +339,49 @@ export function MassEmails() {
                 <option value="">— Choose a campaign —</option>
                 {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              {campaigns.length === 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>No campaigns yet — create one from More ▾ → Campaigns.</span>}
+              {campaigns.length === 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>No campaigns yet — create one from the Campaigns tab.</span>}
             </div>
           )}
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)' }}>
             {loadingRecips ? 'Loading recipients…' : (
               <>
                 <b>{finalRecipients.length}</b> recipient{finalRecipients.length !== 1 ? 's' : ''}{excluded.size > 0 ? ` (${excluded.size} excluded)` : ''} · {audienceLabel}
+                {mode === 'all' && scanned != null && scanned > recipients.length && (
+                  <span style={{ color: 'var(--dim)' }}> · {recipients.length} unique {recipients.length !== 1 ? 'addresses' : 'address'} from {scanned} contacts on file ({scanned - recipients.length} duplicate/blank collapsed)</span>
+                )}
                 {recipients.length > 0 && <button onClick={() => setReviewOpen((v) => !v)} style={{ marginLeft: 10, fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>{reviewOpen ? 'Hide' : 'Review'} list</button>}
               </>
             )}
           </div>
 
           {reviewOpen && recipients.length > 0 && (
-            <div style={{ marginTop: 'var(--sp-2)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 260, overflowY: 'auto' }}>
-              {recipients.map((r) => {
-                const ex = excluded.has(r.email.toLowerCase())
-                return (
-                  <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: ex ? 0.45 : 1 }}>
-                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
-                    <button onClick={() => setExcluded((s) => { const n = new Set(s); const k = r.email.toLowerCase(); n.has(k) ? n.delete(k) : n.add(k); return n })} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: ex ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>{ex ? 'Include' : 'Exclude'}</button>
+            <div style={{ marginTop: 'var(--sp-2)' }}>
+              {/* A→Z jump index — click a letter to scroll to that last-name group. */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 6 }}>
+                {AZ.map((L) => {
+                  const has = reviewGroups.has(L)
+                  return (
+                    <button key={L} onClick={() => has && jumpToLetter(L)} disabled={!has} title={has ? `Jump to ${L}` : undefined} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, minWidth: 22, height: 22, padding: '0 4px', borderRadius: 4, border: '1px solid ' + (has ? 'var(--border-strong)' : 'var(--border)'), background: '#fff', color: has ? 'var(--accent)' : 'var(--dim)', cursor: has ? 'pointer' : 'default' }}>{L}</button>
+                  )
+                })}
+              </div>
+              <div ref={reviewScrollRef} style={{ position: 'relative', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 280, overflowY: 'auto' }}>
+                {AZ.filter((L) => reviewGroups.has(L)).map((L) => (
+                  <div key={L} ref={(el) => { letterRefs.current[L] = el }}>
+                    <div style={{ position: 'sticky', top: 0, background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '4px 10px', fontSize: 'var(--fs-caption)', fontWeight: 800, letterSpacing: '.05em', color: 'var(--muted)', zIndex: 1 }}>{L}</div>
+                    {reviewGroups.get(L)!.map((r) => {
+                      const ex = excluded.has(r.email.toLowerCase())
+                      return (
+                        <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: ex ? 0.45 : 1 }}>
+                          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}</span>
+                          <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
+                          <button onClick={() => setExcluded((s) => { const n = new Set(s); const k = r.email.toLowerCase(); n.has(k) ? n.delete(k) : n.add(k); return n })} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: ex ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>{ex ? 'Include' : 'Exclude'}</button>
+                        </div>
+                      )
+                    })}
                   </div>
-                )
-              })}
+                ))}
+              </div>
             </div>
           )}
         </div>
