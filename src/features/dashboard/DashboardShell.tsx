@@ -5,6 +5,7 @@ import { WORKSPACE_URL, CLASSIC_URL } from '../../lib/config'
 import { useCanViewManager } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
+import { CustomerLookup } from '../account/CustomerLookup'
 
 // Shared dashboard frame: the streamlined top bar (title, Live pill, the
 // Manager / My Work / In Progress view switch, New Quote) wrapping whichever
@@ -35,6 +36,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { canView } = useCanViewManager() // Manager tab: approvers + view-only roles (Accounting)
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  const [lookupOpen, setLookupOpen] = useState(false)
   const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/mass-emails') ? 'massemails' : 'manager'
   const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'massemails' ? 'Compose and send email to clients' : monthLabel
 
@@ -56,6 +58,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             {canView && <Link to="/dashboard" style={seg(view === 'manager', true)}>Manager</Link>}
             <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
+            <button onClick={() => setLookupOpen(true)} style={{ ...seg(false, false), fontFamily: 'inherit' }}>Customer Lookup</button>
             {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}
             {canView && <Link to="/mass-emails" style={seg(view === 'massemails', false)}>Mass Emails</Link>}
           </div>
@@ -82,6 +85,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <div key={refreshKey} style={{ filter: privacy ? 'blur(8px)' : 'none', pointerEvents: privacy ? 'none' : 'auto', userSelect: privacy ? 'none' : 'auto', transition: 'filter .2s' }}>
         {children}
       </div>
+      {lookupOpen && <CustomerLookup onClose={() => setLookupOpen(false)} />}
     </div>
   )
 }
