@@ -108,13 +108,15 @@ export function Templates({ onClose }: { onClose: () => void }) {
   }
 
   const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: isManager ? '#fff' : 'var(--bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
-  const tab = (on: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '7px 16px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${on ? 'var(--accent)' : 'var(--border-strong)'}`, background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' })
 
   return (
     <Modal title="Email Templates" onClose={onClose} width={760}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}>
-        <div style={{ display: 'flex', gap: 'var(--sp-2)' }}>
-          {KEYS.map((k) => <button key={k.key} style={tab(active === k.key)} onClick={() => setActive(k.key)}>{k.label}</button>)}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
+          <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Template</label>
+          <select value={active} onChange={(e) => setActive(e.target.value as TemplateKey)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: 'pointer', minWidth: 200 }}>
+            {KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
+          </select>
         </div>
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
           {isManager ? (

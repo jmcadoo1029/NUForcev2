@@ -90,6 +90,7 @@ export function MassEmails() {
   const [loadingRecips, setLoadingRecips] = useState(false)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [excludeInternal, setExcludeInternal] = useState(true) // drop @nulabs.com (our team) by default
+  const [internalIncluded, setInternalIncluded] = useState<Set<string>>(new Set()) // team members re-included one-off
   const [showInternal, setShowInternal] = useState(false) // expand the list of excluded team members
   const [reviewOpen, setReviewOpen] = useState(false)
 
@@ -152,7 +153,7 @@ export function MassEmails() {
   // Load recipients for the current audience.
   const loadRecipients = async () => {
     setLoadingRecips(true)
-    setExcluded(new Set())
+    setExcluded(new Set()); setInternalIncluded(new Set())
     try {
       let list: Recipient[] = []
       if (mode === 'all') { const load = await fetchAllContacts(); list = load.recipients; setScanned(load.scanned) }
@@ -172,9 +173,16 @@ export function MassEmails() {
   useEffect(() => { if (mode === 'all') loadRecipients() }, []) // initial: all contacts
 
   const finalRecipients = useMemo(
-    () => recipients.filter((r) => !excluded.has(r.email.toLowerCase()) && !(excludeInternal && isInternal(r.email))),
-    [recipients, excluded, excludeInternal],
+    () => recipients.filter((r) => {
+      const k = r.email.toLowerCase()
+      if (excluded.has(k)) return false
+      // Team addresses are held back UNLESS re-included one-off.
+      if (excludeInternal && isInternal(r.email) && !internalIncluded.has(k)) return false
+      return true
+    }),
+    [recipients, excluded, excludeInternal, internalIncluded],
   )
+  const toggleInternal = (email: string) => setInternalIncluded((s) => { const n = new Set(s); const k = email.toLowerCase(); n.has(k) ? n.delete(k) : n.add(k); return n })
   // The internal (@nulabs.com) recipients in the loaded set — shown when the team
   // toggle is on so you can see exactly who's being held back. Sorted by last name.
   const internalRecipients = useMemo(
@@ -213,7 +221,7 @@ export function MassEmails() {
       setSubject(audienceTpl[next].subject)
       setBody(audienceTpl[next].body)
     }
-    setExcluded(new Set())
+    setExcluded(new Set()); setInternalIncluded(new Set())
     if (next === 'all') { fetchAllContacts().then((l) => { setRecipients(l.recipients); setScanned(l.scanned) }).catch(() => {}) }
     else { setRecipients([]); setScanned(null) }
     if (next === 'campaign') setCampaignId('')
@@ -342,7 +350,7 @@ export function MassEmails() {
                 itemKey={(c) => c.id}
                 itemPrimary={(c) => c.name || '(unnamed account)'}
                 itemSecondary={(c) => [c.city, c.state].filter(Boolean).join(', ')}
-                onPick={(c) => { setAccountId(c.id); setAccountText(c.name || ''); setExcluded(new Set()); fetchContactsByAccount(c.id).then(setRecipients).catch((err) => showToast('Couldn’t load account: ' + errMsg(err), 'error', 6000)) }}
+                onPick={(c) => { setAccountId(c.id); setAccountText(c.name || ''); setExcluded(new Set()); setInternalIncluded(new Set()); fetchContactsByAccount(c.id).then(setRecipients).catch((err) => showToast('Couldn’t load account: ' + errMsg(err), 'error', 6000)) }}
                 placeholder="Search accounts…"
                 minChars={2}
               />
@@ -351,7 +359,7 @@ export function MassEmails() {
 
           {mode === 'campaign' && (
             <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-              <select value={campaignId} onChange={(e) => { const id = e.target.value; setCampaignId(id); setExcluded(new Set()); if (id) fetchContactsByCampaign(id).then(setRecipients).catch((err) => showToast('Couldn’t load campaign: ' + errMsg(err), 'error', 6000)); else setRecipients([]) }} style={{ ...inputStyle, width: 'auto', minWidth: 240 }}>
+              <select value={campaignId} onChange={(e) => { const id = e.target.value; setCampaignId(id); setExcluded(new Set()); setInternalIncluded(new Set()); if (id) fetchContactsByCampaign(id).then(setRecipients).catch((err) => showToast('Couldn’t load campaign: ' + errMsg(err), 'error', 6000)); else setRecipients([]) }} style={{ ...inputStyle, width: 'auto', minWidth: 240 }}>
                 <option value="">— Choose a campaign —</option>
                 {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
@@ -371,13 +379,20 @@ export function MassEmails() {
             )}
             {showInternal && internalCount > 0 && (
               <div style={{ marginTop: 6, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 180, overflowY: 'auto', background: 'var(--bg)' }}>
-                {internalRecipients.map((r) => (
-                  <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '5px 10px', borderBottom: '1px solid var(--border)', opacity: excludeInternal ? 0.6 : 1 }}>
-                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: 'var(--fs-sm)' }}>{r.name || '(no name)'}</span>
-                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-caption)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
-                    <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: excludeInternal ? 'var(--dim)' : 'var(--pos)', whiteSpace: 'nowrap' }}>{excludeInternal ? 'Excluded' : 'Included'}</span>
-                  </div>
-                ))}
+                {internalRecipients.map((r) => {
+                  const included = !excludeInternal || internalIncluded.has(r.email.toLowerCase())
+                  return (
+                    <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '5px 10px', borderBottom: '1px solid var(--border)', opacity: included ? 1 : 0.6 }}>
+                      <span style={{ fontWeight: 600, whiteSpace: 'nowrap', fontSize: 'var(--fs-sm)' }}>{r.name || '(no name)'}</span>
+                      <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-caption)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
+                      {excludeInternal ? (
+                        <button onClick={() => toggleInternal(r.email)} title={included ? 'Click to exclude again' : 'Click to include this teammate in the send'} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: included ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>{included ? 'Included' : 'Excluded'}</button>
+                      ) : (
+                        <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', whiteSpace: 'nowrap' }}>Included</span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -410,16 +425,18 @@ export function MassEmails() {
                   <div key={L} ref={(el) => { letterRefs.current[L] = el }}>
                     <div style={{ position: 'sticky', top: 0, background: 'var(--bg)', borderBottom: '1px solid var(--border)', padding: '4px 10px', fontSize: 'var(--fs-caption)', fontWeight: 800, letterSpacing: '.05em', color: 'var(--muted)', zIndex: 1 }}>{L}</div>
                     {reviewGroups.get(L)!.map((r) => {
-                      const internal = excludeInternal && isInternal(r.email)
-                      const ex = excluded.has(r.email.toLowerCase()) || internal
+                      const k = r.email.toLowerCase()
+                      const isTeam = isInternal(r.email)
+                      const teamHeld = excludeInternal && isTeam && !internalIncluded.has(k)
+                      const ex = excluded.has(k) || teamHeld
                       return (
                         <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '6px 10px', borderBottom: '1px solid var(--border)', opacity: ex ? 0.45 : 1 }}>
-                          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}</span>
+                          <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}{isTeam && <span style={{ fontWeight: 500, color: 'var(--dim)', fontSize: 'var(--fs-caption)' }}> · team</span>}</span>
                           <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
-                          {internal ? (
-                            <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', whiteSpace: 'nowrap' }}>Team · excluded</span>
+                          {isTeam && excludeInternal ? (
+                            <button onClick={() => toggleInternal(r.email)} title={teamHeld ? 'Include this teammate in the send' : 'Exclude this teammate again'} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: teamHeld ? 'var(--accent)' : 'var(--pos)', background: 'none', border: 'none', cursor: 'pointer' }}>{teamHeld ? 'Include' : 'Exclude'}</button>
                           ) : (
-                            <button onClick={() => setExcluded((s) => { const n = new Set(s); const k = r.email.toLowerCase(); n.has(k) ? n.delete(k) : n.add(k); return n })} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: excluded.has(r.email.toLowerCase()) ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>{excluded.has(r.email.toLowerCase()) ? 'Include' : 'Exclude'}</button>
+                            <button onClick={() => setExcluded((s) => { const n = new Set(s); n.has(k) ? n.delete(k) : n.add(k); return n })} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: excluded.has(k) ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>{excluded.has(k) ? 'Include' : 'Exclude'}</button>
                           )}
                         </div>
                       )
