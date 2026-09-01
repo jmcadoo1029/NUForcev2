@@ -211,7 +211,7 @@ export function AccountPage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
-      <Link to="/" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>← Home</Link>
+      <Link to="/" style={{ fontSize: 'var(--fs-md)', color: 'var(--accent)', fontWeight: 700, textDecoration: 'none', display: 'inline-block', padding: '2px 0' }}>← Home</Link>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', margin: 'var(--sp-3) 0 var(--sp-5)', flexWrap: 'wrap' }}>
         <div>
           <div style={{ fontSize: 'var(--fs-2xl)', fontWeight: 800, letterSpacing: '-.02em' }}>{name}</div>

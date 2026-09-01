@@ -758,7 +758,7 @@ export function QuotePage() {
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
-      <Link to="/dashboard" style={{ fontSize: 'var(--fs-sm)', color: 'var(--accent)', fontWeight: 600, textDecoration: 'none' }}>← Back to dashboard</Link>
+      <Link to="/dashboard" style={{ fontSize: 'var(--fs-md)', color: 'var(--accent)', fontWeight: 700, textDecoration: 'none', display: 'inline-block', padding: '2px 0' }}>← Back to dashboard</Link>
 
       {state === 'loading' && <div style={{ color: 'var(--muted)', marginTop: 'var(--sp-5)' }}>Loading quote…</div>}
       {state === 'notfound' && <div style={{ color: 'var(--muted)', marginTop: 'var(--sp-5)' }}>No quote found for this id.</div>}
