@@ -17,15 +17,17 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
   const [progress, setProgress] = useState(0)
   const [err, setErr] = useState('')
   const [filter, setFilter] = useState('')
+  const [includeAncillary, setIncludeAncillary] = useState(false)
 
-  const run = () => {
+  const run = (incAnc: boolean) => {
     setRunning(true); setErr(''); setProgress(0); setResult(null)
-    mineStandards((n) => setProgress(n))
+    mineStandards((n) => setProgress(n), { includeAncillary: incAnc })
       .then((r) => setResult(r))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)))
       .finally(() => setRunning(false))
   }
-  useEffect(() => { run() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { run(includeAncillary) }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const toggleAncillary = () => { const next = !includeAncillary; setIncludeAncillary(next); run(next) }
 
   const rows = useMemo(() => {
     if (!result) return []
@@ -66,8 +68,12 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
             <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)' }}>
               <b>{result.standards.length}</b> standards · from <b>{result.quotesWithStandards}</b> quotes with citations <span style={{ color: 'var(--dim)' }}>({result.quotesScanned} scanned)</span>
             </span>
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter standards…" style={{ marginLeft: 'auto', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', minWidth: 180 }} />
-            <Button small variant="ghost" onClick={run} disabled={running}>Re-scan</Button>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-caption)', color: 'var(--muted)', cursor: 'pointer', marginLeft: 'auto' }}>
+              <input type="checkbox" checked={includeAncillary} onChange={toggleAncillary} disabled={running} />
+              Include reports / procedures / teardown
+            </label>
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter standards…" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', minWidth: 160 }} />
+            <Button small variant="ghost" onClick={() => run(includeAncillary)} disabled={running}>Re-scan</Button>
             <Button small variant="ghost" onClick={copyJson}>Copy JSON</Button>
             <Button small onClick={downloadJson}>Download mapping</Button>
           </div>
@@ -86,7 +92,7 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
                     <span key={c.code} style={{ ...chip, borderColor: i === 0 ? 'var(--accent)' : 'var(--border-strong)', background: i === 0 ? 'var(--accent-soft)' : '#fff' }}>
                       <b style={{ color: 'var(--accent)' }}>{c.code}</b>
                       <span>{c.label}</span>
-                      <span style={{ color: 'var(--dim)' }}>· {c.count}× · {Math.round(c.confidence * 100)}%</span>
+                      <span style={{ color: 'var(--dim)' }}>· {c.count}× · {Math.round(c.confidence * 100)}% · lift {c.lift}</span>
                     </span>
                   ))}
                   {s.codes.length > 6 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', alignSelf: 'center' }}>+{s.codes.length - 6} more</span>}
@@ -95,7 +101,7 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-2)' }}>
-            Confidence = how often that code appeared on quotes citing this standard. The top (highlighted) code is the miner’s best guess.
+            Confidence = how often that code appeared on quotes citing this standard. Lift = how much more than chance (a common tag-along code like teardown has low lift). Codes are ranked by lift, so real associations rise to the top; reports/procedures/teardown are hidden unless you tick the box.
           </div>
         </>
       )}

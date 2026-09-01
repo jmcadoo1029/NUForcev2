@@ -9,7 +9,7 @@ import { codeLabel } from '../data/constants'
 // made each call — no manual entry — and it's what the offline test-plan reader will
 // use to turn a customer's cited standards into candidate line items.
 
-export interface CodeTally { code: string; label: string; count: number; confidence: number }
+export interface CodeTally { code: string; label: string; count: number; confidence: number; lift: number }
 export interface StandardRow { standard: string; quotes: number; codes: CodeTally[] }
 export interface MinerResult {
   generatedAt: string
@@ -17,6 +17,11 @@ export interface MinerResult {
   quotesWithStandards: number
   standards: StandardRow[]
 }
+
+// Ancillary / logistics codes — deliverables and add-ons that ride along on many
+// quotes regardless of the test, so they pollute the correlation (e.g. Tear Down
+// co-occurs with almost every standard). Excluded from the mapping by default.
+export const ANCILLARY_CODES = new Set(['41', '42', '43', '44', '96', '98']) // Report/CoC, Procedure, EMI/DCM/PQ report+proc, Tear Down, Subcontract
 
 // Raw reference patterns. Case-insensitive; each capture is normalized below.
 const PATTERNS: RegExp[] = [
@@ -85,20 +90,26 @@ interface Row {
  * (optional) is called with the running count of quotes scanned. Reads are paged
  * past the 1000-row cap. Runs against the live DB with the user's session.
  */
-export async function mineStandards(onProgress?: (n: number) => void): Promise<MinerResult> {
+export interface MineOptions { includeAncillary?: boolean }
+
+export async function mineStandards(onProgress?: (n: number) => void, opts: MineOptions = {}): Promise<MinerResult> {
+  const includeAncillary = !!opts.includeAncillary
   const rows = await restFetchAll<Row>(
     'quotes?select=id,specifications,sp:data->ti->>tiSpecs,nt:data->ti->>tiNotes,pl:data->pickerLines,sl:data->summary->lines&order=id',
   )
   const stdCodes = new Map<string, Map<string, number>>() // standard → (code → co-occurrence count)
   const stdQuotes = new Map<string, number>() // standard → # quotes it appears in
+  const codeBase = new Map<string, number>() // code → # cited quotes it appears on (for lift)
   let withStandards = 0
 
   rows.forEach((r, i) => {
     const text = [r.specifications, r.sp, r.nt].filter(Boolean).join('\n')
     const stds = extractStandards(text)
     if (stds.size === 0) return
-    const codes = extractCodes(r.pl, r.sl)
+    let codes = extractCodes(r.pl, r.sl)
+    if (!includeAncillary) codes = new Set(Array.from(codes).filter((c) => !ANCILLARY_CODES.has(c)))
     withStandards++
+    for (const c of codes) codeBase.set(c, (codeBase.get(c) || 0) + 1)
     for (const s of stds) {
       stdQuotes.set(s, (stdQuotes.get(s) || 0) + 1)
       const m = stdCodes.get(s) || new Map<string, number>()
@@ -109,11 +120,19 @@ export async function mineStandards(onProgress?: (n: number) => void): Promise<M
   })
   if (onProgress) onProgress(rows.length)
 
+  const N = withStandards || 1
   const standards: StandardRow[] = Array.from(stdQuotes.entries())
     .map(([standard, quotes]) => {
       const codes: CodeTally[] = Array.from((stdCodes.get(standard) || new Map()).entries())
-        .map(([code, count]) => ({ code, label: codeLabel(code) || `Code ${code}`, count, confidence: quotes ? Math.round((count / quotes) * 100) / 100 : 0 }))
-        .sort((a, b) => b.count - a.count)
+        .map(([code, count]) => {
+          const confidence = quotes ? count / quotes : 0
+          const base = (codeBase.get(code) || 0) / N // how common the code is across cited quotes
+          const lift = base > 0 ? Math.round((confidence / base) * 10) / 10 : 0 // >1 = associated more than chance
+          return { code, label: codeLabel(code) || `Code ${code}`, count, confidence: Math.round(confidence * 100) / 100, lift }
+        })
+        // Rank by lift (real association) first, then by volume — so a common
+        // tag-along code can't outrank a standard's actual test on raw count alone.
+        .sort((a, b) => b.lift - a.lift || b.count - a.count)
       return { standard, quotes, codes }
     })
     .sort((a, b) => b.quotes - a.quotes || a.standard.localeCompare(b.standard))
