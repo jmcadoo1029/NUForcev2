@@ -4,6 +4,7 @@ import { RecentlyApproved } from './RecentlyApproved'
 import { ProductCatalog } from './ProductCatalog'
 import { Templates } from './Templates'
 import { StandardsMiner } from './StandardsMiner'
+import { useCanViewManager } from '../../lib/perms'
 
 // Overflow menu for the occasional dashboard tools: Monthly snapshot, Recently
 // approved, Product catalog, Email templates, and the Privacy-mode toggle. Keeps
@@ -11,6 +12,7 @@ import { StandardsMiner } from './StandardsMiner'
 export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTogglePrivacy: () => void }) {
   const [open, setOpen] = useState(false)
   const [modal, setModal] = useState<null | 'snapshot' | 'recent' | 'catalog' | 'templates' | 'standards'>(null)
+  const { canView } = useCanViewManager() // Standards ↔ codes is manager-only
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,9 +64,11 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('templates'); setOpen(false) }}>
             Email templates
           </button>
-          <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('standards'); setOpen(false) }}>
-            Standards ↔ codes
-          </button>
+          {canView && (
+            <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('standards'); setOpen(false) }}>
+              Standards ↔ codes
+            </button>
+          )}
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { onTogglePrivacy(); setOpen(false) }}>
             Privacy mode <span style={{ color: privacy ? 'var(--pos)' : 'var(--dim)', fontWeight: 700 }}>· {privacy ? 'On' : 'Off'}</span>
@@ -75,7 +79,7 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
       {modal === 'recent' && <RecentlyApproved onClose={() => setModal(null)} />}
       {modal === 'catalog' && <ProductCatalog onClose={() => setModal(null)} />}
       {modal === 'templates' && <Templates onClose={() => setModal(null)} />}
-      {modal === 'standards' && <StandardsMiner onClose={() => setModal(null)} />}
+      {modal === 'standards' && canView && <StandardsMiner onClose={() => setModal(null)} />}
     </div>
   )
 }
