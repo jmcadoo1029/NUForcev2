@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Card, CardLabel } from '../../../components'
 import { str } from '../../../lib/format'
 import { GSI_OPTS, DOC_OPTS } from '../../../data/quoteDefaults'
@@ -9,6 +10,22 @@ import { Field, ListRow, RegField, regInput, gridEdit3, gridEdit2 } from './fiel
 export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; ti: Record<string, any>; setTi: (patch: Record<string, any>) => void; acct: string }) {
   const s = str
   const dims = ti.dimL && ti.dimW && ti.dimH ? `${s(ti.dimL)} × ${s(ti.dimW)} × ${s(ti.dimH)} in` : ''
+
+  // One-time cm/mm → inches converter for the dimension inputs. Nothing metric is
+  // stored — Convert just fills dimL/W/H with the inch values (rounded to 0.01").
+  const [convOpen, setConvOpen] = useState(false)
+  const [convUnit, setConvUnit] = useState<'mm' | 'cm'>('mm')
+  const [convVals, setConvVals] = useState({ l: '', w: '', h: '' })
+  const toIn = (v: string) => { const n = parseFloat(v); if (!isFinite(n)) return null; const inches = convUnit === 'cm' ? n / 2.54 : n / 25.4; return String(Math.round(inches * 100) / 100) }
+  const convPreview = ['l', 'w', 'h'].map((k) => toIn((convVals as Record<string, string>)[k]) ?? '—').join(' × ')
+  const applyConversion = () => {
+    const patch: Record<string, string> = {}
+    const L = toIn(convVals.l); if (L != null) patch.dimL = L
+    const W = toIn(convVals.w); if (W != null) patch.dimW = W
+    const H = toIn(convVals.h); if (H != null) patch.dimH = H
+    if (Object.keys(patch).length) setTi(patch)
+    setConvOpen(false); setConvVals({ l: '', w: '', h: '' })
+  }
   const power = [ti.volt && `${s(ti.volt)}V`, ti.pwrType && s(ti.pwrType), ti.phase && `${s(ti.phase)}-phase`, ti.hz && `${s(ti.hz)} Hz`, ti.amps && `${s(ti.amps)}A`].filter(Boolean).join(' · ')
   // Loads: show the entered value; if it's null (never set) but we know the
   // account, fall back to Classic's default sentence. An empty string hides it.
@@ -53,12 +70,38 @@ export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; t
           </div>
 
           <div style={gridEdit3}>
-            <RegField label="L × W × H (in)">
+            <RegField
+              label={
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                  L × W × H (in)
+                  <button type="button" onClick={() => setConvOpen((v) => !v)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: 0, textTransform: 'none', color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{convOpen ? 'Close' : 'Convert'}</button>
+                </span>
+              }
+            >
               <div style={{ display: 'flex', gap: 6 }}>
                 <input value={s(ti.dimL)} onChange={(e) => setTi({ dimL: e.target.value })} placeholder="L" style={{ ...regInput, textAlign: 'center' }} />
                 <input value={s(ti.dimW)} onChange={(e) => setTi({ dimW: e.target.value })} placeholder="W" style={{ ...regInput, textAlign: 'center' }} />
                 <input value={s(ti.dimH)} onChange={(e) => setTi({ dimH: e.target.value })} placeholder="H" style={{ ...regInput, textAlign: 'center' }} />
               </div>
+              {convOpen && (
+                <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>Enter in</span>
+                    {(['mm', 'cm'] as const).map((u) => (
+                      <button key={u} type="button" onClick={() => setConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (convUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: convUnit === u ? 'var(--accent)' : '#fff', color: convUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    <input value={convVals.l} onChange={(e) => setConvVals((v) => ({ ...v, l: e.target.value }))} placeholder={`L (${convUnit})`} style={{ ...regInput, textAlign: 'center' }} />
+                    <input value={convVals.w} onChange={(e) => setConvVals((v) => ({ ...v, w: e.target.value }))} placeholder={`W (${convUnit})`} style={{ ...regInput, textAlign: 'center' }} />
+                    <input value={convVals.h} onChange={(e) => setConvVals((v) => ({ ...v, h: e.target.value }))} placeholder={`H (${convUnit})`} style={{ ...regInput, textAlign: 'center' }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>= {convPreview} in</span>
+                    <button type="button" onClick={applyConversion} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '6px 14px', cursor: 'pointer' }}>Fill inches ↑</button>
+                  </div>
+                </div>
+              )}
             </RegField>
             <RegField label="Weight (lbs)"><input value={s(ti.wt)} onChange={(e) => setTi({ wt: e.target.value })} style={regInput} /></RegField>
           </div>
