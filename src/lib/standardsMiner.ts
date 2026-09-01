@@ -130,9 +130,15 @@ export async function mineStandards(onProgress?: (n: number) => void, opts: Mine
           const lift = base > 0 ? Math.round((confidence / base) * 10) / 10 : 0 // >1 = associated more than chance
           return { code, label: codeLabel(code) || `Code ${code}`, count, confidence: Math.round(confidence * 100) / 100, lift }
         })
-        // Rank by lift (real association) first, then by volume — so a common
-        // tag-along code can't outrank a standard's actual test on raw count alone.
-        .sort((a, b) => b.lift - a.lift || b.count - a.count)
+        // Rank by confidence (how often this standard's quotes used the code) — that's
+        // the mapping we want. Lift is only a GUARD: codes associated at least at
+        // chance (lift ≥ 1) come first, so a code that's just common-everywhere is
+        // demoted; but a rare code with a big lift can't top the list on a 1% overlap.
+        .sort((a, b) => {
+          const aOk = a.lift >= 1 ? 1 : 0, bOk = b.lift >= 1 ? 1 : 0
+          if (aOk !== bOk) return bOk - aOk
+          return b.confidence - a.confidence || b.count - a.count
+        })
       return { standard, quotes, codes }
     })
     .sort((a, b) => b.quotes - a.quotes || a.standard.localeCompare(b.standard))

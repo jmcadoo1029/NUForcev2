@@ -101,7 +101,7 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
             ))}
           </div>
           <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-2)' }}>
-            Confidence = how often that code appeared on quotes citing this standard. Lift = how much more than chance (a common tag-along code like teardown has low lift). Codes are ranked by lift, so real associations rise to the top; reports/procedures/teardown are hidden unless you tick the box.
+            Confidence = how often that code appeared on quotes citing this standard — this drives the ranking, so the top (highlighted) code is the most likely mapping. Lift (how much more than chance) is only a guard that demotes codes which are common everywhere. Reports/procedures/teardown are hidden unless you tick the box.
           </div>
         </>
       )}
