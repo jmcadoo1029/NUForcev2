@@ -34,6 +34,7 @@ import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
 import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
 import { markClosedLost } from '../../lib/quoteActions'
+import type { DraftImport } from '../../lib/importDraft'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -124,11 +125,27 @@ export function QuotePage() {
       // Optional pre-linked account, passed from the account page's "+ New Quote".
       // Seeds account + client_id (so the quote is linked from the start) plus the
       // bill-to address, exactly as picking the account in the form would.
-      const pre = (location.state as { prefillAccount?: Record<string, string> } | null)?.prefillAccount
-      const preQi = pre ? { account: pre.account || '', client_id: pre.client_id || '', billTo: pre.billTo || '', billToCity: pre.billToCity || '' } : {}
-      setRow({ id: '', opportunity: null, customer: pre?.account || null, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
-      setLineItems([])
-      setTiEdit({ ...TI_DEFAULTS })
+      const st = (location.state as { prefillAccount?: Record<string, string>; prefillDraft?: DraftImport } | null)
+      const pre = st?.prefillAccount
+      const draft = st?.prefillDraft
+      const preQi = pre
+        ? { account: pre.account || '', client_id: pre.client_id || '', billTo: pre.billTo || '', billToCity: pre.billToCity || '' }
+        : draft?.account ? { account: draft.account } : {}
+      // Imported draft (from the document reader): map its test-item fields onto the
+      // TI defaults (only fields present), and its candidate line items onto the
+      // picker — unpriced, ready to review and price.
+      const draftTi: Record<string, string> = {}
+      if (draft?.testItem) {
+        const t = draft.testItem as Record<string, unknown>
+        const map: Record<string, string> = { specs: 'tiSpecs', notes: 'tiNotes' }
+        for (const [k, v] of Object.entries(t)) { if (v != null && String(v) !== '') draftTi[map[k] || k] = String(v) }
+      }
+      if (!draftTi.tiNotes && draft?.notes) draftTi.tiNotes = draft.notes
+      const draftLines = (draft?.lineItems || []).map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label ?? ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }))
+      const acctForRow = pre?.account || draft?.account || null
+      setRow({ id: '', opportunity: null, customer: acctForRow, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
+      setLineItems(draftLines)
+      setTiEdit({ ...TI_DEFAULTS, ...draftTi })
       setQiEdit({ ...QI_DEFAULTS, date: new Date().toLocaleDateString('en-US'), stage: 'Proposal/Price Quote', ...preQi })
       setSetupEdit({ ...SETUP_FORM_DEFAULTS })
       setBudgetEdit({ on: false, rows: [], markup: '25' })

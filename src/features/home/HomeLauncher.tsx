@@ -4,6 +4,7 @@ import { useCanViewManager } from '../../lib/perms'
 import { WORKSPACE_URL } from '../../lib/config'
 import { Campaigns } from '../dashboard/Campaigns'
 import { CustomerLookup } from '../account/CustomerLookup'
+import { ImportDraft } from '../quote/ImportDraft'
 
 // Neutral landing screen. Opening the app in front of a customer lands here — a
 // plain "what would you like to do?" launcher — instead of the Manager dashboard,
@@ -37,7 +38,7 @@ const cardBase: CSSProperties = {
 export function HomeLauncher() {
   const navigate = useNavigate()
   const { canView, loading } = useCanViewManager()
-  const [modal, setModal] = useState<null | 'campaigns' | 'lookup'>(null)
+  const [modal, setModal] = useState<null | 'campaigns' | 'lookup' | 'import'>(null)
   const [hover, setHover] = useState<string | null>(null)
 
   if (loading) return null
@@ -50,6 +51,7 @@ export function HomeLauncher() {
     { key: 'campaigns', label: 'Campaigns', desc: 'Outreach campaigns and their contacts.', onClick: () => setModal('campaigns'), icon: iconMegaphone },
     { key: 'lookup', label: 'Customer Lookup', desc: 'Open an account in Customer View — no financials on screen.', onClick: () => setModal('lookup'), icon: iconSearch },
     { key: 'newquote', label: 'Create A Quote', desc: 'Start a brand new quote.', onClick: () => navigate('/quote/new'), icon: iconPlus },
+    { key: 'import', label: 'Import a Draft', desc: 'Start a quote from a test-plan file — reviewed and priced by you.', onClick: () => setModal('import'), icon: iconImport },
     { key: 'workspace', label: 'Open Workspace', desc: 'Jump to NUWorkspace in a new tab.', onClick: () => window.open(WORKSPACE_URL, '_blank', 'noopener,noreferrer'), icon: iconExternal },
   ]
 
@@ -85,6 +87,7 @@ export function HomeLauncher() {
       </div>
       {modal === 'campaigns' && <Campaigns onClose={() => setModal(null)} />}
       {modal === 'lookup' && <CustomerLookup onClose={() => setModal(null)} />}
+      {modal === 'import' && <ImportDraft onClose={() => setModal(null)} />}
     </div>
   )
 }
@@ -98,3 +101,4 @@ const iconMegaphone = <svg width="22" height="22" viewBox="0 0 22 22"><path d="M
 const iconSearch = <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="9.5" cy="9.5" r="5.5" {...stroke} /><path d="M13.8 13.8L18 18" {...stroke} /></svg>
 const iconPlus = <svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" {...stroke} /><path d="M11 7.5v7M7.5 11h7" {...stroke} /></svg>
 const iconExternal = <svg width="22" height="22" viewBox="0 0 22 22"><path d="M12 4h6v6M18 4l-7 7" {...stroke} /><path d="M15.5 12.5V17a1.5 1.5 0 01-1.5 1.5H5A1.5 1.5 0 013.5 17V8A1.5 1.5 0 015 6.5h4.5" {...stroke} /></svg>
+const iconImport = <svg width="22" height="22" viewBox="0 0 22 22"><path d="M11 3v10M7 9.5l4 4 4-4" {...stroke} /><path d="M4 15v2.5A1.5 1.5 0 005.5 19h11a1.5 1.5 0 001.5-1.5V15" {...stroke} /></svg>
