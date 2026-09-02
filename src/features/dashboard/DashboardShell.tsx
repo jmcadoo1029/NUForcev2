@@ -2,11 +2,12 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '../../components'
 import { WORKSPACE_URL, CLASSIC_URL } from '../../lib/config'
-import { useCanViewManager } from '../../lib/perms'
+import { useCanViewManager, useIsApprover } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
 import { CustomerLookup } from '../account/CustomerLookup'
 import { Campaigns } from './Campaigns'
+import { ImportDraft } from '../quote/ImportDraft'
 
 // Shared dashboard frame: the streamlined top bar (title, Live pill, the
 // Manager / My Work / In Progress view switch, New Quote) wrapping whichever
@@ -35,10 +36,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { canView } = useCanViewManager() // Manager tab: approvers + view-only roles (Accounting)
+  const { isApprover } = useIsApprover() // Import a Draft: approvers only
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
   const [lookupOpen, setLookupOpen] = useState(false)
   const [campaignsOpen, setCampaignsOpen] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
   const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/mass-emails') ? 'massemails' : 'manager'
   const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'massemails' ? 'Compose and send email to clients' : monthLabel
 
@@ -82,6 +85,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <MoreMenu privacy={privacy} onTogglePrivacy={() => setPrivacy((p) => !p)} />
           <a href={WORKSPACE_URL} target="_blank" rel="noopener noreferrer" title="Open NUWorkspace in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Workspace ↗</a>
           <a href={CLASSIC_URL} target="_blank" rel="noopener noreferrer" title="Open the classic NUForce in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--muted)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Classic ↗</a>
+          {isApprover && <Button variant="secondary" onClick={() => setImportOpen(true)}>Import a Draft</Button>}
           <Button onClick={() => navigate('/quote/new')}>+ New Quote</Button>
         </div>
       </div>
@@ -90,6 +94,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </div>
       {lookupOpen && <CustomerLookup onClose={() => setLookupOpen(false)} />}
       {campaignsOpen && <Campaigns onClose={() => setCampaignsOpen(false)} />}
+      {importOpen && isApprover && <ImportDraft onClose={() => setImportOpen(false)} />}
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCanViewManager } from '../../lib/perms'
+import { useCanViewManager, useIsApprover } from '../../lib/perms'
 import { WORKSPACE_URL } from '../../lib/config'
 import { Campaigns } from '../dashboard/Campaigns'
 import { CustomerLookup } from '../account/CustomerLookup'
@@ -19,6 +19,7 @@ type Tile = {
   icon: JSX.Element
   onClick: () => void
   managerOnly?: boolean
+  approverOnly?: boolean
 }
 
 const cardBase: CSSProperties = {
@@ -38,10 +39,11 @@ const cardBase: CSSProperties = {
 export function HomeLauncher() {
   const navigate = useNavigate()
   const { canView, loading } = useCanViewManager()
+  const { isApprover, loading: apprLoading } = useIsApprover()
   const [modal, setModal] = useState<null | 'campaigns' | 'lookup' | 'import'>(null)
   const [hover, setHover] = useState<string | null>(null)
 
-  if (loading) return null
+  if (loading || apprLoading) return null
 
   const tiles: Tile[] = [
     { key: 'dashboard', label: 'Manager Dashboard', desc: 'Approvals, metrics, and the full pipeline view.', managerOnly: true, onClick: () => navigate('/dashboard'), icon: iconGrid },
@@ -51,11 +53,11 @@ export function HomeLauncher() {
     { key: 'campaigns', label: 'Campaigns', desc: 'Outreach campaigns and their contacts.', onClick: () => setModal('campaigns'), icon: iconMegaphone },
     { key: 'lookup', label: 'Customer Lookup', desc: 'Open an account in Customer View — no financials on screen.', onClick: () => setModal('lookup'), icon: iconSearch },
     { key: 'newquote', label: 'Create A Quote', desc: 'Start a brand new quote.', onClick: () => navigate('/quote/new'), icon: iconPlus },
-    { key: 'import', label: 'Import a Draft', desc: 'Start a quote from a test-plan file — reviewed and priced by you.', onClick: () => setModal('import'), icon: iconImport },
+    { key: 'import', label: 'Import a Draft', desc: 'Start a quote from a test-plan file — reviewed and priced by you.', approverOnly: true, onClick: () => setModal('import'), icon: iconImport },
     { key: 'workspace', label: 'Open Workspace', desc: 'Jump to NUWorkspace in a new tab.', onClick: () => window.open(WORKSPACE_URL, '_blank', 'noopener,noreferrer'), icon: iconExternal },
   ]
 
-  const visible = tiles.filter((t) => !t.managerOnly || canView)
+  const visible = tiles.filter((t) => (!t.managerOnly || canView) && (!t.approverOnly || isApprover))
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
