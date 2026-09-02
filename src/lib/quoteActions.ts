@@ -113,6 +113,66 @@ export async function markClosedLost(quoteId: string, note: string, by: string):
   return next
 }
 
+// ── Soft delete (approver-only) ─────────────────────────────────────────────
+// A deleted quote isn't removed — it's stamped deleted_at/deleted_by so it drops
+// out of every list (restFetch hides quotes with a non-null deleted_at), and an
+// approver can restore it. Both writes also log to chatter + approval history for
+// audit. Callers gate on WRITES_ENABLED and on approver permission.
+
+export interface DeletedQuote {
+  id: string
+  opportunity: string | null
+  customer: string | null
+  total: number | null
+  stage: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+}
+
+/** Soft-delete a quote: set deleted_at/deleted_by, record the reason in chatter,
+ *  stamp history. The row stays, so it's restorable. */
+export async function softDeleteQuote(quoteId: string, note: string, by: string): Promise<void> {
+  const id = encodeURIComponent(quoteId)
+  // deleted_at in the path suppresses restFetch's auto-hide and confirms it's live.
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${id}&select=data&deleted_at=is.null&limit=1`)
+  const data = (rows?.[0]?.data || {}) as Record<string, any>
+  const at = new Date().toISOString()
+  const reason = (note || '').trim()
+  const prev: ChatterEntry[] = Array.isArray(data.chatterEntries) ? data.chatterEntries : []
+  const next = [...prev, { by, at, msg: `Deleted quote${reason ? ` — ${reason}` : ''}` }]
+  const approval = (data.approval || {}) as Record<string, any>
+  const history = [...((approval.history as unknown[]) || []), { event: 'deleted', by, at, comments: reason }]
+  await restFetch('PATCH', `quotes?id=eq.${id}`, {
+    body: { deleted_at: at, deleted_by: by, data: { ...data, chatterEntries: next, approval: { ...approval, history } }, updated_at: at },
+  })
+}
+
+/** Restore a soft-deleted quote: clear deleted_at/deleted_by, log to chatter + history. */
+export async function restoreQuote(quoteId: string, by: string): Promise<void> {
+  const id = encodeURIComponent(quoteId)
+  // deleted_at in the path lets us READ the deleted row (auto-hide suppressed).
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${id}&select=data&deleted_at=not.is.null&limit=1`)
+  const data = (rows?.[0]?.data || {}) as Record<string, any>
+  const at = new Date().toISOString()
+  const prev: ChatterEntry[] = Array.isArray(data.chatterEntries) ? data.chatterEntries : []
+  const next = [...prev, { by, at, msg: 'Restored quote' }]
+  const approval = (data.approval || {}) as Record<string, any>
+  const history = [...((approval.history as unknown[]) || []), { event: 'restored', by, at }]
+  await restFetch('PATCH', `quotes?id=eq.${id}`, {
+    body: { deleted_at: null, deleted_by: null, data: { ...data, chatterEntries: next, approval: { ...approval, history } }, updated_at: at },
+  })
+}
+
+/** List soft-deleted quotes, newest deletion first (the approver restore view). */
+export async function fetchDeletedQuotes(limit = 100): Promise<DeletedQuote[]> {
+  return (
+    (await restFetch<DeletedQuote[]>(
+      'GET',
+      `quotes?select=id,opportunity,customer,total,stage,deleted_at,deleted_by&deleted_at=not.is.null&order=deleted_at.desc&limit=${limit}`,
+    )) || []
+  )
+}
+
 /** Resolve (remove) an active flag by its row id. */
 export async function unflagQuote(flagId: string, by: string): Promise<void> {
   await restFetch('PATCH', `quote_flags?id=eq.${encodeURIComponent(flagId)}`, {

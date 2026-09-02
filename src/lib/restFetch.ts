@@ -25,6 +25,26 @@ interface RestOpts {
 }
 
 /**
+ * Soft-deleted quotes are hidden everywhere by filtering them out at the single
+ * point every read passes through. Any GET against the `quotes` resource gets
+ * `deleted_at=is.null` appended, so lists, search, customer lookup, metrics, and
+ * single-row loads all skip deleted rows without each query having to opt in — the
+ * quotes table has ~40 hand-built query strings and this is far more reliable than
+ * editing each. A caller that needs to SEE deleted rows (the approver restore view,
+ * the delete/restore reads) puts `deleted_at` in its OWN path, which suppresses the
+ * injection. Non-GET requests are untouched, so the soft-delete/restore PATCHes work.
+ * Requires the quotes.deleted_at column to exist (added by migration).
+ */
+function hideDeletedQuotes(method: Method, path: string): string {
+  if (method !== 'GET') return path
+  const q = path.indexOf('?')
+  const resource = q === -1 ? path : path.slice(0, q)
+  if (resource !== 'quotes') return path
+  if (/[?&]deleted_at=/.test(path)) return path // caller opted to see deleted rows
+  return path + (q === -1 ? '?' : '&') + 'deleted_at=is.null'
+}
+
+/**
  * @param method GET/POST/PATCH/DELETE
  * @param path   e.g. "quotes?id=eq.123&select=id"
  */
@@ -35,6 +55,7 @@ export async function restFetch<T = unknown>(
 ): Promise<T> {
   const token = getAccessToken()
   if (!token) throw new NoSessionError()
+  path = hideDeletedQuotes(method, path)
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), REST_TIMEOUT_MS)

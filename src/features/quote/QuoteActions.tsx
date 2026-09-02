@@ -85,6 +85,8 @@ export function QuoteActions({
   onOpenSend,
   onOpenFollowUp,
   onContactUpdated,
+  isApprover = false,
+  onDelete,
 }: {
   quoteId: string
   opportunity?: string | null
@@ -99,8 +101,15 @@ export function QuoteActions({
   onOpenSend?: () => void
   onOpenFollowUp?: (followUpId: string | null) => void
   onContactUpdated?: (contact: string, email: string) => void
+  isApprover?: boolean
+  onDelete?: (note: string) => Promise<void> | void
 }) {
   const { showToast } = useToast()
+  // Delete (approvers only) — a soft delete: hides the quote everywhere but keeps
+  // the row so an approver can restore it. A reason is required and logged.
+  const [delOpen, setDelOpen] = useState(false)
+  const [delNote, setDelNote] = useState('')
+  const [delBusy, setDelBusy] = useState(false)
   const [state, setState] = useState<QuoteActionsState | null>(null)
   // Live flag row (seeded from the fetch). When writes are on, Flag/unflag update
   // this from the server response; when off, `flaggedPreview` drives the chip.
@@ -222,6 +231,20 @@ export function QuoteActions({
     }
   }
 
+  const doDelete = async () => {
+    if (delBusy || !onDelete) return
+    const note = delNote.trim()
+    if (!note) return // reason required
+    setDelBusy(true)
+    try {
+      await onDelete(note) // parent soft-deletes + navigates away
+    } finally {
+      setDelBusy(false)
+      setDelOpen(false)
+      setDelNote('')
+    }
+  }
+
   return (
     <Card style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
       <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--dim)', marginRight: 4 }}>Actions</span>
@@ -294,6 +317,27 @@ export function QuoteActions({
           </>
         )}
       </div>
+      {isApprover && onDelete && (
+        <div style={{ position: 'relative', marginLeft: 'auto' }}>
+          <button
+            onClick={() => { setDelNote(''); setDelOpen((v) => !v) }}
+            title="Delete this quote (approvers only) — hides it but keeps it restorable"
+            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--neg, #c0392b)', background: '#fff', color: 'var(--neg, #c0392b)' }}
+          >Delete</button>
+          {delOpen && (
+            <>
+              <div onClick={() => setDelOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
+                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--neg, #c0392b)', marginBottom: 'var(--sp-2)' }}>Delete this quote</div>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)', lineHeight: 1.5 }}>It's hidden from all lists but not erased — an approver can restore it from the ⋯ menu → Deleted quotes.</div>
+                <textarea value={delNote} onChange={(e) => setDelNote(e.target.value)} placeholder="Reason (required)…" rows={2} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+                <button onClick={doDelete} disabled={delBusy || !delNote.trim()} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: delNote.trim() ? 'var(--neg, #c0392b)' : 'var(--border)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: delBusy || !delNote.trim() ? 'default' : 'pointer' }}>{delBusy ? 'Deleting…' : 'Delete quote'}</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {detail && <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>· {detail}</span>}
 
       {isFlagged && (

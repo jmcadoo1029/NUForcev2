@@ -34,7 +34,7 @@ import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
 import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
-import { markClosedLost } from '../../lib/quoteActions'
+import { markClosedLost, softDeleteQuote } from '../../lib/quoteActions'
 import type { DraftImport } from '../../lib/importDraft'
 import { priceDraftLines } from '../../lib/importDraft'
 import { getSessionEmail } from '../../lib/auth'
@@ -422,6 +422,18 @@ export function QuotePage() {
       showToast('Marked Closed Lost', 'success')
       notifyQuoteLost({ opportunity: s(qiEdit.opp) || row.opportunity || '', customer: s(qiEdit.account) || row.customer || '', lostByName: prettifyEmail(me), note })
     } catch (e) { showToast('Couldn’t mark lost: ' + errMsg(e), 'error', 6000) }
+  }
+  // Delete (approvers only). Soft delete — the row is stamped deleted_at and drops
+  // out of every list, but stays restorable. Navigate to the dashboard after, since
+  // the quote can no longer be loaded (restFetch hides deleted quotes).
+  const deleteQuoteNow = async (note: string) => {
+    if (!row?.id) return
+    if (!WRITES_ENABLED) { showToast('Deleted (preview)', 'info'); return }
+    try {
+      await softDeleteQuote(row.id, note, me)
+      showToast('Quote deleted', 'success')
+      navigate('/dashboard')
+    } catch (e) { showToast('Couldn’t delete: ' + errMsg(e), 'error', 6000) }
   }
   const submitWon = async () => {
     const empId = await fetchMyEmployeeId()
@@ -936,7 +948,7 @@ export function QuotePage() {
                 onWonReject={rejectWon}
               />
 
-              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} contactName={s(qi.contact)} contactEmail={s(qi.email)} clientId={s(qi.client_id)} onContactUpdated={(c, e) => setQi({ contact: c, email: e })} />
+              <QuoteActions key={`qa-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity} customer={acct} stage={s(qi.stage) || row.stage || ''} approvalStatus={approval.status} chatter={(row.data?.chatterEntries as ChatterEntry[]) || []} me={me} onOpenSend={() => setSendOpen(true)} onOpenFollowUp={(fuId) => { setFollowUpFuId(fuId); setFollowUpOpen(true) }} contactName={s(qi.contact)} contactEmail={s(qi.email)} clientId={s(qi.client_id)} onContactUpdated={(c, e) => setQi({ contact: c, email: e })} isApprover={isApprover} onDelete={deleteQuoteNow} />
 
               <SentFiles key={`sf-${sendNonce}`} quoteId={row.id} opportunity={s(qi.opp) || row.opportunity || ''} />
             </>
