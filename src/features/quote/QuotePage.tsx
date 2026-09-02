@@ -36,6 +36,7 @@ import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
 import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
 import { markClosedLost } from '../../lib/quoteActions'
 import type { DraftImport } from '../../lib/importDraft'
+import { priceDraftLines } from '../../lib/importDraft'
 import { getSessionEmail } from '../../lib/auth'
 import { needsReapproval } from '../../lib/approval'
 
@@ -154,16 +155,32 @@ export function QuotePage() {
       // The reader supplies catalog-exact labels (e.g. "Vibration – Setup", "Test
       // Procedure"), so use them as-is; fall back to the code's catalog label only
       // if a line arrives without one.
-      const draftLines = (draft?.lineItems || []).map((l) => {
+      // Assisted pricing: fill each line's price from the catalog (setups and the
+      // EMI/PQ/DC-Mag family stay $0 for the estimator to price). Shock is weight-
+      // based, so pass the unit weight through.
+      const draftWt = Number(String(draft?.testItem?.wt ?? '').replace(/[^\d.]/g, '')) || 0
+      const pricedInput = priceDraftLines(draft?.lineItems || [], draftWt)
+      const draftLines = pricedInput.map((l) => {
         const code = String(l.code ?? '')
         return { key: lineSeq.current++, code, label: String(l.label ?? '') || (code ? codeLabel(code) : ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }
       })
+      // Setup inputs from the reader (holes/cables/fab), when it found explicit
+      // callouts; otherwise the standard defaults.
+      const draftSetup: Record<string, any> = { ...SETUP_FORM_DEFAULTS }
+      if (draft?.setup) {
+        const s = draft.setup
+        if (s.holes != null && String(s.holes) !== '') draftSetup.holes = String(s.holes)
+        if (s.cables != null && String(s.cables) !== '') draftSetup.cables = String(s.cables)
+        if (s.fabHours != null && String(s.fabHours) !== '') draftSetup.fabHours = String(s.fabHours)
+        if (s.techRate != null && String(s.techRate) !== '') draftSetup.techRate = String(s.techRate)
+        if (s.drillTap != null) draftSetup.drillTap = !!s.drillTap
+      }
       const acctForRow = pre?.account || draft?.account || null
       setRow({ id: '', opportunity: null, customer: acctForRow, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
       setLineItems(draftLines)
       setTiEdit({ ...TI_DEFAULTS, ...draftTi })
       setQiEdit({ ...QI_DEFAULTS, date: new Date().toLocaleDateString('en-US'), stage: 'Proposal/Price Quote', ...preQi })
-      setSetupEdit({ ...SETUP_FORM_DEFAULTS })
+      setSetupEdit(draftSetup)
       setBudgetEdit({ on: false, rows: [], markup: '25' })
       setApproval({ status: 'none', history: [] })
       setWonApproval({ status: 'none', history: [] })

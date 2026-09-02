@@ -5,6 +5,8 @@
 // the local tool share one definition. Everything is optional and string-coerced —
 // a partial extraction still yields a useful head start.
 
+import { buildCatalog } from '../data/catalog'
+
 export interface DraftLineItem {
   code?: string // NUForce product code, e.g. "51" (EMI). Optional — label alone is fine.
   label: string // Short test name, e.g. "EMI", "Salt Fog"
@@ -38,10 +40,19 @@ export interface DraftTestItem {
   notes?: string // → the Notes text field
 }
 
+export interface DraftSetup {
+  holes?: string
+  cables?: string
+  fabHours?: string
+  techRate?: string
+  drillTap?: boolean
+}
+
 export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
   rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
   quoteNumber?: string // Quote number (e.g. "26-123"), from the quote-folder name → qi.opp
+  setup?: DraftSetup // Setup inputs (holes/cables/fab) for pricing
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
   notes?: string // Falls back into Notes if testItem.notes is absent
@@ -77,6 +88,17 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
     if (Object.keys(out).length) draft.testItem = out
   }
 
+  if (r.setup && typeof r.setup === 'object' && !Array.isArray(r.setup)) {
+    const s = r.setup as Record<string, unknown>
+    const out: DraftSetup = {}
+    if (s.holes != null) out.holes = String(s.holes)
+    if (s.cables != null) out.cables = String(s.cables)
+    if (s.fabHours != null) out.fabHours = String(s.fabHours)
+    if (s.techRate != null) out.techRate = String(s.techRate)
+    if (s.drillTap != null) out.drillTap = s.drillTap === true || String(s.drillTap).toLowerCase() === 'true'
+    if (Object.keys(out).length) draft.setup = out
+  }
+
   if (Array.isArray(r.lineItems)) {
     draft.lineItems = (r.lineItems as unknown[])
       .filter((l): l is Record<string, unknown> => !!l && typeof l === 'object' && !Array.isArray(l))
@@ -93,6 +115,42 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
     return { ok: false, error: 'Nothing to import — the file has no test item and no line items.' }
   }
   return { ok: true, draft }
+}
+
+// A setup line ("Vibration – Setup") — priced from holes/fab in NUForce, so it
+// comes in at $0 and the user prices it once holes/cables are confirmed.
+const isSetupLabel = (label: string) => /[–-]\s*setup\s*$/i.test(label)
+// EMI / Power Quality / DC Magnetics — every line in these families (setup,
+// testing, teardown, procedure, report) is calculator-driven, so all come in $0.
+const isEmiFamilyLabel = (label: string) => /^\s*(emi|pq|dc\s*mag)/i.test(label)
+
+/**
+ * Assisted pricing for an imported draft. Fills in each line's price from the
+ * NUForce catalog (which applies manager overrides), so the user opens a mostly-
+ * priced quote instead of an all-zero one. Rules agreed with the estimators:
+ *   - Setup lines            → $0  (priced from holes/cables/fab in NUForce)
+ *   - EMI / PQ / DC Magnetics → $0  (calculator-driven)
+ *   - everything else        → its standard catalog price (regular testing lines,
+ *                              Test Procedure / Report / Tear Down)
+ *   - shock testing is weight-based — the catalog derives it from `weightLbs`.
+ * Any line whose label doesn't resolve to a catalog entry stays $0.
+ */
+export function priceDraftLines(lines: DraftLineItem[], weightLbs: number): DraftLineItem[] {
+  const catalog = buildCatalog({ ti: { wt: weightLbs } })
+  const byLabel = new Map<string, number>()
+  for (const p of catalog) {
+    const k = p.label.toLowerCase()
+    if (!byLabel.has(k)) byLabel.set(k, p.price)
+  }
+  return lines.map((l) => {
+    const label = String(l.label || '')
+    let price = 0
+    if (!isSetupLabel(label) && !isEmiFamilyLabel(label)) {
+      const base = byLabel.get(label.toLowerCase())
+      if (base != null && isFinite(base)) price = Math.round(base)
+    }
+    return { ...l, price }
+  })
 }
 
 /** A minimal example of the format, shown in the import dialog and usable as a
