@@ -35,6 +35,7 @@ export interface DraftTestItem {
 
 export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
+  rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
   notes?: string // Falls back into Notes if testItem.notes is absent
@@ -58,6 +59,7 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
   const r = raw as Record<string, unknown>
   const draft: DraftImport = {}
   if (r.account != null) draft.account = String(r.account)
+  if (r.rfqDate != null) draft.rfqDate = String(r.rfqDate)
   if (r.notes != null) draft.notes = String(r.notes)
 
   if (r.testItem && typeof r.testItem === 'object' && !Array.isArray(r.testItem)) {

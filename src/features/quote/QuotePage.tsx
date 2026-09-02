@@ -8,6 +8,7 @@ import { persistApproval, persistWonApproval, requestReopen } from '../../lib/ap
 import { fetchQuoteByKey, type QuoteRow } from '../../lib/quotes'
 import { lineItemsFromData } from '../../data/quoteModel'
 import { TI_DEFAULTS, QI_DEFAULTS, SETUP_FORM_DEFAULTS, STAGE_OPTS, type RelatedContact, type BudgetRow, type LineItem } from '../../data/quoteDefaults'
+import { codeLabel } from '../../data/constants'
 import { money } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { lookupProjectByJobNumber, createProjectFromNuforce, appendToProject, setWorkspaceLink, workspaceProjectUrl, notifyClosedWon, describeWorkspaceError, type ProjectSourceInput } from '../../lib/workspace'
@@ -130,7 +131,14 @@ export function QuotePage() {
       const draft = st?.prefillDraft
       const preQi = pre
         ? { account: pre.account || '', client_id: pre.client_id || '', billTo: pre.billTo || '', billToCity: pre.billToCity || '' }
-        : draft?.account ? { account: draft.account } : {}
+        : draft
+          ? {
+              account: draft.account || '',
+              type: 'New Business',
+              // "{Account} RFQ {date of original RFQ email}" — per NU convention.
+              rfq: draft.account ? `${draft.account} RFQ ${draft.rfqDate || ''}`.trim() : (draft.rfqDate ? `RFQ ${draft.rfqDate}` : ''),
+            }
+          : {}
       // Imported draft (from the document reader): map its test-item fields onto the
       // TI defaults (only fields present), and its candidate line items onto the
       // picker — unpriced, ready to review and price.
@@ -141,7 +149,13 @@ export function QuotePage() {
         for (const [k, v] of Object.entries(t)) { if (v != null && String(v) !== '') draftTi[map[k] || k] = String(v) }
       }
       if (!draftTi.tiNotes && draft?.notes) draftTi.tiNotes = draft.notes
-      const draftLines = (draft?.lineItems || []).map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label ?? ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }))
+      // Use the picker's canonical label for the code (don't keep the reader's
+      // generated name) — the code IS chosen from the catalog. Fall back to the
+      // reader's label only when there's no code.
+      const draftLines = (draft?.lineItems || []).map((l) => {
+        const code = String(l.code ?? '')
+        return { key: lineSeq.current++, code, label: (code && codeLabel(code)) || String(l.label ?? ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }
+      })
       const acctForRow = pre?.account || draft?.account || null
       setRow({ id: '', opportunity: null, customer: acctForRow, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
       setLineItems(draftLines)
