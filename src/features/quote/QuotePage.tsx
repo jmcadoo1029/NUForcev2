@@ -140,6 +140,8 @@ export function QuotePage() {
               opp: draft.quoteNumber || '',
               // "{Account} RFQ {date of original RFQ email}" — per NU convention.
               rfq: draft.account ? `${draft.account} RFQ ${draft.rfqDate || ''}`.trim() : (draft.rfqDate ? `RFQ ${draft.rfqDate}` : ''),
+              // Sibling quote numbers from a multi-quote batch, if the reader supplied them.
+              ...(draft.relatedOpps ? { relatedOpps: draft.relatedOpps } : {}),
             }
           : {}
       // Imported draft (from the document reader): map its test-item fields onto the

@@ -52,6 +52,7 @@ export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
   rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
   quoteNumber?: string // Quote number (e.g. "26-123"), from the quote-folder name → qi.opp
+  relatedOpps?: string // Sibling quote numbers from a multi-quote batch → qi.relatedOpps
   setup?: DraftSetup // Setup inputs (holes/cables/fab) for pricing
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
@@ -79,6 +80,7 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
   if (r.account != null) draft.account = String(r.account)
   if (r.rfqDate != null) draft.rfqDate = String(r.rfqDate)
   if (r.quoteNumber != null) draft.quoteNumber = String(r.quoteNumber)
+  if (r.relatedOpps != null) draft.relatedOpps = String(r.relatedOpps)
   if (r.notes != null) draft.notes = String(r.notes)
 
   if (r.testItem && typeof r.testItem === 'object' && !Array.isArray(r.testItem)) {
