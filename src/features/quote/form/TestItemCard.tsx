@@ -26,6 +26,18 @@ export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; t
     if (Object.keys(patch).length) setTi(patch)
     setConvOpen(false); setConvVals({ l: '', w: '', h: '' })
   }
+
+  // One-time kg/g → lbs converter for the weight input. Nothing metric is stored —
+  // Convert just fills wt with the pound value (rounded to 0.1 lb).
+  const [wtConvOpen, setWtConvOpen] = useState(false)
+  const [wtConvUnit, setWtConvUnit] = useState<'kg' | 'g'>('kg')
+  const [wtConvVal, setWtConvVal] = useState('')
+  const toLbs = (v: string) => { const n = parseFloat(v); if (!isFinite(n)) return null; const lbs = wtConvUnit === 'kg' ? n * 2.2046226 : n / 453.59237; return String(Math.round(lbs * 10) / 10) }
+  const wtPreview = toLbs(wtConvVal) ?? '—'
+  const applyWtConversion = () => {
+    const lbs = toLbs(wtConvVal); if (lbs != null) setTi({ wt: lbs })
+    setWtConvOpen(false); setWtConvVal('')
+  }
   const power = [ti.volt && `${s(ti.volt)}V`, ti.pwrType && s(ti.pwrType), ti.phase && `${s(ti.phase)}-phase`, ti.hz && `${s(ti.hz)} Hz`, ti.amps && `${s(ti.amps)}A`].filter(Boolean).join(' · ')
   // Loads: show the entered value; if it's null (never set) but we know the
   // account, fall back to Classic's default sentence. An empty string hides it.
@@ -103,7 +115,33 @@ export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; t
                 </div>
               )}
             </RegField>
-            <RegField label="Weight (lbs)"><input value={s(ti.wt)} onChange={(e) => setTi({ wt: e.target.value })} style={regInput} /></RegField>
+            <RegField
+              label={
+                <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 8 }}>
+                  Weight (lbs)
+                  <button type="button" onClick={() => setWtConvOpen((v) => !v)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: 0, textTransform: 'none', color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>{wtConvOpen ? 'Close' : 'Convert'}</button>
+                </span>
+              }
+            >
+              <input value={s(ti.wt)} onChange={(e) => setTi({ wt: e.target.value })} style={regInput} />
+              {wtConvOpen && (
+                <div style={{ marginTop: 8, background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>Enter in</span>
+                    {(['kg', 'g'] as const).map((u) => (
+                      <button key={u} type="button" onClick={() => setWtConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (wtConvUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: wtConvUnit === u ? 'var(--accent)' : '#fff', color: wtConvUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                    <input value={wtConvVal} onChange={(e) => setWtConvVal(e.target.value)} placeholder={`Weight (${wtConvUnit})`} style={{ ...regInput, textAlign: 'center' }} />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>= {wtPreview} lbs</span>
+                    <button type="button" onClick={applyWtConversion} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '6px 14px', cursor: 'pointer' }}>Fill lbs ↑</button>
+                  </div>
+                </div>
+              )}
+            </RegField>
           </div>
 
           <div style={gridEdit3}>
