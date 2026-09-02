@@ -29,6 +29,11 @@ export interface DraftTestItem {
   mounting?: string
   pressureFlow?: string
   loads?: string
+  // Regulatory block
+  gsi?: string
+  witness?: string
+  docRestriction?: string
+  dpas?: string
   specs?: string // → the Specifications text field
   notes?: string // → the Notes text field
 }
@@ -36,6 +41,7 @@ export interface DraftTestItem {
 export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
   rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
+  quoteNumber?: string // Quote number (e.g. "26-123"), from the quote-folder name → qi.opp
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
   notes?: string // Falls back into Notes if testItem.notes is absent
@@ -43,7 +49,8 @@ export interface DraftImport {
 
 const TI_STR_KEYS: (keyof DraftTestItem)[] = [
   'item', 'qty', 'model', 'drawing', 'dimL', 'dimW', 'dimH', 'wt',
-  'volt', 'pwrType', 'phase', 'hz', 'amps', 'mounting', 'pressureFlow', 'loads', 'specs', 'notes',
+  'volt', 'pwrType', 'phase', 'hz', 'amps', 'mounting', 'pressureFlow', 'loads',
+  'gsi', 'witness', 'docRestriction', 'dpas', 'specs', 'notes',
 ]
 
 /** Parse + validate a draft-import JSON string. Coerces every field to the form's
@@ -60,6 +67,7 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
   const draft: DraftImport = {}
   if (r.account != null) draft.account = String(r.account)
   if (r.rfqDate != null) draft.rfqDate = String(r.rfqDate)
+  if (r.quoteNumber != null) draft.quoteNumber = String(r.quoteNumber)
   if (r.notes != null) draft.notes = String(r.notes)
 
   if (r.testItem && typeof r.testItem === 'object' && !Array.isArray(r.testItem)) {

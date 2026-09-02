@@ -135,6 +135,8 @@ export function QuotePage() {
           ? {
               account: draft.account || '',
               type: 'New Business',
+              // Quote number from the quote-folder name (e.g. "26-123").
+              opp: draft.quoteNumber || '',
               // "{Account} RFQ {date of original RFQ email}" — per NU convention.
               rfq: draft.account ? `${draft.account} RFQ ${draft.rfqDate || ''}`.trim() : (draft.rfqDate ? `RFQ ${draft.rfqDate}` : ''),
             }
@@ -149,12 +151,12 @@ export function QuotePage() {
         for (const [k, v] of Object.entries(t)) { if (v != null && String(v) !== '') draftTi[map[k] || k] = String(v) }
       }
       if (!draftTi.tiNotes && draft?.notes) draftTi.tiNotes = draft.notes
-      // Use the picker's canonical label for the code (don't keep the reader's
-      // generated name) — the code IS chosen from the catalog. Fall back to the
-      // reader's label only when there's no code.
+      // The reader supplies catalog-exact labels (e.g. "Vibration – Setup", "Test
+      // Procedure"), so use them as-is; fall back to the code's catalog label only
+      // if a line arrives without one.
       const draftLines = (draft?.lineItems || []).map((l) => {
         const code = String(l.code ?? '')
-        return { key: lineSeq.current++, code, label: (code && codeLabel(code)) || String(l.label ?? ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }
+        return { key: lineSeq.current++, code, label: String(l.label ?? '') || (code ? codeLabel(code) : ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }
       })
       const acctForRow = pre?.account || draft?.account || null
       setRow({ id: '', opportunity: null, customer: acctForRow, revision: null, stage: 'Proposal/Price Quote', total: null, data: {} } as QuoteRow)
