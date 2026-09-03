@@ -182,7 +182,7 @@ export function ProductPicker({
                     )}
                   </div>
                   {isSel && (
-                    <input value={descs[prod.key] || ''} onChange={(e) => setDescs((d) => ({ ...d, [prod.key]: e.target.value }))} onClick={(e) => e.stopPropagation()} placeholder="Description (optional) — shows in the line item" style={{ ...cInput, marginLeft: 28 }} />
+                    <input value={descs[prod.key] || ''} onChange={(e) => setDescs((d) => ({ ...d, [prod.key]: e.target.value }))} onClick={(e) => e.stopPropagation()} placeholder="Description (optional) — shows in the line item" style={{ ...cInput, marginLeft: 28, width: 'calc(100% - 28px)' }} />
                   )}
                 </div>
               )
