@@ -48,12 +48,29 @@ export function LineItemsCard({
   onConvert?: () => void
 }) {
   const [dragKey, setDragKey] = useState<number | null>(null)
-  const lineTotal = lineItems.reduce((a, l) => a + l.price, 0)
+  // Two read-only views over ONE set of data: Standard (as today) and Quantity (adds
+  // Qty + Amount columns). Nothing about the data differs — only what's shown.
+  const [qtyView, setQtyView] = useState(false)
+  const qtyOf = (l: LineItem) => Math.max(1, Math.round(l.qty || 1))
+  const lineTotal = lineItems.reduce((a, l) => a + l.price * qtyOf(l), 0)
 
   return (
     <Card pad={false}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 'var(--sp-5) var(--sp-5) var(--sp-3)' }}>
-        <CardLabel>Line items ({lineItems.length})</CardLabel>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
+          <CardLabel>Line items ({lineItems.length})</CardLabel>
+          {lineItems.length > 0 && !(editing || lineEditing) && (
+            <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 20, overflow: 'hidden' }}>
+              {([['Standard', false], ['Quantity', true]] as const).map(([lbl, v]) => (
+                <button
+                  key={lbl}
+                  onClick={() => setQtyView(v)}
+                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', cursor: 'pointer', border: 'none', background: qtyView === v ? 'var(--accent)' : '#fff', color: qtyView === v ? '#fff' : 'var(--muted)' }}
+                >{lbl}</button>
+              ))}
+            </div>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
           {needsConversion && <Button variant="primary" small onClick={onConvert}>Convert to picker</Button>}
           {locked ? (
@@ -85,7 +102,9 @@ export function LineItemsCard({
               <th style={{ textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px var(--sp-5)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Code</th>
               <th style={{ textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Item</th>
               <th style={{ textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px 8px', borderBottom: '1px solid var(--border)' }}>Description</th>
-              <th style={{ textAlign: 'right', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px var(--sp-5)', borderBottom: '1px solid var(--border)' }}>Price</th>
+              {qtyView && <th style={{ textAlign: 'center', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Qty</th>}
+              <th style={{ textAlign: 'right', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px 8px', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>{qtyView ? 'Unit' : 'Price'}</th>
+              {qtyView && <th style={{ textAlign: 'right', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '10px var(--sp-5)', borderBottom: '1px solid var(--border)', whiteSpace: 'nowrap' }}>Amount</th>}
             </tr>
           </thead>
           <tbody>
@@ -98,13 +117,16 @@ export function LineItemsCard({
                   {l.added && <span style={{ marginLeft: 8, fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-soft)', padding: '1px 7px', borderRadius: 20, verticalAlign: 'middle' }}>NEW</span>}
                 </td>
                 <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', color: 'var(--muted)', verticalAlign: 'top' }}>{l.desc || '—'}</td>
-                <td style={{ padding: '10px var(--sp-5)', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>{money(l.price)}</td>
+                {qtyView && <td style={{ padding: '10px 8px', borderBottom: '1px solid var(--border)', textAlign: 'center', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>{qtyOf(l)}</td>}
+                <td style={{ padding: qtyView ? '10px 8px' : '10px var(--sp-5)', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', verticalAlign: 'top' }}>{money(l.price)}</td>
+                {qtyView && <td style={{ padding: '10px var(--sp-5)', borderBottom: '1px solid var(--border)', textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 600, verticalAlign: 'top' }}>{money(l.price * qtyOf(l))}</td>}
               </tr>
             ))}
             <tr>
               <td />
               <td />
-              <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 700 }}>Total</td>
+              <td style={{ padding: '12px 8px', textAlign: 'right', fontWeight: 700 }} colSpan={qtyView ? 2 : 1}>Total</td>
+              {qtyView && <td />}
               <td style={{ padding: '12px var(--sp-5)', textAlign: 'right', fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{money(lineTotal)}</td>
             </tr>
           </tbody>
@@ -120,7 +142,7 @@ export function LineItemsCard({
               key={l.key}
               onDragOver={(e) => { e.preventDefault(); if (dragKey != null && dragKey !== l.key) onReorder(dragKey, l.key) }}
               title={dormant ? dTitle : undefined}
-              style={{ display: 'grid', gridTemplateColumns: '26px 130px 0.9fr 1.1fr 96px 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)', opacity: dragKey === l.key ? 0.4 : 1, background: dormant ? 'var(--warn-soft)' : undefined, borderLeft: dormant ? '3px solid var(--warn)' : '3px solid transparent', paddingLeft: 4 }}
+              style={{ display: 'grid', gridTemplateColumns: '26px 130px 0.9fr 1.1fr 52px 96px 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid var(--border)', opacity: dragKey === l.key ? 0.4 : 1, background: dormant ? 'var(--warn-soft)' : undefined, borderLeft: dormant ? '3px solid var(--warn)' : '3px solid transparent', paddingLeft: 4 }}
             >
               <div
                 draggable
@@ -138,6 +160,7 @@ export function LineItemsCard({
               </select>
               <input value={l.label} onChange={(e) => onUpdateLine(l.key, { label: e.target.value })} placeholder="Item" style={regInput} />
               <input value={l.desc} onChange={(e) => onUpdateLine(l.key, { desc: e.target.value })} placeholder="Description" style={regInput} />
+              <input value={String(qtyOf(l))} onChange={(e) => onUpdateLine(l.key, { qty: Math.max(1, Math.round(sf(e.target.value, 1))) })} inputMode="numeric" title="Quantity" style={{ ...regInput, textAlign: 'center' }} />
               <input value={String(l.price)} onChange={(e) => onUpdateLine(l.key, { price: sf(e.target.value) })} inputMode="decimal" style={{ ...regInput, textAlign: 'right' }} />
               <button onClick={() => onRemoveLine(l.key)} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>×</button>
             </div>
