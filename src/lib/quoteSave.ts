@@ -16,6 +16,7 @@ export interface SaveLine {
   label: string
   desc?: string
   price: number
+  qty?: number
 }
 
 export interface QuoteSaveModel {
@@ -57,10 +58,13 @@ function toYMD(d?: string): string | null {
  */
 export function serializeQuote(model: QuoteSaveModel): SerializedQuote {
   const { qi, ti, setup, budget, lines, approval, wonApproval, wonInfo, chatterEntries } = model
-  const total = lines.reduce((a, l) => a + sf(l.price), 0)
+  const qtyOf = (l: SaveLine) => Math.max(1, Math.round(sf(l.qty, 1)))
+  const total = lines.reduce((a, l) => a + sf(l.price) * qtyOf(l), 0)
 
-  const pickerLines = lines.map((l) => ({ code: str(l.code), label: str(l.label) || 'Line Item', desc: str(l.desc), price: sf(l.price) }))
-  const lineItems = lines.map((l) => ({ code: str(l.code), label: str(l.label) || 'Line Item', desc: str(l.desc), val: sf(l.price) }))
+  // pickerLines (V2 source of truth) carry the UNIT price + qty; the legacy line_items
+  // val is the EXTENDED amount (price × qty) so external/Workspace totals stay correct.
+  const pickerLines = lines.map((l) => ({ code: str(l.code), label: str(l.label) || 'Line Item', desc: str(l.desc), price: sf(l.price), qty: qtyOf(l) }))
+  const lineItems = lines.map((l) => ({ code: str(l.code), label: str(l.label) || 'Line Item', desc: str(l.desc), qty: qtyOf(l), val: sf(l.price) * qtyOf(l) }))
 
   // Rebuild the blob: keep legacy keys, overlay edited sections, and clear the
   // old line sources (picker-only from now on).

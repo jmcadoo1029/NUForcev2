@@ -12,6 +12,7 @@ export interface DraftLineItem {
   label: string // Short test name, e.g. "EMI", "Salt Fog"
   desc?: string // Free text, e.g. the standard/method: "MIL-STD-461G RE102"
   price?: number // Usually 0 — the user prices it in NUForce
+  qty?: number // Quantity (defaults to 1). The reader sets this for grouped multi-unit lines.
 }
 
 export interface DraftTestItem {
@@ -109,6 +110,7 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
         label: String(l.label ?? l.name ?? ''),
         desc: l.desc != null ? String(l.desc) : l.description != null ? String(l.description) : undefined,
         price: l.price != null && isFinite(Number(l.price)) ? Number(l.price) : 0,
+        qty: l.qty != null && isFinite(Number(l.qty)) ? Math.max(1, Math.round(Number(l.qty))) : 1,
       }))
       .filter((l) => (l.label || l.code))
   }

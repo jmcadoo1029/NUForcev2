@@ -5,7 +5,7 @@
 
 export interface RelatedContact { name: string; title: string; email: string; phone: string }
 export interface BudgetRow { desc: string; qty: string; unitCost: string }
-export interface LineItem { key: number; code: string; label: string; desc: string; price: number; added: boolean }
+export interface LineItem { key: number; code: string; label: string; desc: string; price: number; qty: number; added: boolean }
 
 // Test Item field defaults — the exact Classic ti shape.
 export const TI_DEFAULTS: Record<string, any> = {

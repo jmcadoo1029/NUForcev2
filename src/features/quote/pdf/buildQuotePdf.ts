@@ -12,7 +12,7 @@ import { NU_LOGO_PDF, JORDAN_SIG_PDF } from './assets'
 //     descriptions to be truncated.
 //   • Specs/notes read straight from the quote (no isDirty/snapshot freeze).
 
-export interface PdfLine { code?: string | null; label: string; desc?: string; price: number }
+export interface PdfLine { code?: string | null; label: string; desc?: string; price: number; qty?: number }
 export interface PdfBudget {
   on?: boolean
   rows?: { desc?: string; qty?: string | number; unitCost?: string | number }[]
@@ -303,8 +303,9 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
       if (y + rowH + 2 > PH - 52) { drawFooter(); doc.addPage(); pageNum++; y = 54; drawTblHdr() }
       doc.setFillColor(...bg)
       doc.rect(ML, y, TW, rowH, 'F')
+      const q = Math.max(1, Math.round(l.qty || 1))
       setF('normal', 9, DARK)
-      doc.text('1', ML + cQty / 2, y + 10, { align: 'center' })
+      doc.text(String(q), ML + cQty / 2, y + 10, { align: 'center' })
       if (l.code) { setF('normal', 8, MUTED); doc.text(String(l.code), ML + cQty + 4, y + 10) }
       setF('normal', 9, DARK)
       doc.text(labelLines, ML + cQty + cCode + 4, y + 10)
@@ -314,7 +315,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
         doc.text(descLines, ML + cQty + cCode + 4, descBaseY)
       }
       setF('bold', 9, DARK)
-      doc.text(money(l.price || 0), PW - MR - 4, y + 10, { align: 'right' })
+      doc.text(money((l.price || 0) * q), PW - MR - 4, y + 10, { align: 'right' })
       y += rowH
     })
 
@@ -325,7 +326,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     doc.setFillColor(245, 245, 245); doc.rect(ML, y, TW, 20, 'F')
     setF('bold', 11, DARK)
     doc.text('TOTAL', ML + cQty + cCode + 4, y + 14)
-    const total = lines.reduce((a, l) => a + (l.price || 0), 0)
+    const total = lines.reduce((a, l) => a + (l.price || 0) * Math.max(1, Math.round(l.qty || 1)), 0)
     doc.text(money(total), PW - MR - 4, y + 14, { align: 'right' })
     y += 26
 

@@ -164,7 +164,7 @@ export function QuotePage() {
       const pricedInput = priceDraftLines(draft?.lineItems || [], draftWt)
       const draftLines = pricedInput.map((l) => {
         const code = String(l.code ?? '')
-        return { key: lineSeq.current++, code, label: String(l.label ?? '') || (code ? codeLabel(code) : ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, added: true }
+        return { key: lineSeq.current++, code, label: String(l.label ?? '') || (code ? codeLabel(code) : ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }
       })
       // Setup inputs from the reader (holes/cables/fab), when it found explicit
       // callouts; otherwise the standard defaults.
@@ -201,7 +201,7 @@ export function QuotePage() {
         if (!alive) return
         if (!r) return setState('notfound')
         setRow(r)
-        setLineItems(lineItemsFromData(r.data).map((l) => ({ key: lineSeq.current++, code: l.code || '', label: l.label, desc: l.desc, price: l.price, added: false })))
+        setLineItems(lineItemsFromData(r.data).map((l) => ({ key: lineSeq.current++, code: l.code || '', label: l.label, desc: l.desc, price: l.price, qty: l.qty || 1, added: false })))
         const tiData = (r.data?.ti || {}) as Record<string, any>
         // Imported (Salesforce) specs/notes arrive as one unformatted blob, often
         // with encoding artifacts. Fix the encoding for every quote; additionally
@@ -358,7 +358,7 @@ export function QuotePage() {
     notifyQuoteApproved({
       opportunity: s(qi.opp) || row?.opportunity || '',
       customer: s(qi.account) || row?.customer || '',
-      total: money(lineItems.reduce((a, l) => a + (l.price || 0), 0)),
+      total: money(lineItems.reduce((a, l) => a + (l.price || 0) * Math.max(1, l.qty || 1), 0)),
       approverName: prettifyEmail(me),
       submitterName: prettifyEmail(approval.submittedBy || ''),
     })
@@ -452,7 +452,7 @@ export function QuotePage() {
   // been converted this session — editing is gated behind Convert-to-picker.
   const needsConversion = isSalesforce && !!(row?.data?.summary?.lines?.length) && !converted
   const applyConversion = (rows: ConvertedLine[]) => {
-    setLineItems(rows.map((l) => ({ key: lineSeq.current++, code: l.code || '', label: l.label, desc: l.desc, price: l.price, added: false })))
+    setLineItems(rows.map((l) => ({ key: lineSeq.current++, code: l.code || '', label: l.label, desc: l.desc, price: l.price, qty: 1, added: false })))
     setConverted(true)
     setConvertWarnOpen(false)
   }
@@ -494,7 +494,7 @@ export function QuotePage() {
       await buildQuotePdf({
         qi: qiEdit,
         ti: tiEdit,
-        lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })),
+        lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })),
         budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup },
         budgetOnly,
       })
@@ -527,7 +527,7 @@ export function QuotePage() {
   }
 
   // Line-item editing
-  const addLineItems = (newLines: PickerLine[]) => setLineItems((cur) => [...cur, ...newLines.map((l) => ({ key: lineSeq.current++, code: l.code, label: l.label, desc: l.desc, price: l.price, added: true }))])
+  const addLineItems = (newLines: PickerLine[]) => setLineItems((cur) => [...cur, ...newLines.map((l) => ({ key: lineSeq.current++, code: l.code, label: l.label, desc: l.desc, price: l.price, qty: 1, added: true }))])
   const updateLine = (key: number, patch: Partial<LineItem>) => setLineItems((cur) => cur.map((l) => (l.key === key ? { ...l, ...patch } : l)))
   const removeLine = (key: number) => setLineItems((cur) => cur.filter((l) => l.key !== key))
   // Drag-to-sort: move the dragged line to the hovered line's position (live).
@@ -553,7 +553,7 @@ export function QuotePage() {
     ti: tiEdit,
     setup: setupEdit,
     budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup },
-    lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })),
+    lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })),
     approval,
     wonApproval,
     wonInfo,
@@ -711,7 +711,7 @@ export function QuotePage() {
     qi: qiEdit,
     ti: tiEdit,
     wonInfo,
-    lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })),
+    lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })),
     budget: { rows: budgetEdit.rows },
     specsText: s(tiEdit.tiSpecs),
     notesText: s(tiEdit.tiNotes),
@@ -721,7 +721,7 @@ export function QuotePage() {
     notifyClosedWon({
       opportunity: s(qiEdit.opp) || '',
       customer: s(qiEdit.account) || '',
-      total: money(lineItems.reduce((a, l) => a + (l.price || 0), 0)),
+      total: money(lineItems.reduce((a, l) => a + (l.price || 0) * Math.max(1, l.qty || 1), 0)),
       wonDate: wonInfo.wonDate || '',
       closedByName: prettifyEmail(me),
       linkUrl: 'https://nuforce.nulabs.com/#dashboard',
@@ -968,7 +968,7 @@ export function QuotePage() {
               contactEmail={s(qi.email) || (Array.isArray(qi.relatedContacts) && qi.relatedContacts[0]?.email) || ''}
               ccEmails={Array.isArray(qi.relatedContacts) ? qi.relatedContacts.map((rc: any) => s(rc?.email)).filter(Boolean) : []}
               testItem={s(ti.item)}
-              pdfInput={{ qi: qiEdit, ti: tiEdit, lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })), budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup } }}
+              pdfInput={{ qi: qiEdit, ti: tiEdit, lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })), budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup } }}
               onClose={() => setSendOpen(false)}
               onSent={() => setSendNonce((n) => n + 1)}
             />

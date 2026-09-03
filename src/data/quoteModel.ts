@@ -13,7 +13,8 @@ export interface DisplayLine {
   label: string // item name, e.g. "Vibration - Setup"
   desc: string // longer description, shown in its own column
   code: string | null
-  price: number
+  price: number // unit price
+  qty: number // quantity (defaults to 1); line amount = price × qty
 }
 
 interface PickerLine {
@@ -21,6 +22,7 @@ interface PickerLine {
   desc?: string
   code?: string
   price?: string | number
+  qty?: string | number
 }
 interface SummaryLine {
   label?: string
@@ -55,6 +57,7 @@ export function lineItemsFromData(data: QuoteData | null | undefined): DisplayLi
       desc: s(l.desc),
       code: l.code || null,
       price: sf(l.price),
+      qty: Math.max(1, Math.round(sf(l.qty, 1))), // default 1; whole-number quantity
     })
   })
 
@@ -68,6 +71,7 @@ export function lineItemsFromData(data: QuoteData | null | undefined): DisplayLi
       desc: s(ov.desc),
       code: l.code || null,
       price: ov.price !== undefined ? sf(ov.price) : sf(l.val),
+      qty: 1, // legacy summary lines have no quantity
     })
   })
 
