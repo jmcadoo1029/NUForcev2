@@ -63,11 +63,23 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
   const contactRows = await restFetchAll<{ email: string | null }>(`contacts?select=email&email=not.is.null&order=email,id`).catch(() => [])
   const existing = new Set<string>()
   contactRows.forEach((x) => { const e = (x.email || '').trim().toLowerCase(); if (e) existing.add(e) })
+  // The bulk list above is only a fast pre-filter — it can miss a real contact (a page
+  // short, or a formatting quirk in the stored email), which would wrongly flag them as
+  // deleted. So VERIFY each candidate against the DB directly (case-insensitive) before
+  // flagging; only addresses with no matching contact at all are true orphans.
+  const candidates = Array.from(new Set(
+    quotes.map((r) => (r.email || '').trim().toLowerCase()).filter((e) => e.includes('@') && !existing.has(e)),
+  ))
+  const reallyMissing = new Set<string>()
+  await Promise.all(candidates.map(async (e) => {
+    const hit = await restFetch<Array<{ email: string }>>('GET', `contacts?select=email&email=ilike.${enc(e)}&limit=1`).catch(() => [])
+    if (!hit || hit.length === 0) reallyMissing.add(e)
+  }))
   const byEmail = new Map<string, BadGroup>()
   for (const r of quotes) {
     const email = (r.email || '').trim()
     const key = email.toLowerCase()
-    if (!email.includes('@') || existing.has(key)) continue
+    if (!email.includes('@') || !reallyMissing.has(key)) continue
     const g = byEmail.get(key) || { email, name: (r.poc || '').trim(), reason: 'orphaned — contact not in your list', quotes: [], account: (r.customer || '').trim(), clientId: (r.clientId || '').trim() }
     if (!g.name && r.poc) g.name = r.poc.trim()
     if (!g.account && r.customer) g.account = r.customer.trim()
