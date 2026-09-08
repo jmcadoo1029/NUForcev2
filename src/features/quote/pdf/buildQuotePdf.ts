@@ -269,8 +269,10 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     y += 4
     const cQty = 28
     const cCode = 36
+    const cUnit = 72
     const cAmt = 90
-    const cDesc = TW - cQty - cCode - cAmt
+    const cDesc = TW - cQty - cCode - cUnit - cAmt
+    const unitX = PW - MR - cAmt - 4 // right edge of the Unit (per-unit price) column, left of Amount
     const drawTblHdr = () => {
       doc.setFillColor(50, 50, 50)
       doc.rect(ML, y, TW, 16, 'F')
@@ -278,6 +280,7 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
       doc.text('Qty', ML + cQty / 2, y + 11, { align: 'center' })
       doc.text('Code', ML + cQty + 4, y + 11)
       doc.text('Description', ML + cQty + cCode + 4, y + 11)
+      doc.text('Unit', unitX, y + 11, { align: 'right' })
       doc.text('Amount', PW - MR - 4, y + 11, { align: 'right' })
       y += 16
     }
@@ -314,8 +317,10 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
         const descBaseY = y + 10 + (nLabel - 1) * 11 + 9
         doc.text(descLines, ML + cQty + cCode + 4, descBaseY)
       }
+      setF('normal', 9, DARK)
+      doc.text(money(l.price || 0), unitX, y + 10, { align: 'right' }) // per-unit price
       setF('bold', 9, DARK)
-      doc.text(money((l.price || 0) * q), PW - MR - 4, y + 10, { align: 'right' })
+      doc.text(money((l.price || 0) * q), PW - MR - 4, y + 10, { align: 'right' }) // extended = unit × qty
       y += rowH
     })
 
