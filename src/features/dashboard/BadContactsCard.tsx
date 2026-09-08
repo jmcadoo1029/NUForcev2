@@ -5,7 +5,7 @@ import { restFetch, restFetchAll } from '../../lib/restFetch'
 import { money } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
-import { updateQuoteContact, resolveBounceFlag, flagContactInvalid } from '../../lib/quoteContact'
+import { updateQuoteContact, resolveBounceFlag, flagContactInvalid, clearContactInvalid } from '../../lib/quoteContact'
 import { searchClients, fetchClientContacts, searchPeople, personName, type PersonRow, type ClientRow } from '../../lib/directory'
 import { Autocomplete } from '../quote/form/Autocomplete'
 
@@ -136,6 +136,24 @@ export function BadContactsCard() {
     }
   }
 
+  // "This address is fine" — clear a stale bad flag (bounced once / transient blip,
+  // but you've since emailed them successfully). Clears email_invalid and drops the
+  // group. Not for orphans (they have no contact row to clear — reassign those).
+  const clearGroup = async (g: BadGroup) => {
+    if (busy) return
+    setBusy(g.email)
+    try {
+      if (!WRITES_ENABLED) { showToast('Preview — writes off, nothing changed.', 'warn', 4000); return }
+      await clearContactInvalid(g.email)
+      setDone((s) => new Set(s).add(g.email))
+      showToast(`Cleared ${g.email} — no longer flagged bad.`, 'success', 5000)
+    } catch (e) {
+      showToast('Couldn’t clear: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const patch = (email: string, p: Partial<Pick>) =>
     setForm((f) => {
       const cur = f[email] || { account: '', clientId: '', name: '', email: '' }
@@ -262,6 +280,9 @@ export function BadContactsCard() {
               <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
               <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
+              {!/orphan/i.test(g.reason) && (
+                <button onClick={() => clearGroup(g)} disabled={busy === g.email} title="This address is reachable — clear the bad flag and remove it from this list" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 10px', cursor: busy === g.email ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{busy === g.email ? '…' : 'Address is fine'}</button>
+              )}
             </div>
 
             <div style={{ marginBottom: 'var(--sp-3)' }}>

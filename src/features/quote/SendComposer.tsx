@@ -8,6 +8,7 @@ import { downloadObject } from '../../lib/storage'
 import { invokeQuoteSend, filesToAttachments, logSentFiles, type OutgoingFile, type SendKind, type QuoteSendResult } from '../../lib/sendQuote'
 import { markQuoteSent, rescheduleFollowUp } from '../../lib/followups'
 import { appendChatter } from '../../lib/quoteActions'
+import { clearContactInvalid } from '../../lib/quoteContact'
 import { getSessionEmail } from '../../lib/auth'
 import type { PdfLine, PdfBudget } from './pdf/buildQuotePdf'
 
@@ -229,6 +230,11 @@ export function SendComposer(props: SendComposerProps) {
         await rescheduleFollowUp(followUpId, me)
       }
       await logSentFiles({ quoteId: qid, followUpId: followUpRowId, revision: revision || null, sentBy: me, files: logFiles })
+
+      // A successful send means these addresses are reachable — clear any stale
+      // "bad contact" flag on them so they stop showing in Bad Contacts. Best-effort;
+      // a genuine bounce afterward re-flags via the webhook.
+      try { await Promise.all(toList.map((e) => clearContactInvalid(e).catch(() => {}))) } catch { /* self-heal is best-effort */ }
 
       // Auto-log the send to the quote's chatter as an activity note (best-effort —
       // never fail the send over a chatter write). For a combined follow-up, note

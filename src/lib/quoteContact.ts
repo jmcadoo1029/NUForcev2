@@ -51,3 +51,16 @@ export async function flagContactInvalid(email: string, reason: string): Promise
     body: { email_invalid: true, email_invalid_at: new Date().toISOString(), email_invalid_reason: reason || 'manually flagged' },
   })
 }
+
+/** Clear a stale "bad address" flag — the address is reachable after all. Sets
+ *  email_invalid back to false (the ONLY thing in the app that does), so a contact
+ *  that bounced once (or a transient blip) doesn't stay flagged forever. Called
+ *  automatically after a successful send, and by the Bad Contacts "clear" action.
+ *  Case-insensitive match; only touches rows currently flagged. Best-effort. */
+export async function clearContactInvalid(email: string): Promise<void> {
+  const e = email.trim()
+  if (!e) return
+  await restFetch('PATCH', `contacts?email=ilike.${enc(e)}&email_invalid=eq.true`, {
+    body: { email_invalid: false, email_invalid_at: null, email_invalid_reason: null },
+  })
+}
