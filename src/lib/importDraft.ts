@@ -49,12 +49,21 @@ export interface DraftSetup {
   drillTap?: boolean
 }
 
+// An internal Budget line (raw cost — the Budget list applies its own markup). The
+// reader emits these for the noise compressor and EMI amp/power-source rentals.
+export interface DraftBudgetRow {
+  desc: string
+  qty?: string
+  unitCost: string
+}
+
 export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
   rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
   quoteNumber?: string // Quote number (e.g. "26-123"), from the quote-folder name → qi.opp
   relatedOpps?: string // Sibling quote numbers from a multi-quote batch → qi.relatedOpps
   setup?: DraftSetup // Setup inputs (holes/cables/fab) for pricing
+  budget?: DraftBudgetRow[] // Internal Budget add-ons (noise compressor, EMI rentals)
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
   notes?: string // Falls back into Notes if testItem.notes is absent
@@ -100,6 +109,14 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
     if (s.techRate != null) out.techRate = String(s.techRate)
     if (s.drillTap != null) out.drillTap = s.drillTap === true || String(s.drillTap).toLowerCase() === 'true'
     if (Object.keys(out).length) draft.setup = out
+  }
+
+  if (Array.isArray(r.budget)) {
+    const rows = (r.budget as unknown[])
+      .filter((b): b is Record<string, unknown> => !!b && typeof b === 'object' && !Array.isArray(b))
+      .map((b) => ({ desc: String(b.desc ?? ''), qty: b.qty != null ? String(b.qty) : '1', unitCost: String(b.unitCost ?? b.unit_cost ?? '0') }))
+      .filter((b) => b.desc.trim() !== '')
+    if (rows.length) draft.budget = rows
   }
 
   if (Array.isArray(r.lineItems)) {

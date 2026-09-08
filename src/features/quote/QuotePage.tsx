@@ -183,7 +183,11 @@ export function QuotePage() {
       setTiEdit({ ...TI_DEFAULTS, ...draftTi })
       setQiEdit({ ...QI_DEFAULTS, date: new Date().toLocaleDateString('en-US'), stage: 'Proposal/Price Quote', ...preQi })
       setSetupEdit(draftSetup)
-      setBudgetEdit({ on: false, rows: [], markup: '25' })
+      // Budget add-ons from the reader (noise compressor, EMI amp/power rentals) come in
+      // as raw-cost rows; the Budget list applies the 25% markup. Turn the Budget on when
+      // there are any.
+      const draftBudgetRows = (draft?.budget || []).map((b) => ({ desc: String(b.desc || ''), qty: String(b.qty || '1'), unitCost: String(b.unitCost || '0') }))
+      setBudgetEdit({ on: draftBudgetRows.length > 0, rows: draftBudgetRows, markup: '25' })
       setApproval({ status: 'none', history: [] })
       setWonApproval({ status: 'none', history: [] })
       setWonInfo({ wonDate: '', jobNum: '', poNum: '' })
