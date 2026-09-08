@@ -49,9 +49,14 @@ export function LineItemsCard({
 }) {
   const [dragKey, setDragKey] = useState<number | null>(null)
   // Two read-only views over ONE set of data: Standard (as today) and Quantity (adds
-  // Qty + Amount columns). Nothing about the data differs — only what's shown.
-  const [qtyView, setQtyView] = useState(false)
+  // Qty + Amount columns). Nothing about the data differs — only what's shown. The view
+  // DEFAULTS to Quantity whenever the quote actually carries quantities (any line qty > 1
+  // — e.g. a high-quantity import writes itself as a quantity quote); once the estimator
+  // clicks the toggle, their choice wins for the rest of the session.
   const qtyOf = (l: LineItem) => Math.max(1, Math.round(l.qty || 1))
+  const dataWantsQty = lineItems.some((l) => qtyOf(l) > 1)
+  const [userView, setUserView] = useState<boolean | null>(null)
+  const qtyView = userView ?? dataWantsQty
   const lineTotal = lineItems.reduce((a, l) => a + l.price * qtyOf(l), 0)
 
   return (
@@ -64,7 +69,7 @@ export function LineItemsCard({
               {([['Standard', false], ['Quantity', true]] as const).map(([lbl, v]) => (
                 <button
                   key={lbl}
-                  onClick={() => setQtyView(v)}
+                  onClick={() => setUserView(v)}
                   style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', cursor: 'pointer', border: 'none', background: qtyView === v ? 'var(--accent)' : '#fff', color: qtyView === v ? '#fff' : 'var(--muted)' }}
                 >{lbl}</button>
               ))}
@@ -133,6 +138,15 @@ export function LineItemsCard({
         </table>
       ) : (
         <div style={{ padding: '0 var(--sp-5) var(--sp-5)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '26px 130px 0.9fr 1.1fr 52px 96px 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '2px 0 6px', paddingLeft: 4, fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>
+            <span />
+            <span>Code</span>
+            <span>Item</span>
+            <span>Description</span>
+            <span style={{ textAlign: 'center' }}>Qty</span>
+            <span style={{ textAlign: 'right' }}>Price</span>
+            <span />
+          </div>
           {lineItems.map((l) => {
             const r = resolveLine(l.code, l.label)
             const dormant = r.status === 'dormant'
