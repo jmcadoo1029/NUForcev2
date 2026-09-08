@@ -43,18 +43,15 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
   // spaces to a normal space. These are invisible in the app's text fields, but jsPDF gives
   // each one a real gap, which is what made a clean-looking "10°C/minute" print as
   // "1 0 ° C / m i n u t e". Operate on COPIES so the caller's state objects are untouched.
-  const ZW = new Set([0x200B, 0x200C, 0x200D, 0x2060, 0xFEFF, 0x00AD]) // zero-width & soft hyphen
-  const clean = (v: unknown): unknown => {
-    if (typeof v !== 'string') return v
-    let out = ''
-    for (const ch of v) {
-      const c = ch.codePointAt(0) as number
-      if (ZW.has(c)) continue // drop invisible glyph-spacers the field can't show
-      if (c === 0x00A0 || (c >= 0x2000 && c <= 0x200A) || c === 0x202F || c === 0x205F || c === 0x3000) { out += ' '; continue } // exotic space -> normal space
-      out += ch
-    }
-    return out
-  }
+  // Char-agnostic: drop EVERY Unicode format char (\p{Cf} — zero-width spaces/joiners, word
+  // joiner, BOM, soft hyphen, bidi marks, invisible separators…) and control char (\p{Cc},
+  // but keep tab/CR/newline), and normalize EVERY Unicode space separator (\p{Zs} — NBSP,
+  // en/em/thin, ideographic…) to a normal space. Whatever invisible glyph-spacer a source
+  // PDF left behind, this catches it.
+  const clean = (v: unknown): unknown =>
+    typeof v === 'string'
+      ? v.replace(/[\p{Cf}\p{Cc}]/gu, (m) => (m === '\n' || m === '\r' || m === '\t' ? m : '')).replace(/\p{Zs}/gu, ' ')
+      : v
   const cleanRec = <T extends Record<string, any>>(o: T): T => {
     const r: Record<string, any> = {}
     for (const k in o) r[k] = clean(o[k])
