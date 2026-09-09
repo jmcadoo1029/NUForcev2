@@ -38,20 +38,34 @@ export interface QuotePdfBytes { blob: Blob; fileName: string; mime: 'applicatio
 type RGB = [number, number, number]
 
 export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false, output = 'save' }: QuotePdfInput): Promise<QuotePdfBytes | void> {
-  // Strip invisible characters some source PDFs/OCR leave between glyphs — zero-width
-  // spaces/joiners (U+200B–U+200D), word joiner, BOM, soft hyphen — and normalize exotic
-  // spaces to a normal space. These are invisible in the app's text fields, but jsPDF gives
-  // each one a real gap, which is what made a clean-looking "10°C/minute" print as
-  // "1 0 ° C / m i n u t e". Operate on COPIES so the caller's state objects are untouched.
-  // Char-agnostic: drop EVERY Unicode format char (\p{Cf} — zero-width spaces/joiners, word
-  // joiner, BOM, soft hyphen, bidi marks, invisible separators…) and control char (\p{Cc},
-  // but keep tab/CR/newline), and normalize EVERY Unicode space separator (\p{Zs} — NBSP,
-  // en/em/thin, ideographic…) to a normal space. Whatever invisible glyph-spacer a source
-  // PDF left behind, this catches it.
-  const clean = (v: unknown): unknown =>
-    typeof v === 'string'
-      ? v.replace(/[\p{Cf}\p{Cc}]/gu, (m) => (m === '\n' || m === '\r' || m === '\t' ? m : '')).replace(/\p{Zs}/gu, ' ')
-      : v
+  // jsPDF's standard font can only draw Windows-1252 characters. ANY other character
+  // (a zero-width space, a Hangul filler, a stray CJK glyph a source PDF/OCR wedged between
+  // letters, etc.) is drawn as a blank ".notdef" glyph WITH WIDTH — which is exactly what
+  // made a clean-looking "10°C/minute" print as "1 0 ° C / m i n u t e". So the reliable fix
+  // is a whitelist: keep only characters the font can actually render, normalize any Unicode
+  // space to a plain space, and drop everything else. This catches the offending character
+  // no matter which one it is (it doesn't have to be an "invisible"/format char). Keeps °,
+  // ±, ², the en/em dash, smart quotes, bullet, ™, €… (all Windows-1252). Operate on COPIES
+  // so the caller's state objects are untouched.
+  const CP1252_EXTRA = new Set([
+    0x20AC, 0x201A, 0x0192, 0x201E, 0x2026, 0x2020, 0x2021, 0x02C6, 0x2030, 0x0160, 0x2039,
+    0x0152, 0x017D, 0x2018, 0x2019, 0x201C, 0x201D, 0x2022, 0x2013, 0x2014, 0x02DC, 0x2122,
+    0x0161, 0x203A, 0x0153, 0x017E, 0x0178,
+  ]) // the 0x80–0x9F Windows-1252 punctuation/symbols mapped to their Unicode code points
+  const UNI_SPACE = new Set([0xA0, 0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200A, 0x202F, 0x205F, 0x3000])
+  const clean = (v: unknown): unknown => {
+    if (typeof v !== 'string') return v
+    let out = ''
+    for (const ch of v) {
+      const cp = ch.codePointAt(0) as number
+      if (cp === 0x0A || cp === 0x0D || cp === 0x09) { out += ch; continue } // keep newlines/tabs
+      if (UNI_SPACE.has(cp)) { out += ' '; continue }                        // any unicode space -> plain space
+      if (cp === 0xAD) continue                                              // soft hyphen -> drop
+      if ((cp >= 0x20 && cp <= 0x7E) || (cp >= 0xA1 && cp <= 0xFF) || CP1252_EXTRA.has(cp)) out += ch
+      // anything else can't be drawn by the font -> would print as a spacing box -> drop it
+    }
+    return out
+  }
   const cleanRec = <T extends Record<string, any>>(o: T): T => {
     const r: Record<string, any> = {}
     for (const k in o) r[k] = clean(o[k])
