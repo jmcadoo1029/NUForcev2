@@ -292,20 +292,26 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     // ── PRICING SUMMARY ────────────────────────────────────────────────────────
     sectionHdr('Pricing Summary')
     y += 4
-    const cQty = 28
+    // A "quantity quote" carries a real quantity on at least one line — it gets the Qty
+    // and Unit (per-unit price) columns with Amount = unit × qty. A normal quote (all qty 1)
+    // renders the classic Code | Description | Amount table exactly as it did before.
+    const isQty = lines.some((l) => Math.max(1, Math.round(l.qty || 1)) > 1)
     const cCode = 36
-    const cUnit = 72
     const cAmt = 90
+    const cQty = isQty ? 28 : 0
+    const cUnit = isQty ? 72 : 0
     const cDesc = TW - cQty - cCode - cUnit - cAmt
-    const unitX = PW - MR - cAmt - 4 // right edge of the Unit (per-unit price) column, left of Amount
+    const codeX = ML + cQty          // left edge of the Code column
+    const descX = ML + cQty + cCode + 4
+    const unitX = PW - MR - cAmt - 4 // right edge of the Unit column (quantity layout only)
     const drawTblHdr = () => {
       doc.setFillColor(50, 50, 50)
       doc.rect(ML, y, TW, 16, 'F')
       setF('bold', 8.5, [255, 255, 255])
-      doc.text('Qty', ML + cQty / 2, y + 11, { align: 'center' })
-      doc.text('Code', ML + cQty + 4, y + 11)
-      doc.text('Description', ML + cQty + cCode + 4, y + 11)
-      doc.text('Unit', unitX, y + 11, { align: 'right' })
+      if (isQty) doc.text('Qty', ML + cQty / 2, y + 11, { align: 'center' })
+      doc.text('Code', codeX + 4, y + 11)
+      doc.text('Description', descX, y + 11)
+      if (isQty) doc.text('Unit', unitX, y + 11, { align: 'right' })
       doc.text('Amount', PW - MR - 4, y + 11, { align: 'right' })
       y += 16
     }
@@ -332,20 +338,19 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
       doc.setFillColor(...bg)
       doc.rect(ML, y, TW, rowH, 'F')
       const q = Math.max(1, Math.round(l.qty || 1))
+      if (isQty) { setF('normal', 9, DARK); doc.text(String(q), ML + cQty / 2, y + 10, { align: 'center' }) }
+      if (l.code) { setF('normal', 8, MUTED); doc.text(String(l.code), codeX + 4, y + 10) }
       setF('normal', 9, DARK)
-      doc.text(String(q), ML + cQty / 2, y + 10, { align: 'center' })
-      if (l.code) { setF('normal', 8, MUTED); doc.text(String(l.code), ML + cQty + 4, y + 10) }
-      setF('normal', 9, DARK)
-      doc.text(labelLines, ML + cQty + cCode + 4, y + 10)
+      doc.text(labelLines, descX, y + 10)
       if (nDesc) {
         setF('italic', 7.5, [130, 130, 130])
         const descBaseY = y + 10 + (nLabel - 1) * 11 + 9
-        doc.text(descLines, ML + cQty + cCode + 4, descBaseY)
+        doc.text(descLines, descX, descBaseY)
       }
-      setF('normal', 9, DARK)
-      doc.text(money(l.price || 0), unitX, y + 10, { align: 'right' }) // per-unit price
+      if (isQty) { setF('normal', 9, DARK); doc.text(money(l.price || 0), unitX, y + 10, { align: 'right' }) } // per-unit price
       setF('bold', 9, DARK)
-      doc.text(money((l.price || 0) * q), PW - MR - 4, y + 10, { align: 'right' }) // extended = unit × qty
+      // Standard quote: Amount is the unit price. Quantity quote: Amount = unit × qty.
+      doc.text(money((l.price || 0) * (isQty ? q : 1)), PW - MR - 4, y + 10, { align: 'right' })
       y += rowH
     })
 
@@ -355,8 +360,8 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
     doc.setDrawColor(...RED); doc.setLineWidth(1); doc.line(ML, y, PW - MR, y); y += 1
     doc.setFillColor(245, 245, 245); doc.rect(ML, y, TW, 20, 'F')
     setF('bold', 11, DARK)
-    doc.text('TOTAL', ML + cQty + cCode + 4, y + 14)
-    const total = lines.reduce((a, l) => a + (l.price || 0) * Math.max(1, Math.round(l.qty || 1)), 0)
+    doc.text('TOTAL', descX, y + 14)
+    const total = lines.reduce((a, l) => a + (l.price || 0) * (isQty ? Math.max(1, Math.round(l.qty || 1)) : 1), 0)
     doc.text(money(total), PW - MR - 4, y + 14, { align: 'right' })
     y += 26
 
