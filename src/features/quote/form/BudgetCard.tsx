@@ -66,8 +66,8 @@ export function BudgetCard({
                 disabled={saving}
                 onClick={async () => {
                   if (budgetEditing) {
-                    if (onLocalSave) await onLocalSave() // persist the change to the quote
-                    setBudgetEditing(false)
+                    const ok = onLocalSave ? await onLocalSave() : true // persist the change
+                    if (ok !== false) setBudgetEditing(false) // keep open if the save was blocked
                   } else {
                     setBudgetEditing(true)
                   }

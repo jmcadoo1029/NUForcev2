@@ -76,6 +76,7 @@ export function QuotePage() {
   // Line items can be edited on their own, without the whole form being in edit mode.
   const [lineEditing, setLineEditing] = useState(false)
   const [localSaving, setLocalSaving] = useState(false)
+  const [linkWarnOpen, setLinkWarnOpen] = useState(false)
   // Catalog items handed from the calculator to the picker (pre-checked with the
   // suggested price). Null when the picker is opened directly.
   const [pickerSeed, setPickerSeed] = useState<CalcSelection[] | null>(null)
@@ -620,6 +621,9 @@ export function QuotePage() {
   const onSave = () => {
     if (!row) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    // Account-link safeguard: block the save if the quote isn't linked to an account
+    // (client_id). Stops unlinked quotes — the common cloned-quote mistake.
+    if (!ensureAccountLinked()) return
     // Hard safeguard: an imported quote whose legacy lines haven't been converted to
     // picker lines would be saved with NO line items (the save drops the legacy
     // format). Block it — convert first (Convert to picker) so the lines survive.
@@ -711,12 +715,23 @@ export function QuotePage() {
     return newId
   }
 
+  // Safeguard: a quote must be LINKED to an account (client_id — set by PICKING the account
+  // from the list, not just typing the name) before it can be saved. Typing a name leaves
+  // client_id empty, which is how cloned/edited quotes slip through unlinked. Returns true
+  // when linked; otherwise pops the "link it first" modal and returns false.
+  const ensureAccountLinked = (): boolean => {
+    if (s(qiEdit.client_id).trim()) return true
+    setLinkWarnOpen(true)
+    return false
+  }
+
   // A "Save" on a card's LOCAL editor (line items / budget) while the form is in view mode:
   // persist the whole quote straight to the database, so the change sticks with one click —
   // no need to scroll up, enter form-edit mode, and Save again. Overwrites in place (no
   // revision-change prompt); returns whether it saved.
   const saveLocalEdit = async (): Promise<boolean> => {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return false }
+    if (!ensureAccountLinked()) return false
     setLocalSaving(true)
     try {
       const id = await saveQuietly()
@@ -731,7 +746,7 @@ export function QuotePage() {
 
   // Line-items card Edit/Save toggle: Edit reveals the inline editor; Save persists, then closes it.
   const toggleLineEditing = async () => {
-    if (lineEditing) { await saveLocalEdit(); setLineEditing(false) } else { setLineEditing(true) }
+    if (lineEditing) { const ok = await saveLocalEdit(); if (ok) setLineEditing(false) } else { setLineEditing(true) }
   }
 
   const buildWsSource = (quoteId: string): ProjectSourceInput => ({
@@ -938,6 +953,20 @@ export function QuotePage() {
                 <Button variant="ghost" small disabled={saveBusy} onClick={() => setRevDecision(null)}>Cancel</Button>
                 <Button variant="secondary" small disabled={saveBusy} onClick={() => persist()}>{saveBusy ? 'Saving…' : 'Overwrite'}</Button>
                 <Button variant="primary" small disabled={saveBusy} onClick={() => persist({ forceInsert: true })}>{saveBusy ? 'Saving…' : 'Save as new revision'}</Button>
+              </div>
+            </Modal>
+          )}
+
+          {linkWarnOpen && (
+            <Modal title="Link the account first" onClose={() => setLinkWarnOpen(false)} width={440}>
+              <div style={{ fontSize: 'var(--fs-base)', color: 'var(--text)', lineHeight: 1.6, marginBottom: 'var(--sp-4)' }}>
+                This quote isn’t linked to an account, so it can’t be saved yet.
+                <div style={{ color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>
+                  In <b>Quote info</b>, <b>pick the account from the list</b> so it links to the client record — typing the name alone doesn’t link it — then save again.
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button variant="primary" small onClick={() => setLinkWarnOpen(false)}>Go back</Button>
               </div>
             </Modal>
           )}
