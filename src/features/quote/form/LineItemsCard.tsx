@@ -32,11 +32,13 @@ export function LineItemsCard({
   onOpenPicker,
   needsConversion = false,
   onConvert,
+  savingLocal = false,
 }: {
   lineItems: LineItem[]
   editing: boolean
   lineEditing: boolean
   locked: boolean
+  // Toggling OFF (Save) persists the change to the quote — see QuotePage.
   onToggleLineEditing: () => void
   onUpdateLine: (key: number, patch: Partial<LineItem>) => void
   onRemoveLine: (key: number) => void
@@ -46,6 +48,7 @@ export function LineItemsCard({
   // Unconverted Salesforce import: editing is blocked until Convert-to-picker runs.
   needsConversion?: boolean
   onConvert?: () => void
+  savingLocal?: boolean
 }) {
   const [dragKey, setDragKey] = useState<number | null>(null)
   // Two read-only views over ONE set of data: Standard (as today) and Quantity (adds
@@ -86,7 +89,7 @@ export function LineItemsCard({
             <>
               <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenCalc}>Pricing Calculator</Button>
               <Button variant="secondary" small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onOpenPicker}>+ Add line items</Button>
-              {!editing && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{lineEditing ? 'Save' : 'Edit'}</Button>}
+              {!editing && <Button variant={lineEditing ? 'primary' : 'secondary'} small disabled={needsConversion || savingLocal} title={needsConversion ? 'Convert this imported quote to picker line items first' : undefined} onClick={onToggleLineEditing}>{savingLocal ? 'Saving…' : lineEditing ? 'Save' : 'Edit'}</Button>}
             </>
           )}
         </div>

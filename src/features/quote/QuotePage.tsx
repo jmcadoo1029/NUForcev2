@@ -75,6 +75,7 @@ export function QuotePage() {
   const [converted, setConverted] = useState(false)
   // Line items can be edited on their own, without the whole form being in edit mode.
   const [lineEditing, setLineEditing] = useState(false)
+  const [localSaving, setLocalSaving] = useState(false)
   // Catalog items handed from the calculator to the picker (pre-checked with the
   // suggested price). Null when the picker is opened directly.
   const [pickerSeed, setPickerSeed] = useState<CalcSelection[] | null>(null)
@@ -710,6 +711,29 @@ export function QuotePage() {
     return newId
   }
 
+  // A "Save" on a card's LOCAL editor (line items / budget) while the form is in view mode:
+  // persist the whole quote straight to the database, so the change sticks with one click —
+  // no need to scroll up, enter form-edit mode, and Save again. Overwrites in place (no
+  // revision-change prompt); returns whether it saved.
+  const saveLocalEdit = async (): Promise<boolean> => {
+    if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return false }
+    setLocalSaving(true)
+    try {
+      const id = await saveQuietly()
+      if (id) { showToast('Saved', 'success'); return true }
+      showToast('Couldn’t save — try Edit at the top.', 'error', 6000); return false
+    } catch (e) {
+      showToast('Couldn’t save: ' + errMsg(e), 'error', 6000); return false
+    } finally {
+      setLocalSaving(false)
+    }
+  }
+
+  // Line-items card Edit/Save toggle: Edit reveals the inline editor; Save persists, then closes it.
+  const toggleLineEditing = async () => {
+    if (lineEditing) { await saveLocalEdit(); setLineEditing(false) } else { setLineEditing(true) }
+  }
+
   const buildWsSource = (quoteId: string): ProjectSourceInput => ({
     quoteId,
     qi: qiEdit,
@@ -1051,7 +1075,8 @@ export function QuotePage() {
             editing={editing}
             lineEditing={lineEditing}
             locked={locked}
-            onToggleLineEditing={() => setLineEditing((e) => !e)}
+            onToggleLineEditing={toggleLineEditing}
+            savingLocal={localSaving}
             onUpdateLine={updateLine}
             onRemoveLine={removeLine}
             onReorder={reorderTo}
@@ -1069,6 +1094,8 @@ export function QuotePage() {
             onUpd={budgetUpd}
             onAdd={budgetAdd}
             onRem={budgetRem}
+            onLocalSave={saveLocalEdit}
+            saving={localSaving}
           />
           {calcOpen && (
             <PricingCalculator

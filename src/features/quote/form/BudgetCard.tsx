@@ -18,6 +18,8 @@ export function BudgetCard({
   onUpd,
   onAdd,
   onRem,
+  onLocalSave,
+  saving = false,
 }: {
   editing: boolean
   locked?: boolean
@@ -26,6 +28,10 @@ export function BudgetCard({
   onUpd: (i: number, k: keyof BudgetRow, v: string) => void
   onAdd: () => void
   onRem: (i: number) => void
+  // Persist a local (view-mode) budget edit. When present, the card's Save button writes
+  // the change to the quote directly, so there's no need for the form's top Save.
+  onLocalSave?: () => void | Promise<unknown>
+  saving?: boolean
 }) {
   // Local edit toggle: independent of the form-wide `editing`. When either is on the
   // card shows its editable grid + Add button.
@@ -54,7 +60,19 @@ export function BudgetCard({
             locked ? (
               <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Locked — reopen the quote to edit</span>
             ) : (
-              <Button variant={budgetEditing ? 'primary' : 'secondary'} small onClick={() => setBudgetEditing((e) => !e)}>{budgetEditing ? 'Save' : 'Edit'}</Button>
+              <Button
+                variant={budgetEditing ? 'primary' : 'secondary'}
+                small
+                disabled={saving}
+                onClick={async () => {
+                  if (budgetEditing) {
+                    if (onLocalSave) await onLocalSave() // persist the change to the quote
+                    setBudgetEditing(false)
+                  } else {
+                    setBudgetEditing(true)
+                  }
+                }}
+              >{saving ? 'Saving…' : budgetEditing ? 'Save' : 'Edit'}</Button>
             )
           )}
         </div>
