@@ -28,7 +28,8 @@ interface RevRow {
   opportunity?: string | null
   revision?: string | null
   total?: number | null
-  data?: { approval?: { decidedAt?: string } }
+  created_at?: string | null
+  stage?: string | null
 }
 interface LookupRow {
   opportunity: string
@@ -90,19 +91,21 @@ async function load(): Promise<MonthPoint[]> {
     })
   })
 
-  // 2) Revision deltas: approved revs, assigned to their decided month.
+  // 2) Revision deltas: revisions SAVED in the window (net change vs the prior revision),
+  //    on active (non-lost) quotes, assigned to the month they were saved — regardless of
+  //    when the original was created, and counted on save (not approval). A revision whose
+  //    original was created that same month is skipped (its latest total is already in newTotal).
   try {
-    const approvedRevs =
+    const revs =
       (await restFetch<RevRow[]>(
         'GET',
-        `quotes?select=id,opportunity,revision,total,data&approval_status=eq.approved&revision=not.is.null&revision=neq.`,
+        `quotes?select=id,opportunity,revision,total,created_at,stage&revision=not.is.null&revision=neq.`,
       )) || []
     const rangeStart = months[0].startMs
     const rangeEnd = months[months.length - 1].endMs
-    const revsHere = approvedRevs.filter((r) => {
-      const d = r.data?.approval?.decidedAt
-      if (!d) return false
-      const t = new Date(d).getTime()
+    const revsHere = revs.filter((r) => {
+      if (String(r.stage || '') === 'Closed Lost') return false // active quoting only
+      const t = new Date(r.created_at || '').getTime()
       return !isNaN(t) && t >= rangeStart && t < rangeEnd
     })
     if (revsHere.length > 0) {
@@ -128,7 +131,7 @@ async function load(): Promise<MonthPoint[]> {
         byOpp[p.opportunity] = p
       })
       revsHere.forEach((r) => {
-        const t = new Date(r.data!.approval!.decidedAt as string).getTime()
+        const t = new Date(r.created_at || '').getTime()
         const b = months.find((mm) => t >= mm.startMs && t < mm.endMs)
         if (!b) return
         const priorOpp = priorRevOppOf(r.opportunity, r.revision)

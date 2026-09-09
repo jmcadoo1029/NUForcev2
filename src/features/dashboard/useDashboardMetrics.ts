@@ -8,8 +8,9 @@ import { baseOpp, revRank } from '../../lib/opp'
 //                 this month (a family with only a revision this month doesn't
 //                 add to the count).
 //   • Net quoted = newTotal + monthRevDelta — new families' latest totals, plus
-//                 only the *delta* of revisions approved this month for
-//                 prior-month families (not their full value).
+//                 only the *delta* of revisions SAVED this month (vs the prior
+//                 revision) on active/non-lost, prior-month families — so a
+//                 correction you make this month lands this month.
 //   • Avg quote = newTotal / newCount.
 
 export interface WonQuote {
@@ -40,6 +41,7 @@ interface Row {
   total?: number | null
   created_at?: string | null
   won_date?: string | null
+  stage?: string | null
   data?: {
     qi?: { type?: string }
     wonInfo?: { wonDate?: string }
@@ -109,17 +111,20 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
     }
   })
 
-  // ── Revision delta: revs approved this month whose family originated in a prior month ──
+  // ── Revision delta: revisions SAVED this month (net change vs the prior revision), on
+  // active (non-lost) quotes, regardless of when the original was created. Counted on save
+  // (not on approval) so a correction you make this month lands this month. A revision whose
+  // ORIGINAL was also created this month is skipped — its latest total is already in newTotal
+  // above, so adding the delta too would double-count. ──
   let monthRevDelta = 0
   try {
-    const approvedRevs = await restFetch<Row[]>(
+    const revs = await restFetch<Row[]>(
       'GET',
-      `quotes?select=id,opportunity,revision,total,data&approval_status=eq.approved&revision=not.is.null&revision=neq.`,
+      `quotes?select=id,opportunity,revision,total,created_at,stage&revision=not.is.null&revision=neq.`,
     )
-    const revsHere = (approvedRevs || []).filter((r) => {
-      const d = r.data?.approval?.decidedAt
-      if (!d) return false
-      const t = new Date(d).getTime()
+    const revsHere = (revs || []).filter((r) => {
+      if (String(r.stage || '') === 'Closed Lost') return false // active quoting only
+      const t = new Date(r.created_at || '').getTime()
       return !isNaN(t) && t >= ms && t < me
     })
     if (revsHere.length > 0) {
