@@ -1,4 +1,5 @@
-import { Card, CardLabel } from '../../../components'
+import { useState } from 'react'
+import { Card, CardLabel, Button } from '../../../components'
 import { money, sf, str } from '../../../lib/format'
 import type { BudgetRow } from '../../../data/quoteDefaults'
 import { budgetRowMarkedUp, budgetHardTotal, budgetMarkedUpTotal } from '../../../data/budget'
@@ -6,9 +7,12 @@ import { regInput } from './fields'
 
 // Budget materials — internal materials tracking (not added to the quote total).
 // Marked-up figures always round up to the nearest $5 (see data/budget). Shows
-// only when editing or there are rows.
+// only when editing or there are rows. A local Edit/Save toggle (mirroring the line
+// items card) lets you add or tweak a budget row in place, without putting the whole
+// quote form into edit mode / scrolling to the top.
 export function BudgetCard({
   editing,
+  locked = false,
   budget,
   onMarkupChange,
   onUpd,
@@ -16,13 +20,18 @@ export function BudgetCard({
   onRem,
 }: {
   editing: boolean
+  locked?: boolean
   budget: { on: boolean; rows: BudgetRow[]; markup: string }
   onMarkupChange: (v: string) => void
   onUpd: (i: number, k: keyof BudgetRow, v: string) => void
   onAdd: () => void
   onRem: (i: number) => void
 }) {
-  if (!editing && budget.rows.length === 0) return null
+  // Local edit toggle: independent of the form-wide `editing`. When either is on the
+  // card shows its editable grid + Add button.
+  const [budgetEditing, setBudgetEditing] = useState(false)
+  const edit = editing || budgetEditing
+  if (!edit && budget.rows.length === 0) return null
   const s = str
   const mp = sf(budget.markup, 25) / 100
   const hard = budgetHardTotal(budget.rows)
@@ -32,27 +41,38 @@ export function BudgetCard({
     <Card style={{ marginBottom: 'var(--sp-4)', marginTop: 'var(--sp-4)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 'var(--sp-3)', marginBottom: 'var(--sp-2)' }}>
         <CardLabel>Budget materials</CardLabel>
-        {editing && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>Markup %</span>
-            <input value={s(budget.markup)} onChange={(e) => onMarkupChange(e.target.value)} inputMode="decimal" style={{ ...regInput, width: 70, textAlign: 'right' }} />
-          </div>
-        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {edit && (
+            <>
+              <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>Markup %</span>
+              <input value={s(budget.markup)} onChange={(e) => onMarkupChange(e.target.value)} inputMode="decimal" style={{ ...regInput, width: 70, textAlign: 'right' }} />
+            </>
+          )}
+          {/* Local Edit/Save toggle — hidden while the whole form is already in edit mode
+              (then the form's own Save governs), and on a locked quote. */}
+          {!editing && (
+            locked ? (
+              <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Locked — reopen the quote to edit</span>
+            ) : (
+              <Button variant={budgetEditing ? 'primary' : 'secondary'} small onClick={() => setBudgetEditing((e) => !e)}>{budgetEditing ? 'Save' : 'Edit'}</Button>
+            )
+          )}
+        </div>
       </div>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>Internal materials tracking — not added to the quote total. Markup applies here only.</div>
 
       {budget.rows.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: editing ? '1fr 70px 96px 96px 26px' : '1fr 70px 96px 96px', gap: 'var(--sp-2)', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '0 2px 6px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: edit ? '1fr 70px 96px 96px 26px' : '1fr 70px 96px 96px', gap: 'var(--sp-2)', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '0 2px 6px' }}>
           <div>Description</div>
           <div style={{ textAlign: 'right' }}>Qty</div>
           <div style={{ textAlign: 'right' }}>Unit cost</div>
           <div style={{ textAlign: 'right' }}>Marked up</div>
-          {editing && <div />}
+          {edit && <div />}
         </div>
       )}
       {budget.rows.map((r, i) => {
         const markedUp = budgetRowMarkedUp(r, mp)
-        return editing ? (
+        return edit ? (
           <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 70px 96px 96px 26px', gap: 'var(--sp-2)', alignItems: 'center', marginBottom: 6 }}>
             <input value={r.desc} onChange={(e) => onUpd(i, 'desc', e.target.value)} placeholder="Material / item" style={regInput} />
             <input value={r.qty} onChange={(e) => onUpd(i, 'qty', e.target.value)} inputMode="decimal" style={{ ...regInput, textAlign: 'right' }} />
@@ -69,7 +89,7 @@ export function BudgetCard({
           </div>
         )
       })}
-      {editing && (
+      {edit && (
         <button onClick={onAdd} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--accent)', background: 'none', border: '1px dashed var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '7px 14px', cursor: 'pointer', marginTop: 'var(--sp-2)' }}>+ Add material</button>
       )}
       {hard > 0 && (

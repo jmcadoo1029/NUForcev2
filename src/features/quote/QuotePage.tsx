@@ -1063,6 +1063,7 @@ export function QuotePage() {
 
           <BudgetCard
             editing={editing}
+            locked={locked}
             budget={budgetEdit}
             onMarkupChange={(v) => setBudgetEdit((b) => ({ ...b, markup: v }))}
             onUpd={budgetUpd}
