@@ -4,7 +4,7 @@ import { money, moneyShort, fmtDate } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { sendMassEmail } from '../../lib/massEmail'
 import { fetchTemplate, DEFAULT_TEMPLATES } from '../../lib/emailTemplates'
-import { flagContactInvalid } from '../../lib/quoteContact'
+import { flagContactInvalid, clearContactInvalid } from '../../lib/quoteContact'
 import { getSessionEmail } from '../../lib/auth'
 import { useDormantContacts, type DormantRow } from './useDormantContacts'
 
@@ -81,19 +81,21 @@ export function ReEngageContacts() {
   const [sort, setSort] = useState<'value' | 'dormant'>('value')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [composeOpen, setComposeOpen] = useState(false)
-  const [hidden, setHidden] = useState<Set<string>>(new Set()) // emails flagged bad this session — dropped immediately
+  const [flagged, setFlagged] = useState<DormantRow[]>([]) // flagged bad this session — hidden from the list, shown in the undo strip (newest first)
   const [flagging, setFlagging] = useState<string | null>(null)
+  const [unflagging, setUnflagging] = useState<string | null>(null)
+  const flaggedSet = useMemo(() => new Set(flagged.map((r) => r.email)), [flagged])
 
   const cutoff = useMemo(() => { const d = new Date(); d.setMonth(d.getMonth() - months); return d.getTime() }, [months])
   const dormant = useMemo(() => {
-    const list = (data || []).filter((r) => r.lastMs < cutoff && !hidden.has(r.email))
+    const list = (data || []).filter((r) => r.lastMs < cutoff && !flaggedSet.has(r.email))
     list.sort((a, b) => (sort === 'value' ? b.totalQuoted - a.totalQuoted : a.lastMs - b.lastMs))
     return list
-  }, [data, cutoff, sort, hidden])
+  }, [data, cutoff, sort, flaggedSet])
 
   // Flag a contact as bad right from the list: marks the address invalid (same flag
   // Bad contacts uses), drops them here, and pulls their quotes into Bad contacts to
-  // reassign. Reversible there via "Address is fine".
+  // reassign. Also parks them in the undo strip so it's one click to reverse.
   const flagBad = async (r: DormantRow) => {
     if (flagging) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
@@ -101,12 +103,27 @@ export function ReEngageContacts() {
     try {
       const me = getSessionEmail()
       await flagContactInvalid(r.email, `flagged from re-engage${me ? ' by ' + me : ''}`)
-      setHidden((s) => new Set(s).add(r.email))
+      setFlagged((f) => [r, ...f.filter((x) => x.email !== r.email)])
       setSel((s) => { const n = new Set(s); n.delete(r.email); return n })
-      showToast(`${r.name || r.email} flagged as a bad contact — moved to Bad contacts.`, 'success', 6000)
+      showToast(`${r.name || r.email} flagged as a bad contact — moved to Bad contacts. Undo above.`, 'success', 6000)
     } catch (e) {
       showToast('Couldn’t flag: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
     } finally { setFlagging(null) }
+  }
+
+  // Undo a flag from this session: clears the bad-address flag (same as Bad contacts'
+  // "Address is fine") and returns the contact to the list.
+  const undoFlag = async (r: DormantRow) => {
+    if (unflagging) return
+    if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    setUnflagging(r.email)
+    try {
+      await clearContactInvalid(r.email)
+      setFlagged((f) => f.filter((x) => x.email !== r.email))
+      showToast(`Restored ${r.name || r.email}.`, 'info', 4000)
+    } catch (e) {
+      showToast('Couldn’t undo: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
+    } finally { setUnflagging(null) }
   }
 
   const totalValue = dormant.reduce((a, r) => a + r.totalQuoted, 0)
@@ -127,6 +144,18 @@ export function ReEngageContacts() {
         </div>
         <Button variant="primary" small disabled={selected.length === 0} onClick={() => setComposeOpen(true)}>Email selected ({selected.length})</Button>
       </div>
+
+      {flagged.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', background: 'var(--accent-soft)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', marginBottom: 'var(--sp-3)' }}>
+          <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)' }}>Flagged this session</span>
+          {flagged.map((r) => (
+            <span key={r.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 4px 2px 10px' }}>
+              <span style={{ color: 'var(--text)' }}>{r.name || r.email}</span>
+              <button onClick={() => undoFlag(r)} disabled={unflagging === r.email} title={`Undo — restore ${r.email}`} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: unflagging === r.email ? 'default' : 'pointer', padding: '2px 6px' }}>{unflagging === r.email ? '…' : 'Undo'}</button>
+            </span>
+          ))}
+        </div>
+      )}
 
       {!loading && !err && (
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
