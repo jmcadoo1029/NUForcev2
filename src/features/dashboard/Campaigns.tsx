@@ -12,7 +12,18 @@ import {
 // Campaigns manager: pick a campaign and see its contacts; create/delete
 // campaigns and add/remove contacts (ported from Classic). Writes gate on
 // WRITES_ENABLED.
+//
+// `Campaigns` is the modal wrapper (used by the Home launcher); `CampaignsPanel` is
+// the body, rendered inline as a Customer Contact sub-tab. They share all logic.
 export function Campaigns({ onClose }: { onClose: () => void }) {
+  return (
+    <Modal title="Campaigns" onClose={onClose} width={820}>
+      <CampaignsPanel onNavigate={onClose} />
+    </Modal>
+  )
+}
+
+export function CampaignsPanel({ onNavigate }: { onNavigate?: () => void }) {
   const { showToast } = useToast()
   const [list, setList] = useState<Campaign[] | null>(null)
   const [err, setErr] = useState('')
@@ -127,7 +138,7 @@ export function Campaigns({ onClose }: { onClose: () => void }) {
   const quotesFor = (acct: string) => (quotes || []).filter((q) => { const c = (q.customer || '').toLowerCase(); const n = acct.toLowerCase(); return !!n && (c.includes(n) || n.includes(c)) })
 
   return (
-    <Modal title="Campaigns" onClose={onClose} width={820}>
+    <>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 'var(--sp-4)' }}>
         <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>{list ? `${list.length} campaign${list.length === 1 ? '' : 's'}` : ''}</span>
         {!showNew && <Button variant="secondary" small onClick={() => setShowNew(true)}>+ New campaign</Button>}
@@ -220,7 +231,7 @@ export function Campaigns({ onClose }: { onClose: () => void }) {
                         {qs.length === 0 ? (
                           <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 4 }}>No quotes found for this account.</div>
                         ) : qs.map((q) => (
-                          <Link key={q.id} to={`/quote/${q.id}`} onClick={onClose} style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'baseline', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
+                          <Link key={q.id} to={`/quote/${q.id}`} onClick={onNavigate} style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'baseline', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
                             <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity || '—'}</span>
                             <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.stage || ''}</span>
                             <span style={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{money(q.total || 0)}</span>
@@ -235,6 +246,6 @@ export function Campaigns({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       )}
-    </Modal>
+    </>
   )
 }

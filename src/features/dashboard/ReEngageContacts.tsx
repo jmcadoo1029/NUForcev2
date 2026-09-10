@@ -4,6 +4,8 @@ import { money, moneyShort, fmtDate } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { sendMassEmail } from '../../lib/massEmail'
 import { fetchTemplate, DEFAULT_TEMPLATES } from '../../lib/emailTemplates'
+import { flagContactInvalid } from '../../lib/quoteContact'
+import { getSessionEmail } from '../../lib/auth'
 import { useDormantContacts, type DormantRow } from './useDormantContacts'
 
 // Re-engage — contacts we quoted in the past who've gone quiet. Pick a dormancy
@@ -20,6 +22,7 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: '
 const th: CSSProperties = { textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', padding: '8px 10px', whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '8px 10px', borderTop: '1px solid var(--border)', fontSize: 'var(--fs-sm)', verticalAlign: 'top' }
 const numTd: CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
+const flagBtn: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, lineHeight: 1, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }
 
 const monthsAgo = (ms: number) => Math.max(0, Math.round((Date.now() - ms) / (30 * 864e5)))
 
@@ -57,7 +60,7 @@ function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[
   return (
     <Modal title={`Re-engage ${recipients.length} contact${recipients.length === 1 ? '' : 's'}`} onClose={() => !busy && onClose()} width={640}>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
-        Each person gets an individual send (nobody sees another address). <b style={{ color: 'var(--text)' }}>{'{first name}'}</b> is filled per recipient — replace <b style={{ color: 'var(--text)' }}>[Your Name]</b> before sending.
+        Each person gets an individual send (nobody sees another address). <b style={{ color: 'var(--text)' }}>{'{first name}'}</b> is filled per recipient — replace <b style={{ color: 'var(--text)' }}>[Your Name]</b> and <b style={{ color: 'var(--text)' }}>[your email]</b> in the signature before sending.
       </div>
       <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Subject</label>
       <input value={subject} onChange={(e) => setSubject(e.target.value)} style={{ ...inputStyle, margin: '4px 0 12px' }} />
@@ -72,18 +75,39 @@ function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[
 }
 
 export function ReEngageContacts() {
+  const { showToast } = useToast()
   const { data, err, loading } = useDormantContacts()
   const [months, setMonths] = useState(12)
   const [sort, setSort] = useState<'value' | 'dormant'>('value')
   const [sel, setSel] = useState<Set<string>>(new Set())
   const [composeOpen, setComposeOpen] = useState(false)
+  const [hidden, setHidden] = useState<Set<string>>(new Set()) // emails flagged bad this session — dropped immediately
+  const [flagging, setFlagging] = useState<string | null>(null)
 
   const cutoff = useMemo(() => { const d = new Date(); d.setMonth(d.getMonth() - months); return d.getTime() }, [months])
   const dormant = useMemo(() => {
-    const list = (data || []).filter((r) => r.lastMs < cutoff)
+    const list = (data || []).filter((r) => r.lastMs < cutoff && !hidden.has(r.email))
     list.sort((a, b) => (sort === 'value' ? b.totalQuoted - a.totalQuoted : a.lastMs - b.lastMs))
     return list
-  }, [data, cutoff, sort])
+  }, [data, cutoff, sort, hidden])
+
+  // Flag a contact as bad right from the list: marks the address invalid (same flag
+  // Bad contacts uses), drops them here, and pulls their quotes into Bad contacts to
+  // reassign. Reversible there via "Address is fine".
+  const flagBad = async (r: DormantRow) => {
+    if (flagging) return
+    if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    setFlagging(r.email)
+    try {
+      const me = getSessionEmail()
+      await flagContactInvalid(r.email, `flagged from re-engage${me ? ' by ' + me : ''}`)
+      setHidden((s) => new Set(s).add(r.email))
+      setSel((s) => { const n = new Set(s); n.delete(r.email); return n })
+      showToast(`${r.name || r.email} flagged as a bad contact — moved to Bad contacts.`, 'success', 6000)
+    } catch (e) {
+      showToast('Couldn’t flag: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
+    } finally { setFlagging(null) }
+  }
 
   const totalValue = dormant.reduce((a, r) => a + r.totalQuoted, 0)
   const selected = dormant.filter((r) => sel.has(r.email))
@@ -133,6 +157,7 @@ export function ReEngageContacts() {
                 <th style={{ ...th, textAlign: 'right' }}>Quotes</th>
                 <th style={{ ...th, textAlign: 'right' }}>Past $</th>
                 <th style={{ ...th, textAlign: 'right' }}>Won $</th>
+                <th style={{ ...th, textAlign: 'center' }} title="Flag a contact as bad — removes them here and sends their quotes to Bad contacts to reassign">Bad?</th>
               </tr>
             </thead>
             <tbody>
@@ -148,6 +173,9 @@ export function ReEngageContacts() {
                   <td style={numTd}>{r.quoteCount}</td>
                   <td style={numTd}>{moneyShort(r.totalQuoted)}</td>
                   <td style={numTd}>{r.wonValue > 0 ? moneyShort(r.wonValue) : '—'}</td>
+                  <td style={{ ...td, textAlign: 'center' }}>
+                    <button onClick={() => flagBad(r)} disabled={flagging === r.email} title={`Flag ${r.email} as a bad contact`} style={{ ...flagBtn, opacity: flagging === r.email ? 0.5 : 1, cursor: flagging === r.email ? 'default' : 'pointer' }}>{flagging === r.email ? '…' : 'Flag'}</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
