@@ -33,6 +33,8 @@ export function DashboardHome() {
 
       <ApprovalsCard />
 
+      <YearEndHighlights />
+
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
         <StatTile label="Quoted (net) · this month" value={dash(money(m?.quotedTotal ?? 0))} sub={dash(`${m?.quotedCount ?? 0} opportunities`)} />
         <StatTile label="Avg quote" value={dash(money(m?.avgQuote ?? 0))} sub={dash(`${m?.quotedCount ?? 0} quotes`)} />
@@ -72,8 +74,6 @@ export function DashboardHome() {
       </div>
 
       <YtdMetrics />
-
-      <YearEndHighlights />
 
       <TrendChart />
 
