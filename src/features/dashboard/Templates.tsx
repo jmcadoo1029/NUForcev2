@@ -19,6 +19,7 @@ const KEYS: Array<{ key: TemplateKey; label: string }> = [
   { key: 'mass_code', label: 'Mass: Product code' },
   { key: 'mass_campaign', label: 'Mass: Campaign' },
   { key: 'mass_account', label: 'Mass: Account' },
+  { key: 'mass_reengage', label: 'Mass: Re-engage' },
 ]
 
 // Per-template token legend — the combined follow-up uses {Quote List} (all
@@ -49,7 +50,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
   const [active, setActive] = useState<TemplateKey>('quote')
-  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' } })
+  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' }, mass_reengage: { subject: '', body: '' } })
   const [loaded, setLoaded] = useState(false)
   const [isManager, setIsManager] = useState(false)
   const [busy, setBusy] = useState(false)

@@ -1,15 +1,16 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Card, CardLabel, Button, Modal, useToast } from '../../components'
 import { money, moneyShort, fmtDate } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
 import { sendMassEmail } from '../../lib/massEmail'
-import { DEFAULT_TEMPLATES } from '../../lib/emailTemplates'
+import { fetchTemplate, DEFAULT_TEMPLATES } from '../../lib/emailTemplates'
 import { useDormantContacts, type DormantRow } from './useDormantContacts'
 
 // Re-engage — contacts we quoted in the past who've gone quiet. Pick a dormancy
 // window, rank by past value (or how long they've been cold), select who to reach,
 // and send a re-engagement email through the existing mass-email path (seeded from
-// the "we've quoted you before" template, with {first name} merged per recipient).
+// the editable "Re-engage" template in the Email Templates catalog, with {first name}
+// merged per recipient).
 
 const MONTHS = [6, 12, 18, 24]
 const CAP = 300 // cap the rendered rows; the summary still counts them all
@@ -24,10 +25,22 @@ const monthsAgo = (ms: number) => Math.max(0, Math.round((Date.now() - ms) / (30
 
 function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[]; months: number; onClose: () => void }) {
   const { showToast } = useToast()
-  const tpl = DEFAULT_TEMPLATES.mass_code
-  const [subject, setSubject] = useState(tpl.subject)
-  const [body, setBody] = useState(tpl.body)
+  // Seed from the editable "Re-engage" template in the Email Templates catalog.
+  // Start with the in-code default, then swap in any saved override on open —
+  // but only while the sender hasn't started editing (body still the default).
+  const [subject, setSubject] = useState(DEFAULT_TEMPLATES.mass_reengage.subject)
+  const [body, setBody] = useState(DEFAULT_TEMPLATES.mass_reengage.body)
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    fetchTemplate('mass_reengage').then((t) => {
+      if (!alive) return
+      setSubject((s) => (s === DEFAULT_TEMPLATES.mass_reengage.subject ? t.subject : s))
+      setBody((b) => (b === DEFAULT_TEMPLATES.mass_reengage.body ? t.body : b))
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [])
 
   const send = async () => {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }

@@ -16,6 +16,10 @@ export type TemplateKey =
   | 'mass_code'
   | 'mass_campaign'
   | 'mass_account'
+  // Re-engage — the starter for the Customer Contact → Re-engage list (dormant
+  // contacts). Not a Mass Emails audience, so it's kept out of MASS_TEMPLATE_KEYS,
+  // but it's a mass_* key so it uses the {first name} / [Your Name] merge tokens.
+  | 'mass_reengage'
 
 // The mass-email audience keys (subset of TemplateKey), in audience order.
 export const MASS_TEMPLATE_KEYS = ['mass_all', 'mass_code', 'mass_campaign', 'mass_account'] as const
@@ -160,6 +164,23 @@ Please feel free to reach out to me directly with anything you have coming up �
 Looking forward to working with you!`,
 }
 
+// Re-engage starter — warmer, "we haven't talked in a while" framing aimed at a
+// contact who's gone quiet. {first name} merges per recipient; [Your Name] is typed
+// by the sender. Editable in the Email Templates manager (key mass_reengage).
+const DEFAULT_MASS_REENGAGE: EmailTemplate = {
+  key: 'mass_reengage',
+  subject: 'NU Laboratories — It’s been a while, let’s reconnect',
+  body: `Hello, {first name}!
+
+This is [Your Name] at NU Laboratories. It’s been a little while since we last worked together, and I wanted to reach back out — we’ve valued the chance to support your testing in the past and would love to do so again.
+
+In case a refresher is helpful, NU Laboratories offers a full range of testing under one roof: shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more — most of it handled in-house with fast turnaround.
+
+If you have anything coming down the pipeline, I’d welcome the chance to put together a quote. Just reply to this email or give me a call — it would be our pleasure to work with you again.
+
+Looking forward to reconnecting!`,
+}
+
 export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {
   quote: DEFAULT_QUOTE,
   follow_up: DEFAULT_FOLLOW_UP,
@@ -168,6 +189,7 @@ export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {
   mass_code: DEFAULT_MASS_CODE,
   mass_campaign: DEFAULT_MASS_CAMPAIGN,
   mass_account: DEFAULT_MASS_ACCOUNT,
+  mass_reengage: DEFAULT_MASS_REENGAGE,
 }
 
 export interface TemplateVars {
