@@ -1,7 +1,6 @@
 import { ReadyToSendCard } from './ReadyToSendCard'
 import { FlaggedQuotesCard } from './FlaggedQuotesCard'
 import { FollowUpsCard } from './FollowUpsCard'
-import { BadContactsCard } from './BadContactsCard'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
 import { useCanViewManager } from '../../lib/perms'
 
@@ -14,7 +13,6 @@ export function MyWork() {
   return (
     <>
       <ReadyToSendCard />
-      <BadContactsCard />
       <FlaggedQuotesCard />
       <FollowUpsCard />
       {!canView && <ActiveQuotesCard />}

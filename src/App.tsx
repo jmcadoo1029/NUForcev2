@@ -11,7 +11,7 @@ import { useCanViewManager } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { Contracting } from './features/dashboard/Contracting'
-import { MassEmails } from './features/dashboard/MassEmails'
+import { CustomerContact } from './features/dashboard/CustomerContact'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 import { HomeLauncher } from './features/home/HomeLauncher'
@@ -42,14 +42,12 @@ function ContractingHome() {
   )
 }
 
-// Mass Emails — managers + accounting (view-only role) only; others go to My Work.
-function MassEmailsHome() {
-  const { canView, loading } = useCanViewManager()
-  if (loading) return null
-  if (!canView) return <Navigate to="/my-work" replace />
+// Customer Contact — outreach + contact hygiene (Mass Emails, Campaigns, Bad Contacts,
+// and the re-engage list). Visible to everyone.
+function CustomerContactHome() {
   return (
     <DashboardShell>
-      <MassEmails />
+      <CustomerContact />
     </DashboardShell>
   )
 }
@@ -91,7 +89,8 @@ export default function App() {
           }
         />
         <Route path="/contracting" element={<ContractingHome />} />
-        <Route path="/mass-emails" element={<MassEmailsHome />} />
+        <Route path="/customer-contact" element={<CustomerContactHome />} />
+        <Route path="/mass-emails" element={<Navigate to="/customer-contact" replace />} />
         <Route path="/quote/:id" element={<QuotePage />} />
         <Route path="/account/:name" element={<AccountPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
