@@ -8,6 +8,7 @@ import { ProductCodeDeepDive } from './ProductCodeDeepDive'
 import { WonBreakdown } from './WonBreakdown'
 import { YtdMetrics } from './YtdMetrics'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
+import { YearEndHighlights } from './YearEndHighlights'
 
 // Manager view content (the top bar/frame lives in DashboardShell). The sales
 // cockpit: action items, KPI tiles, Closed-Won, quotes created this month, and
@@ -71,6 +72,8 @@ export function DashboardHome() {
       </div>
 
       <YtdMetrics />
+
+      <YearEndHighlights />
 
       <TrendChart />
 
