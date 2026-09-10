@@ -240,7 +240,10 @@ export function QuotePage() {
         const won = (r.data?.wonInfo || {}) as Partial<WonInfo>
         setWonInfo({ wonDate: won.wonDate || '', jobNum: won.jobNum || '', poNum: won.poNum || '' })
         setLoadedJobNum(won.jobNum || '')
-        setWorkspaceProjectId(((r.data as Record<string, unknown> | undefined)?.workspace_project_id as string | null) ?? null)
+        // The Workspace link is written to the workspace_project_id COLUMN by setWorkspaceLink
+        // (authoritative); the data blob copy can lag (it's null if the quote was last saved
+        // before the project was created). Read the column first, blob only as a legacy fallback.
+        setWorkspaceProjectId((r.workspace_project_id as string | null) ?? ((r.data as Record<string, unknown> | undefined)?.workspace_project_id as string | null) ?? null)
         // Seed approval state — the DB column wins, the blob supplies the detail.
         const ap = (r.data?.approval || {}) as ApprovalState
         const wa = (r.data?.wonApproval || {}) as ApprovalState

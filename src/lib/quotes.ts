@@ -16,6 +16,7 @@ export interface QuoteRow {
   approval_status?: string | null
   won_approval_status?: string | null
   source?: string | null
+  workspace_project_id?: string | null
   updated_at?: string | null
   created_at?: string | null
   // Canonical free-text columns (shared with Classic). The data blob also carries
@@ -28,7 +29,7 @@ export interface QuoteRow {
 
 const LIST_COLS = 'id,opportunity,customer,revision,stage,total,updated_at'
 const FULL_COLS =
-  'id,opportunity,customer,rfq,revision,stage,total,approval_status,won_approval_status,source,updated_at,created_at,notes,specifications,data'
+  'id,opportunity,customer,rfq,revision,stage,total,approval_status,won_approval_status,source,workspace_project_id,updated_at,created_at,notes,specifications,data'
 
 /** Most recently updated quotes (for the dashboard list). */
 export async function fetchRecentQuotes(limit = 15): Promise<QuoteRow[]> {
