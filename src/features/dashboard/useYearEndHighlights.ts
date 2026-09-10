@@ -6,27 +6,45 @@ import { codeReportLabel } from './codeReport'
 
 // Year-end highlights — per-calendar-year rollups over ALL history, computed once
 // (client-side) so the panel can flip between years and compute a trailing 3-year
-// average without re-querying. Quoted metrics bucket by created_at year (matching the
-// YTD tile / net-of-revisions dedup); won metrics bucket by won_date year. Loads lazily
-// (only when the panel is first expanded) because it pulls every quote's data blob.
+// average without re-querying. Loads lazily (only when first expanded) because it pulls
+// every quote's data blob.
+//
+// Quoted value is NET OF REVISIONS (same rule as the monthly KPI / trend): a new family's
+// latest total in the year its ORIGINAL was created, plus only the DELTA of revisions saved
+// this year (vs the prior revision) for older, active families. Won metrics bucket by won
+// date. "New business" = data.qi.type !== 'Existing Business'.
 
 export interface CodeAgg {
   code: string
   label: string
   count: number // distinct quotes that include this code
-  value: number // summed extended line value (unit price × qty) for this code
+  value: number // summed extended line value (unit price × qty)
+}
+export interface Award {
+  opp: string
+  customer: string
+  total: number
+}
+export interface Change {
+  opp: string
+  customer: string
+  delta: number
 }
 export interface YearStats {
   year: number
-  quoteCount: number
-  quotedValue: number
+  quoteCount: number // new families originated this year (net of revisions)
+  quotedValue: number // net: new-family totals + revision deltas
   wonCount: number
   wonValue: number
   newWonCount: number
   newWonValue: number
-  highestWon: { opp: string; customer: string; total: number } | null
+  highestNewWon: Award | null // highest NEW-business closed quote
+  bestCustomer: { name: string; wonValue: number; wonCount: number } | null
+  bestProduct: CodeAgg | null // top product code by won value
+  mostChangedUp: Change | null // revision this year with the biggest value increase
+  mostChangedDown: Change | null // …biggest decrease
   quotedByCode: CodeAgg[] // sorted desc by value
-  wonNewByCode: CodeAgg[] // new-business won, sorted desc by value
+  wonNewByCode: CodeAgg[]
 }
 export interface YearEndData {
   years: number[] // ascending
@@ -46,8 +64,22 @@ interface Q {
 }
 
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v) || 0)
+const customerOf = (q: Q) => (q.customer || q.data?.qi?.account || '(Unknown)').trim() || '(Unknown)'
+const stageOf = (q: Q) => q.stage || q.data?.qi?.stage || ''
 
-/** Keep the highest-revision row per family (base opportunity). */
+function msOf(s?: string | null): number {
+  const t = s ? new Date(s).getTime() : NaN
+  return isNaN(t) ? Infinity : t
+}
+function yearFromDate(s?: string | null): number | null {
+  if (!s) return null
+  const m = String(s).match(/(\d{4})-\d{2}-\d{2}/)
+  const y = m ? parseInt(m[1], 10) : new Date(s).getFullYear()
+  return y >= 2000 && y <= 2099 ? y : null
+}
+const wonYearOf = (q: Q): number | null => yearFromDate(q.won_date) ?? yearFromDate(q.data?.wonInfo?.wonDate)
+
+/** Keep the highest-revision row per family. */
 function latestPerBase(rows: Q[]): Q[] {
   const m = new Map<string, Q>()
   rows.forEach((r) => {
@@ -58,16 +90,15 @@ function latestPerBase(rows: Q[]): Q[] {
   return Array.from(m.values())
 }
 
-function yearFromDate(s?: string | null): number | null {
-  if (!s) return null
-  const m = String(s).match(/(\d{4})-\d{2}-\d{2}/)
-  const y = m ? parseInt(m[1], 10) : new Date(s).getFullYear()
-  return y >= 2000 && y <= 2099 ? y : null
+/** The opportunity string of the revision just BEFORE this one ('26-9B' → '26-9A', 'A' → base). */
+function priorRevOppOf(opp?: string | null, rev?: string | null): string | null {
+  const letter = String(rev || '').trim().toUpperCase()
+  if (!/^[A-Z]$/.test(letter)) return null
+  const base = baseOpp(opp)
+  return letter === 'A' ? base : base + String.fromCharCode(letter.charCodeAt(0) - 1)
 }
-const wonYearOf = (q: Q): number | null => yearFromDate(q.won_date) ?? yearFromDate(q.data?.wonInfo?.wonDate)
 
-/** Aggregate product codes across a set of quote families: per code, how many quotes
- *  include it and the summed extended line value. */
+/** Per code across a set of quote families: how many quotes include it, summed extended value. */
 function aggCodes(families: Q[]): CodeAgg[] {
   const m = new Map<string, { count: number; value: number }>()
   families.forEach((q) => {
@@ -89,40 +120,91 @@ function aggCodes(families: Q[]): CodeAgg[] {
 async function load(): Promise<YearEndData> {
   const all = (await restFetchAll<Q>('quotes?select=id,opportunity,revision,customer,total,stage,created_at,won_date,data&order=id')) || []
 
+  // Indexes shared across years.
+  const byOpp = new Map<string, Q>() // exact opportunity string → row (for prior-rev lookup)
+  const famRows = new Map<string, Q[]>() // baseOpp → all its revision rows
   const byCreatedYear = new Map<number, Q[]>()
   const byWonYear = new Map<number, Q[]>()
   const push = (m: Map<number, Q[]>, y: number, q: Q) => { const a = m.get(y); if (a) a.push(q); else m.set(y, [q]) }
 
   for (const q of all) {
+    if (q.opportunity) byOpp.set(q.opportunity, q)
+    const b = baseOpp(q.opportunity) || `__id_${q.id}`
+    const fr = famRows.get(b); if (fr) fr.push(q); else famRows.set(b, [q])
     const cy = yearFromDate(q.created_at)
     if (cy != null) push(byCreatedYear, cy, q)
-    const stage = q.stage || q.data?.qi?.stage || ''
-    if (stage === 'Closed Won') {
-      const wy = wonYearOf(q)
-      if (wy != null) push(byWonYear, wy, q)
-    }
+    if (stageOf(q) === 'Closed Won') { const wy = wonYearOf(q); if (wy != null) push(byWonYear, wy, q) }
   }
+
+  // Each family's ORIGIN created-time (its blank-rev row, else its earliest row).
+  const familyOriginMs = new Map<string, number>()
+  famRows.forEach((rows, b) => {
+    const blank = rows.find((r) => revRank(r.revision) === -1)
+    const originMs = blank ? msOf(blank.created_at) : Math.min(...rows.map((r) => msOf(r.created_at)))
+    familyOriginMs.set(b, originMs)
+  })
 
   const years = Array.from(new Set([...byCreatedYear.keys(), ...byWonYear.keys()])).sort((a, b) => a - b)
   const byYear: Record<number, YearStats> = {}
+
   for (const y of years) {
-    const quotedFams = latestPerBase(byCreatedYear.get(y) || [])
+    const yStartMs = new Date(y, 0, 1).getTime()
+    const rowsCreated = byCreatedYear.get(y) || []
+
+    // ── Net-of-revisions quoted value + count ──
+    const hasBlank = new Set<string>()
+    rowsCreated.forEach((r) => { if (revRank(r.revision) === -1) hasBlank.add(baseOpp(r.opportunity)) })
+    const groups = new Map<string, Q>() // latest rev per base among THIS year's created rows
+    rowsCreated.forEach((r) => { const b = baseOpp(r.opportunity) || `__id_${r.id}`; const cur = groups.get(b); if (!cur || revRank(r.revision) > revRank(cur.revision)) groups.set(b, r) })
+    let newCount = 0
+    let newTotal = 0
+    groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; newTotal += num(latest.total) } })
+
+    let revDelta = 0
+    let mostChangedUp: Change | null = null
+    let mostChangedDown: Change | null = null
+    rowsCreated.forEach((r) => {
+      if (revRank(r.revision) < 1) return // lettered revisions only
+      if (stageOf(r) === 'Closed Lost') return // active quoting only
+      const originMs = familyOriginMs.get(baseOpp(r.opportunity)) ?? Infinity
+      if (originMs >= yStartMs) return // original is also this year → already in newTotal
+      const priorOpp = priorRevOppOf(r.opportunity, r.revision)
+      const prior = priorOpp ? byOpp.get(priorOpp) : undefined
+      if (!prior) return
+      const delta = num(r.total) - num(prior.total)
+      revDelta += delta
+      const c: Change = { opp: r.opportunity || '', customer: customerOf(r), delta }
+      if (delta > 0 && (!mostChangedUp || delta > mostChangedUp.delta)) mostChangedUp = c
+      if (delta < 0 && (!mostChangedDown || delta < mostChangedDown.delta)) mostChangedDown = c
+    })
+
+    // ── Won ──
     const wonFams = latestPerBase(byWonYear.get(y) || [])
     const newWonFams = wonFams.filter((q) => q.data?.qi?.type !== 'Existing Business')
-    const highestWon = wonFams.reduce<YearStats['highestWon']>((best, q) => {
+    const highestNewWon = newWonFams.reduce<Award | null>((best, q) => {
       const t = num(q.total)
-      return !best || t > best.total ? { opp: q.opportunity || '', customer: q.customer || q.data?.qi?.account || '(Unknown)', total: t } : best
+      return !best || t > best.total ? { opp: q.opportunity || '', customer: customerOf(q), total: t } : best
     }, null)
+    const custMap = new Map<string, { value: number; count: number }>()
+    wonFams.forEach((q) => { const c = customerOf(q); const cur = custMap.get(c) || { value: 0, count: 0 }; cur.value += num(q.total); cur.count += 1; custMap.set(c, cur) })
+    let bestCustomer: YearStats['bestCustomer'] = null
+    custMap.forEach((v, name) => { if (!bestCustomer || v.value > bestCustomer.wonValue) bestCustomer = { name, wonValue: v.value, wonCount: v.count } })
+    const wonByCode = aggCodes(wonFams)
+
     byYear[y] = {
       year: y,
-      quoteCount: quotedFams.length,
-      quotedValue: quotedFams.reduce((a, q) => a + num(q.total), 0),
+      quoteCount: newCount,
+      quotedValue: newTotal + revDelta,
       wonCount: wonFams.length,
       wonValue: wonFams.reduce((a, q) => a + num(q.total), 0),
       newWonCount: newWonFams.length,
       newWonValue: newWonFams.reduce((a, q) => a + num(q.total), 0),
-      highestWon,
-      quotedByCode: aggCodes(quotedFams),
+      highestNewWon,
+      bestCustomer,
+      bestProduct: wonByCode[0] || null,
+      mostChangedUp,
+      mostChangedDown,
+      quotedByCode: aggCodes(latestPerBase(rowsCreated)),
       wonNewByCode: aggCodes(newWonFams),
     }
   }

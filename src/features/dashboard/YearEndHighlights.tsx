@@ -9,7 +9,7 @@ import { useYearEndHighlights, type YearStats, type YearEndData, type CodeAgg } 
 
 type Metric = { key: string; label: string; pick: (s: YearStats) => number; money: boolean }
 const METRICS: Metric[] = [
-  { key: 'quotedValue', label: 'Quoted $', pick: (s) => s.quotedValue, money: true },
+  { key: 'quotedValue', label: 'Quoted $ (net)', pick: (s) => s.quotedValue, money: true },
   { key: 'wonValue', label: 'Won $', pick: (s) => s.wonValue, money: true },
   { key: 'newWonValue', label: 'New-business won $', pick: (s) => s.newWonValue, money: true },
   { key: 'quoteCount', label: '# Quotes', pick: (s) => s.quoteCount, money: false },
@@ -25,6 +25,10 @@ function trailing3(byYear: Record<number, YearStats>, year: number, pick: (s: Ye
 const pill = (active: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border-strong)'), background: active ? 'var(--accent-soft)' : '#fff', color: active ? 'var(--accent)' : 'var(--muted)' })
 const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : '#fff', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 const sectionLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', margin: 'var(--sp-5) 0 var(--sp-3)' }
+// A text value (name / code) for a StatTile — smaller than the big numeric value so long
+// names wrap instead of overflowing.
+const nameVal = (s: string) => <span style={{ fontSize: 'var(--fs-lg)', fontWeight: 800, lineHeight: 1.15, display: 'block', wordBreak: 'break-word' }}>{s}</span>
+const signedMoney = (n: number) => (n >= 0 ? '+' : '−') + money(Math.abs(n))
 
 // ── Metric trend: per-year bars + a trailing-3-year-average line (SVG) ───────────
 function MetricTrend({ data, metric }: { data: YearEndData; metric: Metric }) {
@@ -178,17 +182,43 @@ export function YearEndHighlights() {
                 ))}
               </div>
 
-              {/* Headline tiles */}
+              {/* Core metrics */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--sp-4)' }}>
-                <StatTile label="Total quotes" value={cur.quoteCount.toLocaleString()} sub={subCount((s) => s.quoteCount)} />
-                <StatTile label="Total quoted value" value={money(cur.quotedValue)} sub={subMoney((s) => s.quotedValue)} />
+                <StatTile label="Quotes started" value={cur.quoteCount.toLocaleString()} sub={subCount((s) => s.quoteCount)} />
+                <StatTile label="Quoted value (net)" value={money(cur.quotedValue)} sub={subMoney((s) => s.quotedValue)} />
                 <StatTile label="New business won" value={cur.newWonCount.toLocaleString()} sub={subCount((s) => s.newWonCount)} tone="pos" />
                 <StatTile label="New-business won value" value={money(cur.newWonValue)} sub={subMoney((s) => s.newWonValue)} tone="pos" />
+              </div>
+
+              {/* Superlatives */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 'var(--sp-4)', marginTop: 'var(--sp-4)' }}>
                 <StatTile
-                  label="Highest closed quote"
-                  value={cur.highestWon ? money(cur.highestWon.total) : '—'}
-                  sub={cur.highestWon ? `${cur.highestWon.opp} · ${cur.highestWon.customer}` : 'no won quotes this year'}
+                  label="Highest closed (new business)"
                   tone="accent"
+                  value={cur.highestNewWon ? money(cur.highestNewWon.total) : '—'}
+                  sub={cur.highestNewWon ? `${cur.highestNewWon.opp} · ${cur.highestNewWon.customer}` : 'no new-business wins this year'}
+                />
+                <StatTile
+                  label="Best customer"
+                  value={cur.bestCustomer ? nameVal(cur.bestCustomer.name) : '—'}
+                  sub={cur.bestCustomer ? `${money(cur.bestCustomer.wonValue)} won · ${cur.bestCustomer.wonCount} quote${cur.bestCustomer.wonCount === 1 ? '' : 's'}` : 'no wins this year'}
+                />
+                <StatTile
+                  label="Best product"
+                  value={cur.bestProduct ? nameVal(`${cur.bestProduct.code} · ${cur.bestProduct.label}`) : '—'}
+                  sub={cur.bestProduct ? `${money(cur.bestProduct.value)} won` : 'no coded wins this year'}
+                />
+                <StatTile
+                  label="Most changed ▲"
+                  tone="pos"
+                  value={cur.mostChangedUp ? signedMoney(cur.mostChangedUp.delta) : '—'}
+                  sub={cur.mostChangedUp ? `${cur.mostChangedUp.opp} · ${cur.mostChangedUp.customer}` : 'no upward revisions'}
+                />
+                <StatTile
+                  label="Most changed ▼"
+                  tone="accent"
+                  value={cur.mostChangedDown ? signedMoney(cur.mostChangedDown.delta) : '—'}
+                  sub={cur.mostChangedDown ? `${cur.mostChangedDown.opp} · ${cur.mostChangedDown.customer}` : 'no downward revisions'}
                 />
               </div>
 
@@ -210,7 +240,7 @@ export function YearEndHighlights() {
               </div>
 
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-5)' }}>
-                Quoted metrics bucket by quote-created year (latest revision per family); won metrics by won date. The 3-year average is the mean of the up-to-three prior years with data.
+                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Most changed” is the single revision this year with the largest value increase / decrease. The 3-year average is the mean of the up-to-three prior years with data.
               </div>
             </>
           )}
