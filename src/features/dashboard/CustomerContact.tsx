@@ -8,9 +8,10 @@ import { Campaigns } from './Campaigns'
 
 // Customer Contact — the home for outreach + contact hygiene. Visible to everyone.
 // Sub-tabs: the Re-engage dormant-contact list and the Bad Contacts widget are open
-// to all; Mass Emails (and the Campaigns manager it draws audiences from) are
-// manager-only, so those controls are hidden for non-managers and a non-manager can
-// never land on the Mass Emails view.
+// to all, and anyone can create/manage campaigns (the Campaigns modal only builds
+// lists — it never sends). Mass Emails is manager-only, so its button is hidden for
+// non-managers and a non-manager can never land on it; since a campaign is emailed
+// from the Mass Emails composer, sending from a campaign stays manager-gated there.
 
 type Sub = 'reengage' | 'massemails' | 'badcontacts'
 
@@ -27,7 +28,7 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({
 })
 
 export function CustomerContact() {
-  const { canView } = useCanViewManager() // manager view — gates Mass Emails + Campaigns
+  const { canView } = useCanViewManager() // manager view — gates the Mass Emails send tab
   const [sub, setSub] = useState<Sub>('reengage')
   const [campaignsOpen, setCampaignsOpen] = useState(false)
 
@@ -47,12 +48,12 @@ export function CustomerContact() {
           {canView && <button style={seg(view === 'massemails', false)} onClick={() => setSub('massemails')}>Mass Emails</button>}
           <button style={seg(view === 'badcontacts', false)} onClick={() => setSub('badcontacts')}>Bad Contacts</button>
         </div>
-        {canView && <Button variant="secondary" onClick={() => setCampaignsOpen(true)}>Manage Campaigns</Button>}
+        <Button variant="secondary" onClick={() => setCampaignsOpen(true)}>Manage Campaigns</Button>
       </div>
 
       {view === 'reengage' ? <ReEngageContacts /> : view === 'massemails' ? <MassEmails /> : <BadContactsCard />}
 
-      {campaignsOpen && canView && <Campaigns onClose={() => setCampaignsOpen(false)} />}
+      {campaignsOpen && <Campaigns onClose={() => setCampaignsOpen(false)} />}
     </>
   )
 }
