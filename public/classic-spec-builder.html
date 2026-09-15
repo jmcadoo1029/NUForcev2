@@ -27,8 +27,7 @@
   .topbar .hint{font-size:12px;color:#8FA0AE;font-family:var(--mono)}
 
   .wrap{max-width:1280px;margin:0 auto;padding:22px 24px}
-  .layout{display:grid;grid-template-columns:1fr minmax(330px,430px);gap:22px;align-items:start}
-  @media (max-width:980px){.layout{grid-template-columns:1fr}}
+  .layout{display:block}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
   .card .pad{padding:16px 18px}
@@ -86,10 +85,12 @@
   .addsection{font-family:var(--sans);font-size:14px;font-weight:500;cursor:pointer;width:100%;border:1px dashed var(--line-strong);background:#fff;color:var(--ink-soft);padding:13px;border-radius:var(--radius);transition:border-color .12s,color .12s}
   .addsection:hover{border-color:var(--accent);color:var(--accent)}
 
-  /* ---- preview ---- */
-  .preview-col{position:sticky;top:18px}
-  .preview-head{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 9px}
-  .preview-frame{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);max-height:calc(100vh - 130px);overflow:auto;padding:26px 30px}
+  /* ---- preview (pop-up overlay) ---- */
+  .preview-col{position:fixed;inset:0;z-index:40;background:rgba(19,32,46,.5);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:36px 20px 92px}
+  .preview-col.open{display:flex}
+  .preview-sheet{position:relative;background:#fff;border-radius:var(--radius);box-shadow:0 18px 50px rgba(19,32,46,.35);width:100%;max-width:850px;padding:30px 34px}
+  .preview-close{position:absolute;top:8px;right:10px;width:30px;height:30px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--muted);font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .preview-close:hover{border-color:var(--accent);color:var(--accent)}
 
   /* document look (shared by on-screen preview + print) */
   .docpage{font-family:"Times New Roman",Georgia,serif;color:#000;font-size:12pt}
@@ -175,9 +176,11 @@
         <button class="addsection" id="addSection">+ Add another test section</button>
       </div>
 
-      <div class="preview-col">
-        <p class="preview-head">Document preview</p>
-        <div class="preview-frame"><div id="preview"></div></div>
+      <div class="preview-col" id="previewOverlay">
+        <div class="preview-sheet">
+          <button class="preview-close" id="previewClose" aria-label="Close preview" title="Close preview">×</button>
+          <div id="preview"></div>
+        </div>
       </div>
     </div>
   </main>
@@ -190,6 +193,7 @@
         <button id="loadJson" title="Load a previously saved .json file">Load data</button>
         <button id="resetBtn" title="Clear everything">Reset</button>
       </div>
+      <button class="secondary" id="showPreview" title="Preview the document">Preview</button>
       <button class="primary" id="savePdf">Save as PDF</button>
     </div>
   </div>
@@ -621,6 +625,14 @@ $("savePdf").addEventListener("click",()=>{
   window.print();
 });
 window.addEventListener("afterprint",()=>{ document.title="NU Laboratories — Test Specifications Builder"; });
+
+/* ---- document preview pop-up ---- */
+function openPreview(){ updatePreview(); $("previewOverlay").classList.add("open"); }
+function closePreview(){ $("previewOverlay").classList.remove("open"); }
+$("showPreview").addEventListener("click",openPreview);
+$("previewClose").addEventListener("click",closePreview);
+$("previewOverlay").addEventListener("click",(e)=>{ if(e.target===$("previewOverlay")) closePreview(); });
+document.addEventListener("keydown",(e)=>{ if(e.key==="Escape" && $("previewOverlay").classList.contains("open")) closePreview(); });
 
 /* ---------------- helpers ---------------- */
 function triggerDownload(blob,name){ const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},1500); }
