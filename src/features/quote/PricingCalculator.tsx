@@ -8,6 +8,7 @@ import { Labeled, input, sectionLabel, tabBtn, tabBtnOn, specTriggerBtn } from '
 import type { CalcSelection, CalcCustom, CalcBudgetRow } from './calc/types'
 import { FabGuide } from './FabGuide'
 import { EmiCustomerQuestions } from './EmiCustomerQuestions'
+import { SpecBuilderModal } from './SpecBuilderModal'
 import { VibTab } from './calc/tabs/VibTab'
 import { ShockTab } from './calc/tabs/ShockTab'
 import { NoiseTab } from './calc/tabs/NoiseTab'
@@ -110,6 +111,9 @@ export function PricingCalculator({
   // a new tab. Three sources: blank (Classic), from the quote's calculator
   // selections (NUForce), or from the CRR workup (needs Workspace — preview).
   const [specMenuOpen, setSpecMenuOpen] = useState(false)
+  // The Spec Builder now opens in a modal (iframe) rather than a new tab. Holds the
+  // tool URL to show; null = closed.
+  const [specBuilderSrc, setSpecBuilderSrc] = useState<string | null>(null)
   const SPEC_URL = '/classic-spec-builder.html'
 
   // Build the from-quote payload the HTML tool reads from localStorage: one
@@ -149,7 +153,7 @@ export function PricingCalculator({
   const openSpec = (mode: '' | 'from-quote') => {
     const q = encodeURIComponent(qi?.opp || '')
     const params = [q ? `quote=${q}` : '', mode ? `mode=${mode}` : ''].filter(Boolean).join('&')
-    window.open(params ? `${SPEC_URL}?${params}` : SPEC_URL, '_blank', 'noopener,noreferrer')
+    setSpecBuilderSrc(params ? `${SPEC_URL}?${params}` : SPEC_URL)
   }
   const openClassicSpecBuilder = () => openSpec('')
   const openSpecFromQuote = () => {
@@ -191,7 +195,7 @@ export function PricingCalculator({
                 <>
                   <div onClick={() => setSpecMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
                   <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 6, overflow: 'hidden' }}>
-                    <button onClick={() => { setSpecMenuOpen(false); openClassicSpecBuilder() }} title="Open a blank Test Spec Builder in a new tab" style={menuItemStyle}>Classic Spec Builder</button>
+                    <button onClick={() => { setSpecMenuOpen(false); openClassicSpecBuilder() }} title="Open a blank Test Spec Builder" style={menuItemStyle}>Classic Spec Builder</button>
                     <button onClick={() => { setSpecMenuOpen(false); openSpecFromQuote() }} title="Pre-fill from this quote's calculator selections" style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Spec Builder from NUForce</button>
                   </div>
                 </>
@@ -262,6 +266,7 @@ export function PricingCalculator({
     </div>
     {fabGuideOpen && <FabGuide onClose={() => setFabGuideOpen(false)} />}
     {emiQOpen && <EmiCustomerQuestions onClose={() => setEmiQOpen(false)} />}
+    {specBuilderSrc && <SpecBuilderModal src={specBuilderSrc} onClose={() => setSpecBuilderSrc(null)} />}
     </>
   )
 }
