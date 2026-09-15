@@ -10,9 +10,15 @@ import { restFetch } from './restFetch'
 
 export interface CrrWorkup {
   quote_number: string
+  customer_company?: string
+  status?: string
+  ready_to_quote?: boolean
+  updated_at?: string
   data?: {
     enabledSpecs?: Record<string, boolean>
     specRows?: Record<string, Array<Array<unknown>>> // key → rows of [testKey, label, time, comments]
+    fields?: Record<string, any> // the CRR form fields (custCompany, eqUnitName, eqCurrent, specialReq, quoteReq, …)
+    checks?: Record<string, any> // the CRR checkboxes (pwrAC/pwrDC, pwr1ph/pwr3ph, cuiReq, govWitness, …)
   }
 }
 
@@ -73,6 +79,54 @@ export async function fetchCrrWorkup(opp: string): Promise<CrrWorkup | null> {
     const pool = atOrBelow.length ? atOrBelow : variants
     const chosen = exact || pool.slice().sort((a, b) => revRank(b.quote_number) - revRank(a.quote_number))[0]
     return chosen || null
+  } catch {
+    return null
+  }
+}
+
+/** A lightweight CRR row for the import picker (no heavy `data` blob). */
+export interface CrrSummary {
+  quote_number: string
+  customer_company: string
+  status: string
+  ready_to_quote: boolean
+  updated_at: string
+}
+
+/**
+ * Search CRR workups for the import picker. Matches `term` against quote number OR
+ * customer company (case-insensitive substring). Empty term → the most recent
+ * workups. Returns summary rows only (the full workup is fetched on selection).
+ */
+export async function searchCrrWorkups(term: string): Promise<CrrSummary[]> {
+  const t = (term || '').trim()
+  const cols = 'quote_number,customer_company,status,ready_to_quote,updated_at'
+  let q = `crr_workups?select=${cols}&order=updated_at.desc&limit=30`
+  if (t) {
+    const esc = encodeURIComponent(`*${t}*`)
+    q += `&or=(quote_number.ilike.${esc},customer_company.ilike.${esc})`
+  }
+  try {
+    const rows = (await restFetch<any[]>('GET', q)) || []
+    return rows.map((r) => ({
+      quote_number: String(r.quote_number ?? ''),
+      customer_company: String(r.customer_company ?? ''),
+      status: String(r.status ?? ''),
+      ready_to_quote: !!r.ready_to_quote,
+      updated_at: String(r.updated_at ?? ''),
+    }))
+  } catch {
+    return []
+  }
+}
+
+/** Fetch a single CRR workup by exact quote number (full row incl. `data`). */
+export async function fetchCrrWorkupExact(quoteNumber: string): Promise<CrrWorkup | null> {
+  const qn = (quoteNumber || '').trim()
+  if (!qn) return null
+  try {
+    const rows = (await restFetch<CrrWorkup[]>('GET', `crr_workups?quote_number=eq.${encodeURIComponent(qn)}&select=*&limit=1`)) || []
+    return rows[0] || null
   } catch {
     return null
   }
@@ -144,6 +198,81 @@ export function deriveCrrShifts(workup: CrrWorkup | null | undefined, specs: Spe
   }
 }
 
+// ── CRR → quote helpers ───────────────────────────────────────────────────────
+
+/** Which test families a workup has enabled (any spec revision counts). */
+export function crrEnabled(w: CrrWorkup | null | undefined): { emi: boolean; pq: boolean; dcm: boolean } {
+  const e = w?.data?.enabledSpecs || {}
+  return { emi: !!(e.emi461f || e.emi461g), pq: !!(e.pq300b || e.pq300p1), dcm: !!e.dcmag }
+}
+
+/** Suggested (rounded-up) shift count per family, from the workup's spec-row times. */
+export function crrShiftsByFamily(w: CrrWorkup | null | undefined): { emi: number; pq: number; dcm: number } {
+  return {
+    emi: deriveCrrShifts(w, EMI_SPECS).suggestedShifts,
+    pq: deriveCrrShifts(w, PQ_SPECS).suggestedShifts,
+    dcm: deriveCrrShifts(w, DCM_SPECS).suggestedShifts,
+  }
+}
+
+/**
+ * The current rating as a plain amp number, from the CRR's open-text eqCurrent.
+ * Uses the LARGEST amp-denominated value and ignores voltages: "10A" → 10,
+ * "<10A (… 120VAC … 8.5A)" → 10, "50A inrush, 100A max" → 100. '' when none.
+ */
+export function parseCurrentAmps(text: unknown): string {
+  const s = String(text ?? '')
+  const nums = [...s.matchAll(/(\d+(?:\.\d+)?)\s*a(?:mps?)?\b/gi)].map((m) => parseFloat(m[1]))
+  if (!nums.length) return ''
+  const max = Math.max(...nums)
+  return Number.isInteger(max) ? String(max) : String(max)
+}
+
+/** First integer in a free-text field (e.g. eqCables "5 including power, one fiber" → "5"). */
+export function firstInt(text: unknown): string {
+  const m = String(text ?? '').match(/\d+/)
+  return m ? m[0] : ''
+}
+
+export interface SpecialReqParse {
+  budget: Array<{ desc: string; qty: string; unitCost: string }>
+  leftover: string // the non-dollar text (goes to notes)
+}
+
+/**
+ * Pull $-denominated budget items out of the free-text "Special Test Requirements"
+ * (eqSpecialReq): each clause with a $amount becomes a budget row (the amount removed
+ * from the description), and the clauses WITHOUT a dollar amount are returned as
+ * `leftover` for the notes. "$5k" is read as 5000.
+ */
+export function parseSpecialReq(text: unknown): SpecialReqParse {
+  const s = String(text ?? '').trim()
+  const budget: SpecialReqParse['budget'] = []
+  const leftovers: string[] = []
+  if (!s) return { budget, leftover: '' }
+  const clauses = s.split(/(?<=[.;])\s+|\n+/)
+  for (const c of clauses) {
+    const m = c.match(/\$\s?([\d,]+(?:\.\d+)?)\s*(k)?/i)
+    if (!m) {
+      if (c.trim()) leftovers.push(c.trim())
+      continue
+    }
+    let amt = parseFloat(m[1].replace(/,/g, ''))
+    if (m[2]) amt *= 1000
+    const desc = c
+      .replace(/\$\s?[\d,]+(?:\.\d+)?\s*k?/i, '')
+      .replace(/\s{2,}/g, ' ')
+      .replace(/^[\s.,;-]+|[\s.,;-]+$/g, '')
+      .trim()
+    if (amt > 0) budget.push({ desc: desc || 'Special test requirement', qty: '1', unitCost: String(Math.round(amt)) })
+  }
+  return { budget, leftover: leftovers.join(' ').replace(/\s{2,}/g, ' ').trim() }
+}
+
+// Non-test spec rows (setup / teardown / procedure / report) — excluded from the
+// Spec Builder, which should carry TESTING rows only.
+const NON_TEST_ROW = /setup|tear\s*-?\s*down|teardown|procedure|report/i
+
 // ── Spec Builder from CRR ─────────────────────────────────────────────────────
 // Build the Spec Builder payload from the CRR workup — the same shape the
 // from-NUForce path produces ({ quote, sections:[{type, rows:[[test,label,comments]]}] })
@@ -165,7 +294,7 @@ export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, qu
   const mapFourCol = (key: string, type: string) => {
     if (!enabled[key]) return
     const rows = (allRows[key] || [])
-      .filter((r) => Array.isArray(r) && isNumericTime(r[2]))
+      .filter((r) => Array.isArray(r) && isNumericTime(r[2]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[1] ?? '')))
       .map((r) => [String(r[0] ?? ''), String(r[1] ?? ''), String(r[3] ?? '')])
     if (rows.length) sections.push({ type, rows })
   }
@@ -174,7 +303,7 @@ export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, qu
   const mapPq = (key: string) => {
     if (!enabled[key]) return
     const rows = (allRows[key] || [])
-      .filter((r) => Array.isArray(r) && isNumericTime(r[1]))
+      .filter((r) => Array.isArray(r) && isNumericTime(r[1]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[2] ?? '')))
       .map((r) => {
         const parts: string[] = []
         if (String(r[3] ?? '')) parts.push(String(r[3]))
