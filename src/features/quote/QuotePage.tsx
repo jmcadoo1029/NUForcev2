@@ -574,14 +574,19 @@ export function QuotePage() {
       for (const [k, v] of Object.entries(t)) {
         if (v == null || String(v) === '') continue
         const key = keyMap[k] || k
-        if (key === 'tiNotes') continue // handled below (append, not fill)
+        if (key === 'tiNotes' || key === 'tiSpecs') continue // appended below, not filled
         if (isFillable(key, cur[key])) next[key] = String(v)
       }
-      const block = String(t.notes || '').trim()
-      if (block) {
-        const existing = String(cur.tiNotes || '').trim()
-        if (!existing.includes(block)) next.tiNotes = existing ? `${existing}\n\n${block}` : block
+      // Specifications and Notes always append (never overwrite existing text), each
+      // skipped if its block is already present so re-running doesn't duplicate.
+      const append = (field: 'tiSpecs' | 'tiNotes', block: string) => {
+        const b = block.trim()
+        if (!b) return
+        const existing = String(cur[field] || '').trim()
+        if (!existing.includes(b)) next[field] = existing ? `${existing}\n\n${b}` : b
       }
+      append('tiSpecs', String(t.specs || ''))
+      append('tiNotes', String(t.notes || ''))
       return next
     })
 

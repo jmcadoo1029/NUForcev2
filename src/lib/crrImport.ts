@@ -66,6 +66,26 @@ export function buildCrrLineItems(w: CrrWorkup | null | undefined): DraftLineIte
   return [...procs, ...bodies, ...reps]
 }
 
+// Each enabled spec (family + the revision picked in Workspace) → the standard it
+// names, in NU's Specifications wording. Ordered EMI → PQ → DC Magnetics to match
+// the line-item order.
+const SPEC_STANDARDS: Array<{ key: string; family: string; std: string }> = [
+  { key: 'emi461f', family: 'EMI', std: 'MIL-STD-461F' },
+  { key: 'emi461g', family: 'EMI', std: 'MIL-STD-461G' },
+  { key: 'pq300b', family: 'Power Quality', std: 'MIL-STD-1399-300B' },
+  { key: 'pq300p1', family: 'Power Quality', std: 'MIL-STD-1399-300-1' },
+  { key: 'dcmag', family: 'DC Magnetics', std: 'DOD-STD-1399 Section 070' },
+]
+
+/** The Specifications text carried over from the CRR: one line per enabled spec,
+ *  "<Family> testing in accordance with <standard>." '' if none enabled. */
+export function crrSpecsText(w: CrrWorkup | null | undefined): string {
+  const e = (w?.data?.enabledSpecs || {}) as Record<string, boolean>
+  return SPEC_STANDARDS.filter((s) => e[s.key])
+    .map((s) => `${s.family} testing in accordance with ${s.std}.`)
+    .join('\n')
+}
+
 /** The labeled notes block appended to the quote: quoteReq + the non-$ Special Test
  *  Requirements text, under a header naming the enabled families. '' if empty. */
 export function crrNotesBlock(w: CrrWorkup | null | undefined): string {
@@ -98,6 +118,7 @@ export function buildDraftFromCrr(w: CrrWorkup): DraftImport {
     amps: parseCurrentAmps(f.eqCurrent),
     docRestriction: c.cuiReq ? 'CUI/Other' : '',
     witness: c.govWitness ? 'Yes' : 'Unknown',
+    specs: crrSpecsText(w),
     notes: crrNotesBlock(w),
   }
   const draft: DraftImport = {
