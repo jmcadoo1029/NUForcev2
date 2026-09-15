@@ -15,6 +15,7 @@ import { lookupProjectByJobNumber, createProjectFromNuforce, appendToProject, se
 import { fetchCrrWorkup, buildSpecPayloadFromCrr, type CrrWorkup } from '../../lib/crr'
 import { buildDraftFromCrr } from '../../lib/crrImport'
 import { CrrImport } from './CrrImport'
+import { SpecBuilderModal } from './SpecBuilderModal'
 import { ProductPicker, type PickerLine } from './ProductPicker'
 import { PricingCalculator, type CalcSelection } from './PricingCalculator'
 import { ApprovalBar, type ApprovalState } from './ApprovalBar'
@@ -100,6 +101,9 @@ export function QuotePage() {
   // "Populate from CRR" — pull a Workspace CRR workup into this quote (fill-empty +
   // append line items/budget/notes). The modal previews before applying.
   const [crrOpen, setCrrOpen] = useState(false)
+  // Spec Builder now opens in a modal (iframe) instead of a new tab. Holds the URL
+  // of the tool to show; null = closed.
+  const [specBuilderSrc, setSpecBuilderSrc] = useState<string | null>(null)
   // Approval / won-approval workflow (seeded from the quote; actions preview until Phase 7).
   const [approval, setApproval] = useState<ApprovalState>({ status: 'none', history: [] })
   const [wonApproval, setWonApproval] = useState<ApprovalState>({ status: 'none', history: [] })
@@ -525,7 +529,7 @@ export function QuotePage() {
   const openClassicSpec = () => {
     setSpecMenuOpen(false)
     const q = encodeURIComponent(s(qi.opp) || row?.opportunity || '')
-    window.open(q ? `/classic-spec-builder.html?quote=${q}` : '/classic-spec-builder.html', '_blank', 'noopener,noreferrer')
+    setSpecBuilderSrc(q ? `/classic-spec-builder.html?quote=${q}` : '/classic-spec-builder.html')
   }
   const openSpecFromCrr = async () => {
     setSpecMenuOpen(false)
@@ -537,7 +541,7 @@ export function QuotePage() {
     if (payload.sections.length === 0 && !window.confirm('The CRR workup has no enabled spec tables with numeric time. Open the Spec Builder anyway with a blank section?')) return
     try { localStorage.setItem('nuforce_spec_builder_payload', JSON.stringify(payload)) } catch (e) { console.warn('spec payload write failed', e) }
     const q = encodeURIComponent(opp)
-    window.open(`/classic-spec-builder.html?quote=${q}&mode=from-quote`, '_blank', 'noopener,noreferrer')
+    setSpecBuilderSrc(`/classic-spec-builder.html?quote=${q}&mode=from-quote`)
   }
 
   // Apply a CRR workup to THIS quote (from the Populate-from-CRR modal). Fill-empty
@@ -1006,6 +1010,8 @@ export function QuotePage() {
           {revOpen && <RevisionHistory opportunity={s(qi.opp) || row.opportunity || ''} currentId={row.id} onClose={() => setRevOpen(false)} />}
 
           {crrOpen && <CrrImport currentOpp={s(qi.opp) || row.opportunity || ''} onClose={() => setCrrOpen(false)} onApply={applyCrrDraft} />}
+
+          {specBuilderSrc && <SpecBuilderModal src={specBuilderSrc} onClose={() => setSpecBuilderSrc(null)} />}
 
           {cloneOpen && (
             <Modal title="Clone quote" onClose={() => !cloneBusy && setCloneOpen(false)} width={430}>

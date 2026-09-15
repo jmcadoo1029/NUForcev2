@@ -153,7 +153,7 @@
       <span class="brand"><b>NU</b> Laboratories</span>
       <span class="toolname">Test Specifications Builder</span>
       <span class="spacer"></span>
-      <span class="hint">runs offline · Word + PDF output</span>
+      <span class="hint">runs offline · PDF output</span>
     </div>
   </header>
 
@@ -190,8 +190,7 @@
         <button id="loadJson" title="Load a previously saved .json file">Load data</button>
         <button id="resetBtn" title="Clear everything">Reset</button>
       </div>
-      <button class="secondary" id="savePdf">Save as PDF</button>
-      <button class="primary" id="saveDocx">Save as Word (.docx)</button>
+      <button class="primary" id="savePdf">Save as PDF</button>
     </div>
   </div>
 
@@ -615,15 +614,6 @@ function processPaste(text,opts){
 }
 
 /* ---------------- output buttons ---------------- */
-$("saveDocx").addEventListener("click",()=>{
-  try{
-    const bytes=generateDocxBytes(state.quote.trim(), state.sections);
-    const blob=new Blob([bytes],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"});
-    const q=sanitize(state.quote);
-    triggerDownload(blob, q?("Test Specifications - Quote "+q+".docx"):"Test Specifications.docx");
-    flash("Word document generated. Check your downloads.","ok");
-  }catch(err){ console.error(err); flash("Could not generate the Word file: "+err.message,"warn"); }
-});
 $("savePdf").addEventListener("click",()=>{
   $("printarea").innerHTML=buildDocHTML();
   const q=sanitize(state.quote);
