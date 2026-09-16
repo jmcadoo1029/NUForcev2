@@ -112,11 +112,12 @@ export function PricingCalculator({
   // shared hole count. `puTest` picks the governing fab test (base + rule); Vibration
   // resolves MWS-vs-LWS per unit by weight.
   const [multiUnit, setMultiUnit] = useState(false)
-  const [puTest, setPuTest] = useState<'mws' | 'lws' | 'vib'>('mws')
+  type PuKey = 'mws' | 'lws' | 'vib' | 'hfv' | 'ab' | 'sb' | 'sho'
+  const [puTest, setPuTest] = useState<PuKey>('mws')
   const [puBase, setPuBase] = useState('')  // blank → the governing test's default base
-  const [puRows, setPuRows] = useState<{ name: string; holes: string; weight: string }[]>([
-    { name: 'Unit 1', holes: '', weight: '' },
-    { name: 'Unit 2', holes: '', weight: '' },
+  const [puRows, setPuRows] = useState<{ name: string; holes: string; weight: string; fab: string }[]>([
+    { name: 'Unit 1', holes: '', weight: '', fab: '' },
+    { name: 'Unit 2', holes: '', weight: '', fab: '' },
   ])
 
   // Test Spec Builder — a standalone tool at /classic-spec-builder.html opened in
@@ -186,20 +187,31 @@ export function PricingCalculator({
   }
 
   // ── Per-unit setup pricing (multi-unit mode) ────────────────────────────────
-  const PU_META: Record<'mws' | 'lws' | 'vib', { label: string; code: string; base: number }> = {
-    mws: { label: 'Medium Weight Shock', code: '91', base: MWS_SETUP_BASE },
-    lws: { label: 'Lightweight Shock', code: '92', base: LWS_SETUP_BASE },
-    vib: { label: 'Vibration', code: '94', base: sf(vib.std, LWS_SETUP_BASE) },
+  // Each governing test → its setup-line code, label, default base, and how the fab
+  // rule is chosen: fixed ('mws'/'lws') or 'weight' (MWS ≥250 lb, else LWS).
+  const PU_META: Record<PuKey, { label: string; code: string; base: number; rule: FabRule | 'weight' }> = {
+    mws: { label: 'Medium Weight Shock', code: '91', base: MWS_SETUP_BASE, rule: 'mws' },
+    lws: { label: 'Lightweight Shock', code: '92', base: LWS_SETUP_BASE, rule: 'lws' },
+    vib: { label: 'Vibration', code: '94', base: sf(vib.std, LWS_SETUP_BASE), rule: 'weight' },
+    hfv: { label: 'HF Vibration', code: '52', base: sf(hfv.std, 500), rule: 'lws' },
+    ab: { label: 'Airborne Noise', code: '12', base: sf(ab.std, 1000), rule: 'weight' },
+    sb: { label: 'Structureborne Noise', code: '12', base: sf(sb.std, 850), rule: 'weight' },
+    sho: { label: 'Shock', code: '52', base: sf(sho.std, 500), rule: 'lws' },
   }
-  const puBaseVal = puBase.trim() !== '' ? sf(puBase) : PU_META[puTest].base
+  const puMeta = PU_META[puTest]
+  const puBaseVal = puBase.trim() !== '' ? sf(puBase) : puMeta.base
   const puRuleFor = (weight: string): FabRule =>
-    puTest === 'vib' ? (fabRuleFor({ vib: true }, sf(weight) || null) || 'lws') : puTest
-  const puCost = (r: { holes: string; weight: string }): number =>
-    setupCostForUnit({ holes: sf(r.holes), rule: puRuleFor(r.weight), techRate: su.techRate, drillTap: su.drillTap, baseStd: puBaseVal })
+    puMeta.rule === 'weight' ? (fabRuleFor({ vib: true }, sf(weight) || null) || 'lws') : puMeta.rule
+  const puAutoFab = (r: { holes: string; weight: string }): number => fabHoursFromHoles(sf(r.holes), puRuleFor(r.weight))
+  const puCost = (r: { holes: string; weight: string; fab: string }): number =>
+    setupCostForUnit({
+      holes: sf(r.holes), rule: puRuleFor(r.weight), techRate: su.techRate, drillTap: su.drillTap,
+      baseStd: puBaseVal, fabHours: r.fab.trim() !== '' ? sf(r.fab) : undefined,
+    })
   const sendPerUnitSetups = () => {
     const lines: CalcCustom[] = puRows
       .filter((r) => r.name.trim() && sf(r.holes) > 0)
-      .map((r) => ({ code: PU_META[puTest].code, label: `${PU_META[puTest].label} – Setup`, desc: r.name.trim(), price: puCost(r) }))
+      .map((r) => ({ code: puMeta.code, label: `${puMeta.label} – Setup`, desc: r.name.trim(), price: puCost(r) }))
       .filter((l) => l.price > 0)
     if (lines.length) onSendCustom(lines)
   }
@@ -281,33 +293,38 @@ export function PricingCalculator({
                     </label>
                   </Labeled>
                   <Labeled label="Governing test (fab rule)">
-                    <select value={puTest} onChange={(e) => { setPuTest(e.target.value as 'mws' | 'lws' | 'vib'); setPuBase('') }} style={input}>
+                    <select value={puTest} onChange={(e) => { setPuTest(e.target.value as PuKey); setPuBase('') }} style={input}>
                       <option value="mws">Medium Weight Shock</option>
                       <option value="lws">Lightweight Shock</option>
                       <option value="vib">Vibration</option>
+                      <option value="hfv">HF Vibration</option>
+                      <option value="ab">Airborne Noise</option>
+                      <option value="sb">Structureborne Noise</option>
+                      <option value="sho">Shock (other)</option>
                     </select>
                   </Labeled>
-                  <Labeled label={`Setup base ($) · default ${money(PU_META[puTest].base)}`}>
-                    <input value={puBase} onChange={(e) => setPuBase(e.target.value)} placeholder={String(PU_META[puTest].base)} inputMode="decimal" style={input} />
+                  <Labeled label={`Setup base ($) · default ${money(puMeta.base)}`}>
+                    <input value={puBase} onChange={(e) => setPuBase(e.target.value)} placeholder={String(puMeta.base)} inputMode="decimal" style={input} />
                   </Labeled>
                 </div>
                 <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', margin: 'var(--sp-2) 0' }}>
-                  Fab hours per unit come from the FabGuide by hole count{puTest === 'vib' ? ' (weight sets MWS vs LWS at ≥250 lb)' : ''}. Setup = base + drill + fab, rounded to $25.
+                  Fab hours per unit auto-fill from the FabGuide by hole count{puMeta.rule === 'weight' ? ' (weight sets MWS vs LWS at ≥250 lb)' : ''} — edit any cell to override. Setup = base + drill + fab, rounded to $25.
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px 88px 26px', gap: 'var(--sp-2)', alignItems: 'center', fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)', padding: '0 2px 4px' }}>
-                  <div>Unit</div><div>Holes</div><div>Weight</div><div style={{ textAlign: 'right' }}>Setup</div><div />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 58px 66px 62px 84px 26px', gap: 'var(--sp-2)', alignItems: 'center', fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)', padding: '0 2px 4px' }}>
+                  <div>Unit</div><div>Holes</div><div>Weight</div><div>Fab hrs</div><div style={{ textAlign: 'right' }}>Setup</div><div />
                 </div>
                 {puRows.map((r, i) => (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px 88px 26px', gap: 'var(--sp-2)', alignItems: 'center', marginBottom: 4 }}>
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 58px 66px 62px 84px 26px', gap: 'var(--sp-2)', alignItems: 'center', marginBottom: 4 }}>
                     <input value={r.name} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} style={input} />
                     <input value={r.holes} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, holes: e.target.value } : x)))} inputMode="decimal" style={input} />
-                    <input value={r.weight} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, weight: e.target.value } : x)))} inputMode="decimal" placeholder={puTest === 'vib' ? 'lbs' : '—'} style={input} />
+                    <input value={r.weight} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, weight: e.target.value } : x)))} inputMode="decimal" placeholder={puMeta.rule === 'weight' ? 'lbs' : '—'} style={input} />
+                    <input value={r.fab} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, fab: e.target.value } : x)))} inputMode="decimal" placeholder={sf(r.holes) > 0 ? String(puAutoFab(r)) : 'auto'} style={input} />
                     <div style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{sf(r.holes) > 0 ? money(puCost(r)) : '—'}</div>
                     <button onClick={() => setPuRows((rows) => rows.filter((_, j) => j !== i))} title="Remove unit" style={{ background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--sp-3)', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                  <button onClick={() => setPuRows((rows) => [...rows, { name: `Unit ${rows.length + 1}`, holes: '', weight: '' }])} style={{ ...tabBtn }}>+ Add unit</button>
+                  <button onClick={() => setPuRows((rows) => [...rows, { name: `Unit ${rows.length + 1}`, holes: '', weight: '', fab: '' }])} style={{ ...tabBtn }}>+ Add unit</button>
                   <button onClick={sendPerUnitSetups} style={{ ...tabBtnOn, fontWeight: 700, cursor: 'pointer' }}>Send {puRows.filter((r) => r.name.trim() && sf(r.holes) > 0).length} setup line(s) → quote</button>
                 </div>
               </>
