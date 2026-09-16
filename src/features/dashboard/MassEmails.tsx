@@ -10,10 +10,11 @@ import { searchClients, type ClientRow } from '../../lib/directory'
 import {
   fetchAllContacts, fetchContactsByProductCode, fetchCampaignOptions, fetchContactsByCampaign,
   fetchContactsByAccount, fetchTemplates, saveTemplate, deleteTemplate,
-  sendMassEmail, fetchMassEmails, fetchMassEmailMetrics,
+  sendMassEmail, fetchMassEmails, fetchMassEmailMetrics, applySenderIdentity,
   type Recipient, type EmailTemplate, type MassEmailRow, type MassEmailMetrics, type CampaignOption,
 } from '../../lib/massEmail'
 import { fetchTemplate, DEFAULT_TEMPLATES, type MassTemplateKey } from '../../lib/emailTemplates'
+import { fetchSelf, type Self } from '../../lib/me'
 
 // Mass Emails — compose + send a personalized blast to an audience: all contacts,
 // everyone quoted a given product code (optionally within a date window), or the
@@ -103,6 +104,9 @@ export function MassEmails() {
 
   const [history, setHistory] = useState<MassEmailRow[]>([])
   const [metrics, setMetrics] = useState<Record<string, MassEmailMetrics>>({})
+  // The signed-in sender — fills [Your Name] and the signature in the send preview.
+  const [self, setSelf] = useState<Self | null>(null)
+  useEffect(() => { fetchSelf().then(setSelf).catch(() => {}) }, [])
 
   const loadTemplates = () => fetchTemplates().then(setTemplates).catch(() => {})
   const loadHistory = () => fetchMassEmails().then(setHistory).catch(() => {})
@@ -295,6 +299,12 @@ export function MassEmails() {
         <div style={{ marginBottom: 'var(--sp-3)' }}>
           <label style={label}>Body <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>— {'{first name}'} merges each contact's first name; [Your Name] and a signature fill in with yours automatically</span></label>
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} style={{ ...inputStyle, lineHeight: 1.6, resize: 'vertical' }} />
+          {self && (
+            <div style={{ marginTop: 'var(--sp-3)' }}>
+              <label style={label}>Preview — as it sends <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>(your name and signature filled in; {'{first name}'} still merges per recipient)</span></label>
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', margin: 0 }}>{applySenderIdentity(body, self)}</pre>
+            </div>
+          )}
         </div>
 
         {/* Audience */}
