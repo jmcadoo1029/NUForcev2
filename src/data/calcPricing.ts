@@ -77,10 +77,11 @@ export function setupCostForUnit(opts: {
   techRate: number
   drillTap?: boolean
   baseStd?: number | string
+  fabHours?: number  // override the cheat-sheet hours (when the estimator edits them)
 }): number {
   const su: SetupInputs = {
     techRate: opts.techRate,
-    fabHours: fabHoursFromHoles(opts.holes, opts.rule),
+    fabHours: opts.fabHours != null && isFinite(opts.fabHours) ? opts.fabHours : fabHoursFromHoles(opts.holes, opts.rule),
     holes: sf(opts.holes),
     drillTap: !!opts.drillTap,
   }
