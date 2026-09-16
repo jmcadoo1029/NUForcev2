@@ -178,13 +178,7 @@ In case a refresher is helpful, NU Laboratories offers a full range of testing u
 
 If you have anything coming down the pipeline, I’d welcome the chance to put together a quote. Just reply to this email or give me a call — it would be our pleasure to work with you again.
 
-Looking forward to reconnecting!
-
-[Your Name]
-NU Laboratories, Inc.
-312 Old Allerton Rd.
-Annandale, NJ 08801
-[your email]`,
+Looking forward to reconnecting!`,
 }
 
 export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {

@@ -1,6 +1,30 @@
 import { restFetch } from './restFetch'
 import { FN_BASE, REST_APIKEY } from './config'
 import { getAccessToken } from './auth'
+import { fetchSelf, type Self } from './me'
+
+// NU signature block appended to every mass send (unless the body already carries one).
+function signatureBlock(self: Self): string {
+  return [self.name, 'NU Laboratories, Inc.', '312 Old Allerton Rd.', 'Annandale, NJ 08801', '(908) 713-9300', self.email]
+    .filter(Boolean)
+    .join('\n')
+}
+
+// Fill the SENDER's identity into a template body (the recipient's {first name} is merged
+// per-recipient by the edge function; this handles the sender-level tokens, same for all):
+//   [Your Name]  → the sender's FIRST name (e.g. "This is Jordan from NU Laboratories")
+//   [your email] / {First & Last name…} → the sender's email / full name
+// and appends a signature block unless the body already has the NU address block.
+export function applySenderIdentity(body: string, self: Self): string {
+  let b = String(body || '')
+  b = b.replace(/\[your name\]/gi, self.firstName || self.name || 'the NU Laboratories team')
+  b = b.replace(/\[your email\]/gi, self.email || '')
+  b = b.replace(/\{First & Last name of NU Labs person sending the quote\}/g, self.name || '')
+  if (!/NU Laboratories,\s*Inc\./i.test(b)) {
+    b = b.replace(/\s+$/, '') + '\n\n' + signatureBlock(self)
+  }
+  return b
+}
 
 // Mass Emails: recipients (all contacts, or "everyone we quoted product code X"),
 // reusable templates, sending (via the mass-email edge function), and history +
@@ -122,12 +146,16 @@ export interface MassSendResult { ok: boolean; massId?: string; total?: number; 
 export async function sendMassEmail(input: { subject: string; body: string; audience: string; recipients: Recipient[] }): Promise<MassSendResult> {
   const token = getAccessToken()
   if (!token) return { ok: false, error: 'No active session.' }
+  // Fill the sender's name/signature into the body before sending (same for every
+  // recipient; the per-recipient {first name} merge still happens in the edge function).
+  const self = await fetchSelf()
+  const finalInput = { ...input, body: applySenderIdentity(input.body, self) }
   let res: Response
   try {
     res = await fetch(`${FN_BASE}/mass-email`, {
       method: 'POST',
       headers: { apikey: REST_APIKEY, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
+      body: JSON.stringify(finalInput),
     })
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }

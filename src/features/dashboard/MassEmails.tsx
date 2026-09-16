@@ -293,7 +293,7 @@ export function MassEmails() {
           <input value={subject} onChange={(e) => setSubject(e.target.value)} style={inputStyle} />
         </div>
         <div style={{ marginBottom: 'var(--sp-3)' }}>
-          <label style={label}>Body <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>— use {'{first name}'} to merge each contact's first name</span></label>
+          <label style={label}>Body <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>— {'{first name}'} merges each contact's first name; [Your Name] and a signature fill in with yours automatically</span></label>
           <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} style={{ ...inputStyle, lineHeight: 1.6, resize: 'vertical' }} />
         </div>
 
