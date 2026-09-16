@@ -636,7 +636,18 @@ export function QuotePage() {
     const toAdd = (draft.lineItems || [])
       .filter((l) => l.label && !have.has(l.label.trim().toLowerCase()))
       .map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }))
-    if (toAdd.length) setLineItems((cur) => [...cur, ...toAdd])
+    if (toAdd.length) {
+      // Slot the new lines into NU's preferred order — Procedures (44), then
+      // Setup/Testing/Teardown (51 and the like), then Reports (43) — instead of
+      // dropping them at the bottom. Stable sort (index tiebreak) keeps each existing
+      // line in its current spot within its section and lands the new PQ / DC-Mag
+      // lines in the right group beside the others.
+      const rank = (code: string) => (code === '44' ? 0 : code === '43' ? 2 : 1)
+      setLineItems((cur) => [...cur, ...toAdd]
+        .map((l, i) => ({ l, i }))
+        .sort((a, b) => rank(a.l.code) - rank(b.l.code) || a.i - b.i)
+        .map((x) => x.l))
+    }
 
     // Budget — add only rows whose description isn't already on the quote's budget,
     // so pulling a revised CRR brings in the NEW budget lines (e.g. PQ / DC Mag)
