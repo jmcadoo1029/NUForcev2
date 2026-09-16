@@ -3,7 +3,8 @@ import { Modal, Button, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fetchIsApprover } from '../../lib/perms'
-import { fetchSelf } from '../../lib/me'
+import { fetchSelf, type Self } from '../../lib/me'
+import { applySenderIdentity } from '../../lib/massEmail'
 import { fetchTemplate, saveTemplate, fillTemplate, DEFAULT_TEMPLATES, TOKENS, type TemplateKey, type TemplateVars } from '../../lib/emailTemplates'
 
 // Email Templates manager — the global send + follow-up templates, editable here
@@ -55,20 +56,22 @@ export function Templates({ onClose }: { onClose: () => void }) {
   const [isManager, setIsManager] = useState(false)
   const [busy, setBusy] = useState(false)
   const [sample, setSample] = useState<TemplateVars>(SAMPLE)
+  const [self, setSelf] = useState<Self | null>(null)
   const subjectRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const focusedRef = useRef<'subject' | 'body'>('body')
 
   useEffect(() => {
     let alive = true
-    Promise.all([Promise.all(KEYS.map((k) => fetchTemplate(k.key))), fetchSelf()]).then(([tpls, self]) => {
+    Promise.all([Promise.all(KEYS.map((k) => fetchTemplate(k.key))), fetchSelf()]).then(([tpls, selfInfo]) => {
       if (!alive) return
       setDrafts((prev) => {
         const next = { ...prev }
         KEYS.forEach((k, i) => { next[k.key] = { subject: tpls[i].subject, body: tpls[i].body } })
         return next
       })
-      setSample((s) => ({ ...s, senderName: self.name || s.senderName }))
+      setSelf(selfInfo)
+      setSample((s) => ({ ...s, senderName: selfInfo.name || s.senderName }))
       setLoaded(true)
     })
     fetchIsApprover().then((v) => alive && setIsManager(v))
@@ -158,7 +161,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>Preview <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic', color: 'var(--muted)' }}>· sample data</span></div>
             <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)' }}>
               <div style={{ fontWeight: 700, marginBottom: 'var(--sp-2)', color: 'var(--text)' }}>{fillTemplate(cur.subject, sample)}</div>
-              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{fillTemplate(cur.body, sample)}</div>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{active.startsWith('mass_') && self ? applySenderIdentity(fillTemplate(cur.body, sample), self) : fillTemplate(cur.body, sample)}</div>
             </div>
           </div>
 

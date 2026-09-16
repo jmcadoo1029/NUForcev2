@@ -129,7 +129,7 @@ const DEFAULT_MASS_CODE: EmailTemplate = {
 
 This is [Your Name] at NU Laboratories. Our records show we’ve had the pleasure of quoting testing for you in the past, and I wanted to reach out to make sure we stay on your radar for any upcoming projects.
 
-NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly.
+NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly. You can explore our full range of capabilities at www.nulabs.com.
 
 If you have a project you’d like quoted, just reply to this email or give me a call — it would be our pleasure to support your testing needs again.
 
@@ -157,7 +157,7 @@ const DEFAULT_MASS_ACCOUNT: EmailTemplate = {
 
 This is [Your Name] at NU Laboratories. I’m reaching out to your team to make sure we’re a resource whenever a testing need comes up.
 
-NU Laboratories provides a full range of testing under one roof — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. If any project on your side calls for testing, we’d be glad to put together a quote and turn it around quickly.
+NU Laboratories provides a full range of testing under one roof — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. If any project on your side calls for testing, we’d be glad to put together a quote and turn it around quickly. See everything we do at www.nulabs.com.
 
 Please feel free to reach out to me directly with anything you have coming up — it would be our pleasure to support your team.
 
@@ -174,7 +174,7 @@ const DEFAULT_MASS_REENGAGE: EmailTemplate = {
 
 This is [Your Name] at NU Laboratories. It’s been a little while since we last worked together, and I wanted to reach back out — we’ve valued the chance to support your testing in the past and would love to do so again.
 
-In case a refresher is helpful, NU Laboratories offers a full range of testing under one roof: shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more — most of it handled in-house with fast turnaround.
+In case a refresher is helpful, NU Laboratories offers a full range of testing under one roof: shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more — most of it handled in-house with fast turnaround. You can see our full capabilities at www.nulabs.com.
 
 If you have anything coming down the pipeline, I’d welcome the chance to put together a quote. Just reply to this email or give me a call — it would be our pleasure to work with you again.
 
