@@ -57,6 +57,14 @@ export interface DraftBudgetRow {
   unitCost: string
 }
 
+// A per-unit breakdown for a multi-unit quote — seeds the calculator's per-unit setup
+// table (name / mounting holes / weight), so the estimator confirms instead of retyping.
+export interface DraftUnit {
+  name?: string
+  holes?: string
+  weight?: string
+}
+
 export interface DraftImport {
   account?: string // Account/customer name (links later at close-won)
   rfqDate?: string // Date of the customer's original RFQ email — used to build the RFQ field
@@ -66,6 +74,7 @@ export interface DraftImport {
   budget?: DraftBudgetRow[] // Internal Budget add-ons (noise compressor, EMI rentals)
   testItem?: DraftTestItem
   lineItems?: DraftLineItem[]
+  units?: DraftUnit[] // Per-unit breakdown (name/holes/weight) for the calculator's per-unit setup table
   notes?: string // Falls back into Notes if testItem.notes is absent
 }
 
@@ -117,6 +126,18 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
       .map((b) => ({ desc: String(b.desc ?? ''), qty: b.qty != null ? String(b.qty) : '1', unitCost: String(b.unitCost ?? b.unit_cost ?? '0') }))
       .filter((b) => b.desc.trim() !== '')
     if (rows.length) draft.budget = rows
+  }
+
+  if (Array.isArray(r.units)) {
+    const rows = (r.units as unknown[])
+      .filter((u): u is Record<string, unknown> => !!u && typeof u === 'object' && !Array.isArray(u))
+      .map((u) => ({
+        name: u.name != null ? String(u.name) : '',
+        holes: u.holes != null ? String(u.holes) : '',
+        weight: u.weight != null ? String(u.weight) : (u.wt != null ? String(u.wt) : ''),
+      }))
+      .filter((u) => u.name || u.holes || u.weight)
+    if (rows.length) draft.units = rows
   }
 
   if (Array.isArray(r.lineItems)) {

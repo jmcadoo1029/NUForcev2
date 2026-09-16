@@ -60,6 +60,7 @@ export function PricingCalculator({
   qi,
   setup,
   onSetupChange,
+  unitsSeed,
 }: {
   onSend: (items: CalcSelection[]) => void
   onSendCustom: (lines: CalcCustom[]) => void
@@ -69,6 +70,7 @@ export function PricingCalculator({
   qi?: Record<string, any> // quote info (opp/date) — for spec-PDF headers
   setup: Record<string, any> // the quote's Setup Details (shared, live)
   onSetupChange: (patch: Record<string, any>) => void
+  unitsSeed?: { name?: string; holes?: string; weight?: string }[] // per-unit table pre-fill from an imported reader draft
 }) {
   const [tab, setTab] = useState<Tab>('vib')
   const [fabGuideOpen, setFabGuideOpen] = useState(false)
@@ -111,14 +113,20 @@ export function PricingCalculator({
   // own hole count → its own setup price via the shared fab cheat sheet) instead of one
   // shared hole count. `puTest` picks the governing fab test (base + rule); Vibration
   // resolves MWS-vs-LWS per unit by weight.
-  const [multiUnit, setMultiUnit] = useState(false)
   type PuKey = 'mws' | 'lws' | 'vib' | 'hfv' | 'ab' | 'sb' | 'sho'
+  // Seed the per-unit table from an imported reader draft (name/holes/weight), if any.
+  const seededRows = (unitsSeed || [])
+    .map((u) => ({ name: String(u.name || ''), holes: String(u.holes || ''), weight: String(u.weight || ''), fab: '' }))
+    .filter((u) => u.name || u.holes || u.weight)
+  const [multiUnit, setMultiUnit] = useState(seededRows.length > 1)
   const [puTest, setPuTest] = useState<PuKey>('mws')
   const [puBase, setPuBase] = useState('')  // blank → the governing test's default base
-  const [puRows, setPuRows] = useState<{ name: string; holes: string; weight: string; fab: string }[]>([
-    { name: 'Unit 1', holes: '', weight: '', fab: '' },
-    { name: 'Unit 2', holes: '', weight: '', fab: '' },
-  ])
+  const [puRows, setPuRows] = useState<{ name: string; holes: string; weight: string; fab: string }[]>(
+    seededRows.length ? seededRows : [
+      { name: 'Unit 1', holes: '', weight: '', fab: '' },
+      { name: 'Unit 2', holes: '', weight: '', fab: '' },
+    ],
+  )
 
   // Test Spec Builder — a standalone tool at /classic-spec-builder.html opened in
   // a new tab. Three sources: blank (Classic), from the quote's calculator
