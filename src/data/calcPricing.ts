@@ -31,6 +31,62 @@ export function smartSetup(std: number | string, su: SetupInputs) {
   return Math.round(sf(std) + drill + fab)
 }
 
+// ── Fab-hours cheat sheet (the FabGuide "?" table), as a function ─────────────
+// Turns the estimated-fab-times reference into the number the calculator uses, so
+// fab hours can be filled from a hole count instead of typed by hand — and reused
+// per unit on a multi-unit quote. Standard-fixture column only (a real in-stock
+// "bookend" fixture can be fewer hours, which we can't know). >250 lb standalone
+// vibration / AB-SB noise uses the heavier MWS rules.
+export type FabRule = 'mws' | 'lws'
+export const FAB_WEIGHT_THRESHOLD_LBS = 250
+
+// Which fab rule governs, from the mechanical tests present (+ weight for standalone
+// vibration / AB-SB noise). null when no fab-governed test is present.
+export function fabRuleFor(
+  t: { mws?: boolean; lws?: boolean; vib?: boolean; absb?: boolean; hfvOrShock?: boolean },
+  weightLbs?: number | null,
+): FabRule | null {
+  if (t.mws) return 'mws'
+  if (t.lws) return 'lws'
+  if (t.vib || t.absb) return (weightLbs != null && weightLbs > FAB_WEIGHT_THRESHOLD_LBS) ? 'mws' : 'lws'
+  if (t.hfvOrShock) return 'lws'
+  return null
+}
+
+// Estimated fab hours for a hole count under the given rule (FabGuide Standard column):
+//   MWS: ≤4→8, ≤8→12, else 16   ·   LWS: ≤4→4, ≤7→6, else 8
+export function fabHoursFromHoles(holes: number, rule: FabRule): number {
+  const h = Math.max(0, Math.round(sf(holes)))
+  if (rule === 'mws') return h <= 4 ? 8 : h <= 8 ? 12 : 16
+  return h <= 4 ? 4 : h <= 7 ? 6 : 8
+}
+
+// Default section setup bases (mirror the calculator tabs' defaults): Medium-Weight
+// Shock $1500, Lightweight Shock $900. The per-unit table can override with the tab's
+// live value, but these are the standing defaults.
+export const MWS_SETUP_BASE = 1500
+export const LWS_SETUP_BASE = 900
+
+// A unit's suggested setup price from ITS hole count — fab hours from the cheat sheet,
+// then the SAME base + drill + fab math every setup uses (single source of truth), and
+// rounded to the nearest $25 (the calculator's standard). `baseStd` is the governing test's setup base (e.g. 1500
+// for medium-weight shock); pass the calculator tab's live value, or the defaults above.
+export function setupCostForUnit(opts: {
+  holes: number
+  rule: FabRule
+  techRate: number
+  drillTap?: boolean
+  baseStd?: number | string
+}): number {
+  const su: SetupInputs = {
+    techRate: opts.techRate,
+    fabHours: fabHoursFromHoles(opts.holes, opts.rule),
+    holes: sf(opts.holes),
+    drillTap: !!opts.drillTap,
+  }
+  return r25(smartSetup(opts.baseStd ?? 0, su))  // nearest $25, matching the calculator tabs
+}
+
 // Medium-weight shock testing, weight-based (Classic mwTesting, the quote table).
 export const mwTesting = (wt: number) => (!wt || wt <= 0 ? 4575 : wt <= 2500 ? 4575 : wt <= 3500 ? 5575 : 6250)
 
