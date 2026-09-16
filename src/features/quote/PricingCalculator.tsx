@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { sf, money } from '../../lib/format'
-import { type SetupInputs, SETUP_DEFAULTS, drillFab, smartSetup, PQ_SR, DCM_SR, EMI_SR, OT_DEFAULTS } from '../../data/calcPricing'
+import { type SetupInputs, SETUP_DEFAULTS, drillFab, smartSetup, PQ_SR, DCM_SR, EMI_SR, OT_DEFAULTS, type FabRule, fabRuleFor, fabHoursFromHoles, setupCostForUnit, MWS_SETUP_BASE, LWS_SETUP_BASE } from '../../data/calcPricing'
 import { getEmi461fTestDefinitions, getEmi461gTestDefinitions } from '../../data/emiSpecDefs'
 import { getPq300bTestDefinitions, getPq300p1TestDefinitions } from '../../data/pqSpecDefs'
 import { menuItemStyle } from '../../components'
@@ -107,6 +107,18 @@ export function PricingCalculator({
   // EMI budget add-ons — pre-checked, editable raw amounts. Ported one-way to the Budget list.
   const [emiBudget, setEmiBudget] = useState({ rs103On: true, rs103Amt: '5000', v440On: true, v440Amt: '6500' })
 
+  // Multi-unit setup pricing. When on, Setup Details shows a per-unit table (each unit's
+  // own hole count → its own setup price via the shared fab cheat sheet) instead of one
+  // shared hole count. `puTest` picks the governing fab test (base + rule); Vibration
+  // resolves MWS-vs-LWS per unit by weight.
+  const [multiUnit, setMultiUnit] = useState(false)
+  const [puTest, setPuTest] = useState<'mws' | 'lws' | 'vib'>('mws')
+  const [puBase, setPuBase] = useState('')  // blank → the governing test's default base
+  const [puRows, setPuRows] = useState<{ name: string; holes: string; weight: string }[]>([
+    { name: 'Unit 1', holes: '', weight: '' },
+    { name: 'Unit 2', holes: '', weight: '' },
+  ])
+
   // Test Spec Builder — a standalone tool at /classic-spec-builder.html opened in
   // a new tab. Three sources: blank (Classic), from the quote's calculator
   // selections (NUForce), or from the CRR workup (needs Workspace — preview).
@@ -173,6 +185,25 @@ export function PricingCalculator({
     if (valid.length) onSend(valid)
   }
 
+  // ── Per-unit setup pricing (multi-unit mode) ────────────────────────────────
+  const PU_META: Record<'mws' | 'lws' | 'vib', { label: string; code: string; base: number }> = {
+    mws: { label: 'Medium Weight Shock', code: '91', base: MWS_SETUP_BASE },
+    lws: { label: 'Lightweight Shock', code: '92', base: LWS_SETUP_BASE },
+    vib: { label: 'Vibration', code: '94', base: sf(vib.std, LWS_SETUP_BASE) },
+  }
+  const puBaseVal = puBase.trim() !== '' ? sf(puBase) : PU_META[puTest].base
+  const puRuleFor = (weight: string): FabRule =>
+    puTest === 'vib' ? (fabRuleFor({ vib: true }, sf(weight) || null) || 'lws') : puTest
+  const puCost = (r: { holes: string; weight: string }): number =>
+    setupCostForUnit({ holes: sf(r.holes), rule: puRuleFor(r.weight), techRate: su.techRate, drillTap: su.drillTap, baseStd: puBaseVal })
+  const sendPerUnitSetups = () => {
+    const lines: CalcCustom[] = puRows
+      .filter((r) => r.name.trim() && sf(r.holes) > 0)
+      .map((r) => ({ code: PU_META[puTest].code, label: `${PU_META[puTest].label} – Setup`, desc: r.name.trim(), price: puCost(r) }))
+      .filter((l) => l.price > 0)
+    if (lines.length) onSendCustom(lines)
+  }
+
   // Close only when the press STARTS and ENDS on the backdrop itself. Without this,
   // dragging to select text inside an input and releasing over the backdrop fires a
   // click on the backdrop and wrongly closes the calculator.
@@ -208,27 +239,79 @@ export function PricingCalculator({
         <div style={{ padding: 'var(--sp-4) var(--sp-5)', flex: 1 }}>
           {/* Shared setup inputs */}
           <div style={{ background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
-            <div style={sectionLabel}>Setup details <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--dim)' }}>· shared with the quote</span></div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--sp-3)' }}>
-              <Labeled label="Tech rate ($/hr)"><input value={setup?.techRate ?? ''} onChange={(e) => onSetupChange({ techRate: e.target.value })} inputMode="decimal" style={input} /></Labeled>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  Fab hours
-                  <button onClick={() => setFabGuideOpen(true)} title="Estimated fab times per test" aria-label="Fab hours cheat sheet" style={{ background: 'none', border: '1px solid var(--border-strong)', borderRadius: '50%', width: 16, height: 16, padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--muted)', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
-                </div>
-                <input value={setup?.fabHours ?? ''} onChange={(e) => onSetupChange({ fabHours: e.target.value })} inputMode="decimal" style={input} />
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+              <div style={{ ...sectionLabel, marginBottom: 0 }}>Setup details <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: 'var(--dim)' }}>· shared with the quote</span></div>
+              <div style={{ display: 'flex', gap: 4 }}>
+                <button onClick={() => setMultiUnit(false)} style={{ ...tabBtn, ...(!multiUnit ? tabBtnOn : null) }}>1 unit</button>
+                <button onClick={() => setMultiUnit(true)} style={{ ...tabBtn, ...(multiUnit ? tabBtnOn : null) }}>Multiple units</button>
               </div>
-              <Labeled label="Holes"><input value={setup?.holes ?? ''} onChange={(e) => onSetupChange({ holes: e.target.value })} inputMode="decimal" style={input} /></Labeled>
-              <Labeled label="Drill & tap">
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
-                  <input type="checkbox" checked={!!setup?.drillTap} onChange={(e) => onSetupChange({ drillTap: e.target.checked })} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
-                  <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>{setup?.drillTap ? '×1.5' : 'off'}</span>
-                </label>
-              </Labeled>
             </div>
-            <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>
-              Drill {money(Math.round(drill))} · Fab {money(Math.round(fab))} added to every setup
-            </div>
+
+            {!multiUnit ? (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--sp-3)' }}>
+                  <Labeled label="Tech rate ($/hr)"><input value={setup?.techRate ?? ''} onChange={(e) => onSetupChange({ techRate: e.target.value })} inputMode="decimal" style={input} /></Labeled>
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      Fab hours
+                      <button onClick={() => setFabGuideOpen(true)} title="Estimated fab times per test" aria-label="Fab hours cheat sheet" style={{ background: 'none', border: '1px solid var(--border-strong)', borderRadius: '50%', width: 16, height: 16, padding: 0, cursor: 'pointer', fontSize: 10, color: 'var(--muted)', lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>?</button>
+                    </div>
+                    <input value={setup?.fabHours ?? ''} onChange={(e) => onSetupChange({ fabHours: e.target.value })} inputMode="decimal" style={input} />
+                  </div>
+                  <Labeled label="Holes"><input value={setup?.holes ?? ''} onChange={(e) => onSetupChange({ holes: e.target.value })} inputMode="decimal" style={input} /></Labeled>
+                  <Labeled label="Drill & tap">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!setup?.drillTap} onChange={(e) => onSetupChange({ drillTap: e.target.checked })} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+                      <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>{setup?.drillTap ? '×1.5' : 'off'}</span>
+                    </label>
+                  </Labeled>
+                </div>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>
+                  Drill {money(Math.round(drill))} · Fab {money(Math.round(fab))} added to every setup
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--sp-3)' }}>
+                  <Labeled label="Tech rate ($/hr)"><input value={setup?.techRate ?? ''} onChange={(e) => onSetupChange({ techRate: e.target.value })} inputMode="decimal" style={input} /></Labeled>
+                  <Labeled label="Drill & tap">
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 8, height: 38, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={!!setup?.drillTap} onChange={(e) => onSetupChange({ drillTap: e.target.checked })} style={{ accentColor: 'var(--accent)', width: 16, height: 16 }} />
+                      <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>{setup?.drillTap ? '×1.5' : 'off'}</span>
+                    </label>
+                  </Labeled>
+                  <Labeled label="Governing test (fab rule)">
+                    <select value={puTest} onChange={(e) => { setPuTest(e.target.value as 'mws' | 'lws' | 'vib'); setPuBase('') }} style={input}>
+                      <option value="mws">Medium Weight Shock</option>
+                      <option value="lws">Lightweight Shock</option>
+                      <option value="vib">Vibration</option>
+                    </select>
+                  </Labeled>
+                  <Labeled label={`Setup base ($) · default ${money(PU_META[puTest].base)}`}>
+                    <input value={puBase} onChange={(e) => setPuBase(e.target.value)} placeholder={String(PU_META[puTest].base)} inputMode="decimal" style={input} />
+                  </Labeled>
+                </div>
+                <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', margin: 'var(--sp-2) 0' }}>
+                  Fab hours per unit come from the FabGuide by hole count{puTest === 'vib' ? ' (weight sets MWS vs LWS at ≥250 lb)' : ''}. Setup = base + drill + fab, rounded to $25.
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px 88px 26px', gap: 'var(--sp-2)', alignItems: 'center', fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)', padding: '0 2px 4px' }}>
+                  <div>Unit</div><div>Holes</div><div>Weight</div><div style={{ textAlign: 'right' }}>Setup</div><div />
+                </div>
+                {puRows.map((r, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 68px 78px 88px 26px', gap: 'var(--sp-2)', alignItems: 'center', marginBottom: 4 }}>
+                    <input value={r.name} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))} style={input} />
+                    <input value={r.holes} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, holes: e.target.value } : x)))} inputMode="decimal" style={input} />
+                    <input value={r.weight} onChange={(e) => setPuRows((rows) => rows.map((x, j) => (j === i ? { ...x, weight: e.target.value } : x)))} inputMode="decimal" placeholder={puTest === 'vib' ? 'lbs' : '—'} style={input} />
+                    <div style={{ textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{sf(r.holes) > 0 ? money(puCost(r)) : '—'}</div>
+                    <button onClick={() => setPuRows((rows) => rows.filter((_, j) => j !== i))} title="Remove unit" style={{ background: 'none', border: 'none', color: 'var(--dim)', cursor: 'pointer', fontSize: 16, lineHeight: 1 }}>×</button>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--sp-3)', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                  <button onClick={() => setPuRows((rows) => [...rows, { name: `Unit ${rows.length + 1}`, holes: '', weight: '' }])} style={{ ...tabBtn }}>+ Add unit</button>
+                  <button onClick={sendPerUnitSetups} style={{ ...tabBtnOn, fontWeight: 700, cursor: 'pointer' }}>Send {puRows.filter((r) => r.name.trim() && sf(r.holes) > 0).length} setup line(s) → quote</button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Tabs */}
