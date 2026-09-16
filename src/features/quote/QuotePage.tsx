@@ -13,7 +13,10 @@ import { money, sf } from '../../lib/format'
 import { setupCostForUnit, setupMetaFromLabel, SETUP_DEFAULTS, type FabRule } from '../../data/calcPricing'
 import { prettifyEmail } from '../../lib/text'
 import { lookupProjectByJobNumber, createProjectFromNuforce, appendToProject, setWorkspaceLink, workspaceProjectUrl, notifyClosedWon, describeWorkspaceError, type ProjectSourceInput } from '../../lib/workspace'
-import { fetchCrrWorkup, buildSpecPayloadFromCrr } from '../../lib/crr'
+import { fetchCrrWorkup, buildSpecPayloadFromCrr, type CrrWorkup } from '../../lib/crr'
+import { buildDraftFromCrr } from '../../lib/crrImport'
+import { CrrImport } from './CrrImport'
+import { SpecBuilderModal } from './SpecBuilderModal'
 import { ProductPicker, type PickerLine } from './ProductPicker'
 import { PricingCalculator, type CalcSelection } from './PricingCalculator'
 import { ApprovalBar, type ApprovalState } from './ApprovalBar'
@@ -99,6 +102,12 @@ export function QuotePage() {
   const [editing, setEditing] = useState(false)
   const [revOpen, setRevOpen] = useState(false)
   const [specMenuOpen, setSpecMenuOpen] = useState(false)
+  // "Populate from CRR" — pull a Workspace CRR workup into this quote (fill-empty +
+  // append line items/budget/notes). The modal previews before applying.
+  const [crrOpen, setCrrOpen] = useState(false)
+  // Spec Builder now opens in a modal (iframe) instead of a new tab. Holds the URL
+  // of the tool to show; null = closed.
+  const [specBuilderSrc, setSpecBuilderSrc] = useState<string | null>(null)
   // Approval / won-approval workflow (seeded from the quote; actions preview until Phase 7).
   const [approval, setApproval] = useState<ApprovalState>({ status: 'none', history: [] })
   const [wonApproval, setWonApproval] = useState<ApprovalState>({ status: 'none', history: [] })
@@ -545,7 +554,7 @@ export function QuotePage() {
   const openClassicSpec = () => {
     setSpecMenuOpen(false)
     const q = encodeURIComponent(s(qi.opp) || row?.opportunity || '')
-    window.open(q ? `/classic-spec-builder.html?quote=${q}` : '/classic-spec-builder.html', '_blank', 'noopener,noreferrer')
+    setSpecBuilderSrc(q ? `/classic-spec-builder.html?quote=${q}` : '/classic-spec-builder.html')
   }
   const openSpecFromCrr = async () => {
     setSpecMenuOpen(false)
@@ -557,8 +566,83 @@ export function QuotePage() {
     if (payload.sections.length === 0 && !window.confirm('The CRR workup has no enabled spec tables with numeric time. Open the Spec Builder anyway with a blank section?')) return
     try { localStorage.setItem('nuforce_spec_builder_payload', JSON.stringify(payload)) } catch (e) { console.warn('spec payload write failed', e) }
     const q = encodeURIComponent(opp)
-    window.open(`/classic-spec-builder.html?quote=${q}&mode=from-quote`, '_blank', 'noopener,noreferrer')
+    setSpecBuilderSrc(`/classic-spec-builder.html?quote=${q}&mode=from-quote`)
   }
+
+  // Apply a CRR workup to THIS quote (from the Populate-from-CRR modal). Fill-empty
+  // for Quote Info + Test Item, append the CRR line items / budget, and append the
+  // labeled notes block. Never overwrites a field the user already filled. The
+  // EMI/PQ/DC-Mag line prices come straight from the mapping (Testing = shifts×rate,
+  // Teardown = fixed, Procedure/Report = catalog) — applied as-is, NOT re-priced.
+  const applyCrrDraft = (workup: CrrWorkup) => {
+    const draft = buildDraftFromCrr(workup)
+    // Some fields default to a non-empty sentinel ('AC'/'Unknown'/'None'); treat those
+    // as still-empty so the CRR value can fill them, but never clobber a real edit.
+    const FIELD_DEFAULT: Record<string, string> = { pwrType: 'AC', witness: 'Unknown', gsi: 'Unknown', docRestriction: 'None' }
+    const isFillable = (key: string, cur: unknown) => {
+      const v = s(cur).trim()
+      if (v === '') return true
+      const def = FIELD_DEFAULT[key]
+      return def != null && v === def
+    }
+
+    // Quote Info — fill-empty (opp, account, rfq).
+    const qiPatch: Record<string, any> = {}
+    if (draft.quoteNumber && !s(qiEdit.opp).trim()) qiPatch.opp = draft.quoteNumber
+    if (draft.account && !s(qiEdit.account).trim()) qiPatch.account = draft.account
+    if (draft.rfqDate && !s(qiEdit.rfq).trim()) {
+      qiPatch.rfq = draft.account ? `${draft.account} RFQ ${draft.rfqDate}`.trim() : `RFQ ${draft.rfqDate}`
+    }
+    if (Object.keys(qiPatch).length) setQiEdit((q) => ({ ...q, ...qiPatch }))
+
+    // Test Item — fill-empty for every mapped field; Notes always appends (labeled).
+    const t = (draft.testItem || {}) as Record<string, unknown>
+    const keyMap: Record<string, string> = { specs: 'tiSpecs', notes: 'tiNotes' }
+    setTiEdit((cur) => {
+      const next: Record<string, any> = { ...cur }
+      for (const [k, v] of Object.entries(t)) {
+        if (v == null || String(v) === '') continue
+        const key = keyMap[k] || k
+        if (key === 'tiNotes' || key === 'tiSpecs') continue // appended below, not filled
+        if (isFillable(key, cur[key])) next[key] = String(v)
+      }
+      // Specifications and Notes always append (never overwrite existing text), each
+      // skipped if its block is already present so re-running doesn't duplicate.
+      const append = (field: 'tiSpecs' | 'tiNotes', block: string) => {
+        const b = block.trim()
+        if (!b) return
+        const existing = String(cur[field] || '').trim()
+        if (!existing.includes(b)) next[field] = existing ? `${existing}\n\n${b}` : b
+      }
+      append('tiSpecs', String(t.specs || ''))
+      append('tiNotes', String(t.notes || ''))
+      return next
+    })
+
+    // Line items — append, skipping any whose label already exists on the quote
+    // (so re-running doesn't duplicate). CRR lines arrive in the right order
+    // (procedures → setup/test/teardown → reports).
+    const have = new Set(lineItems.map((l) => l.label.trim().toLowerCase()))
+    const toAdd = (draft.lineItems || [])
+      .filter((l) => l.label && !have.has(l.label.trim().toLowerCase()))
+      .map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }))
+    if (toAdd.length) setLineItems((cur) => [...cur, ...toAdd])
+
+    // Budget — append the parsed $ items (raw cost) and turn the Budget on.
+    const bRows = (draft.budget || []).map((b) => ({ desc: String(b.desc || ''), qty: String(b.qty || '1'), unitCost: String(b.unitCost || '0') }))
+    if (bRows.length) setBudgetEdit((b) => ({ ...b, on: true, rows: [...b.rows, ...bRows] }))
+
+    // Setup — cable count, fill-empty (default '0' counts as empty).
+    const cables = draft.setup?.cables
+    if (cables) {
+      const curC = s(setupEdit.cables).trim()
+      if (curC === '' || curC === '0') setSetupEdit((s2) => ({ ...s2, cables: String(cables) }))
+    }
+
+    const bits = [toAdd.length && `${toAdd.length} line item${toAdd.length !== 1 ? 's' : ''}`, bRows.length && `${bRows.length} budget item${bRows.length !== 1 ? 's' : ''}`].filter(Boolean).join(' + ')
+    showToast(`Populated from CRR ${workup.quote_number}${bits ? ' — added ' + bits : ''}. Review before saving.`, 'success', 5000)
+  }
+
 
   // Line-item editing
   const addLineItems = (newLines: PickerLine[]) => setLineItems((cur) => [...cur, ...newLines.map((l) => ({ key: lineSeq.current++, code: l.code, label: l.label, desc: l.desc, price: l.price, qty: 1, added: true }))])
@@ -923,6 +1007,7 @@ export function QuotePage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(false)}>{pdfBusy === 'quote' ? 'Generating…' : 'Quote PDF'}</Button>
                 {budgetEdit.rows.length > 0 && <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(true)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF'}</Button>}
+                {editing && <Button variant="secondary" small onClick={() => setCrrOpen(true)} title="Pull a Workspace CRR workup into this quote (fills empty fields, adds EMI/PQ/DC-Mag line items, appends notes)">Populate from CRR</Button>}
                 <div style={{ position: 'relative' }}>
                   <Button variant="secondary" small onClick={() => setSpecMenuOpen((v) => !v)}>Spec Builder</Button>
                   {specMenuOpen && (
@@ -948,6 +1033,8 @@ export function QuotePage() {
             </div>
           </div>
 
+          {crrOpen && <CrrImport currentOpp={s(qi.opp) || row.opportunity || ''} onClose={() => setCrrOpen(false)} onApply={applyCrrDraft} />}
+          {specBuilderSrc && <SpecBuilderModal src={specBuilderSrc} onClose={() => setSpecBuilderSrc(null)} />}
           {revOpen && <RevisionHistory opportunity={s(qi.opp) || row.opportunity || ''} currentId={row.id} onClose={() => setRevOpen(false)} />}
 
           {cloneOpen && (
