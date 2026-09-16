@@ -67,6 +67,27 @@ export function fabHoursFromHoles(holes: number, rule: FabRule): number {
 export const MWS_SETUP_BASE = 1500
 export const LWS_SETUP_BASE = 900
 
+// Standing setup-base defaults per hole-driven test (mirror the calculator tabs). Used to
+// pre-price setup lines at import time from a reader draft, and as the per-unit table's
+// defaults. Non-hole-driven setups (EMI/PQ/DCM, salt fog, etc.) aren't priced this way.
+export const SETUP_BASES = { mws: 1500, lws: 900, vib: 900, hfv: 500, ab: 1000, sb: 850, sho: 500 }
+
+// Map a setup line label ("Medium Weight Shock – Setup") to its base + fab rule, so the
+// same setupCostForUnit math prices it at import. null for setups that aren't hole-driven
+// (EMI/PQ/DC-Mag and the environmental tests price elsewhere). 'weight' → MWS ≥250 lb else LWS.
+export function setupMetaFromLabel(label: string): { base: number; rule: FabRule | 'weight' } | null {
+  const s = String(label || '').toLowerCase()
+  if (!/[–-]\s*setup\s*$/.test(s)) return null
+  if (/medium\s*weight\s*shock/.test(s)) return { base: SETUP_BASES.mws, rule: 'mws' }
+  if (/light\s*weight\s*shock|lightweight\s*shock/.test(s)) return { base: SETUP_BASES.lws, rule: 'lws' }
+  if (/hf\s*vibration|high[-\s]*frequency\s*vibration/.test(s)) return { base: SETUP_BASES.hfv, rule: 'lws' }
+  if (/vibration/.test(s)) return { base: SETUP_BASES.vib, rule: 'weight' }
+  if (/airborne\s*noise/.test(s)) return { base: SETUP_BASES.ab, rule: 'weight' }
+  if (/structure\s*-?\s*borne\s*noise/.test(s)) return { base: SETUP_BASES.sb, rule: 'weight' }
+  if (/\bshock\b/.test(s)) return { base: SETUP_BASES.sho, rule: 'lws' }
+  return null
+}
+
 // A unit's suggested setup price from ITS hole count — fab hours from the cheat sheet,
 // then the SAME base + drill + fab math every setup uses (single source of truth), and
 // rounded to the nearest $25 (the calculator's standard). `baseStd` is the governing test's setup base (e.g. 1500

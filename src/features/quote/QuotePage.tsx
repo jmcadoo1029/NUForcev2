@@ -9,7 +9,8 @@ import { fetchQuoteByKey, type QuoteRow } from '../../lib/quotes'
 import { lineItemsFromData } from '../../data/quoteModel'
 import { TI_DEFAULTS, QI_DEFAULTS, SETUP_FORM_DEFAULTS, STAGE_OPTS, type RelatedContact, type BudgetRow, type LineItem } from '../../data/quoteDefaults'
 import { codeLabel } from '../../data/constants'
-import { money } from '../../lib/format'
+import { money, sf } from '../../lib/format'
+import { setupCostForUnit, setupMetaFromLabel, SETUP_DEFAULTS, type FabRule } from '../../data/calcPricing'
 import { prettifyEmail } from '../../lib/text'
 import { lookupProjectByJobNumber, createProjectFromNuforce, appendToProject, setWorkspaceLink, workspaceProjectUrl, notifyClosedWon, describeWorkspaceError, type ProjectSourceInput } from '../../lib/workspace'
 import { fetchCrrWorkup, buildSpecPayloadFromCrr } from '../../lib/crr'
@@ -167,7 +168,27 @@ export function QuotePage() {
       // based, so pass the unit weight through.
       const draftWt = Number(String(draft?.testItem?.wt ?? '').replace(/[^\d.]/g, '')) || 0
       const pricedInput = priceDraftLines(draft?.lineItems || [], draftWt)
-      const draftLines = pricedInput.map((l) => {
+      // Import-time setup pricing: give each hole-driven setup line a suggested price using
+      // the same calculator math (setupCostForUnit), seeded from that unit's holes (the
+      // per-unit breakdown) or the whole-quote hole count. A full suggestion the estimator
+      // audits in the calculator; EMI/PQ/DC-Mag and env setups aren't priced here.
+      const unitSeed = Array.isArray(draft?.units) ? draft!.units! : []
+      const puTechRate = sf(draft?.setup?.techRate, SETUP_DEFAULTS.techRate)
+      const puDrillTap = !!draft?.setup?.drillTap
+      const wholeHoles = sf(draft?.setup?.holes)
+      const findSeedUnit = (desc: string) =>
+        unitSeed.find((u) => u.name && String(desc).toLowerCase().includes(String(u.name).toLowerCase()))
+      const pricedInput2 = pricedInput.map((l) => {
+        const meta = setupMetaFromLabel(String(l.label || ''))
+        if (!meta) return l
+        const u = findSeedUnit(String(l.desc || ''))
+        const holes = u ? sf(u.holes) : wholeHoles
+        if (!(holes > 0)) return l  // no hole count → leave for the estimator
+        const weight = u ? sf(u.weight) : draftWt
+        const rule: FabRule = meta.rule === 'weight' ? (weight > 250 ? 'mws' : 'lws') : meta.rule
+        return { ...l, price: setupCostForUnit({ holes, rule, techRate: puTechRate, drillTap: puDrillTap, baseStd: meta.base }) }
+      })
+      const draftLines = pricedInput2.map((l) => {
         const code = String(l.code ?? '')
         return { key: lineSeq.current++, code, label: String(l.label ?? '') || (code ? codeLabel(code) : ''), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }
       })
