@@ -606,16 +606,26 @@ export function QuotePage() {
         if (key === 'tiNotes' || key === 'tiSpecs') continue // appended below, not filled
         if (isFillable(key, cur[key])) next[key] = String(v)
       }
-      // Specifications and Notes always append (never overwrite existing text), each
-      // skipped if its block is already present so re-running doesn't duplicate.
-      const append = (field: 'tiSpecs' | 'tiNotes', block: string) => {
-        const b = block.trim()
-        if (!b) return
-        const existing = String(cur[field] || '').trim()
-        if (!existing.includes(b)) next[field] = existing ? `${existing}\n\n${b}` : b
+      // Specifications — add only the CRR spec lines whose standard isn't already
+      // cited in the specs you wrote. The CRR emits one line per family ("<Family>
+      // testing in accordance with <STD>."), so on a revision this brings in the new
+      // PQ / DC-Mag lines without duplicating the EMI spec you already have.
+      const curSpec = String(cur.tiSpecs || '')
+      const newSpecLines = String(t.specs || '')
+        .split('\n').map((x) => x.trim()).filter(Boolean)
+        .filter((ln) => {
+          const m = ln.match(/in accordance with (.+?)\.?$/i)
+          const std = m ? m[1].trim() : ln
+          return !curSpec.includes(std) && !curSpec.includes(ln)
+        })
+      if (newSpecLines.length) next.tiSpecs = curSpec.trim() ? `${curSpec.trim()}\n${newSpecLines.join('\n')}` : newSpecLines.join('\n')
+
+      // Notes — append the CRR notes block only if its body isn't already present.
+      const noteBlock = String(t.notes || '').trim()
+      if (noteBlock) {
+        const existingNotes = String(cur.tiNotes || '').trim()
+        if (!existingNotes.includes(noteBlock)) next.tiNotes = existingNotes ? `${existingNotes}\n\n${noteBlock}` : noteBlock
       }
-      append('tiSpecs', String(t.specs || ''))
-      append('tiNotes', String(t.notes || ''))
       return next
     })
 
@@ -628,8 +638,14 @@ export function QuotePage() {
       .map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }))
     if (toAdd.length) setLineItems((cur) => [...cur, ...toAdd])
 
-    // Budget — append the parsed $ items (raw cost) and turn the Budget on.
-    const bRows = (draft.budget || []).map((b) => ({ desc: String(b.desc || ''), qty: String(b.qty || '1'), unitCost: String(b.unitCost || '0') }))
+    // Budget — add only rows whose description isn't already on the quote's budget,
+    // so pulling a revised CRR brings in the NEW budget lines (e.g. PQ / DC Mag)
+    // without duplicating what you already have. Existing rows are left as-is, so a
+    // changed cost on a line you already have is yours to adjust — not overwritten.
+    const haveBudget = new Set(budgetEdit.rows.map((r) => String(r.desc || '').trim().toLowerCase()))
+    const bRows = (draft.budget || [])
+      .map((b) => ({ desc: String(b.desc || ''), qty: String(b.qty || '1'), unitCost: String(b.unitCost || '0') }))
+      .filter((r) => r.desc && !haveBudget.has(r.desc.trim().toLowerCase()))
     if (bRows.length) setBudgetEdit((b) => ({ ...b, on: true, rows: [...b.rows, ...bRows] }))
 
     // Setup — cable count, fill-empty (default '0' counts as empty).
