@@ -288,7 +288,7 @@ export function SendComposer(props: SendComposerProps) {
             const others = allOpps.filter((o) => o !== g.opportunity)
             const msg = `Quote emailed to ${toList.join(', ')}${ccList.length ? ` (cc ${ccList.join(', ')})` : ''}`
               + (others.length ? ` — sent together with ${joinOpps(others)}` : '')
-            return appendChatter(String(g.quoteId), { by, at, msg }).catch(() => {})
+            return appendChatter(String(g.quoteId), { by, at, msg, auto: true }).catch(() => {})
           }))
         } else if (isGroup) {
           const allOpps = groupItems!.map((g) => g.opportunity)
@@ -297,14 +297,14 @@ export function SendComposer(props: SendComposerProps) {
               const others = allOpps.filter((o) => o !== g.opportunity)
               const msg = `Combined follow-up email sent to ${toList.join(', ')}${ccList.length ? ` (cc ${ccList.join(', ')})` : ''}`
                 + (others.length ? ` — also covered ${joinOpps(others)}` : '')
-              return appendChatter(g.quoteId, { by, at, msg }).catch(() => {})
+              return appendChatter(g.quoteId, { by, at, msg, auto: true }).catch(() => {})
             }),
           )
         } else {
           const note = (mode === 'quote' ? 'Quote emailed to ' : 'Follow-up email sent to ')
             + toList.join(', ')
             + (ccList.length ? ` (cc ${ccList.join(', ')})` : '')
-          await appendChatter(qid, { by, at, msg: note })
+          await appendChatter(qid, { by, at, msg: note, auto: true })
         }
       } catch { /* chatter note is best-effort */ }
 

@@ -12,6 +12,7 @@ import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { Contracting } from './features/dashboard/Contracting'
 import { CustomerContact } from './features/dashboard/CustomerContact'
+import { ActivityFeed } from './features/dashboard/ActivityFeed'
 import { QuotePage } from './features/quote/QuotePage'
 import { AccountPage } from './features/account/AccountPage'
 import { HomeLauncher } from './features/home/HomeLauncher'
@@ -90,6 +91,14 @@ export default function App() {
         />
         <Route path="/contracting" element={<ContractingHome />} />
         <Route path="/customer-contact" element={<CustomerContactHome />} />
+        <Route
+          path="/feed"
+          element={
+            <DashboardShell>
+              <ActivityFeed />
+            </DashboardShell>
+          }
+        />
         <Route path="/mass-emails" element={<Navigate to="/customer-contact" replace />} />
         <Route path="/quote/:id" element={<QuotePage />} />
         <Route path="/account/:name" element={<AccountPage />} />

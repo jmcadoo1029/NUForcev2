@@ -68,7 +68,7 @@ export async function flagQuote(input: FlagInput): Promise<QuoteFlag | null> {
   return rows?.[0] || null
 }
 
-export interface ChatterEntry { by: string; at: string; msg: string }
+export interface ChatterEntry { by: string; at: string; msg: string; auto?: boolean }
 
 /**
  * Append a chatter entry to the quote's data.chatterEntries. Fetches the current
