@@ -623,7 +623,7 @@ function processPaste(text,opts){
 $("savePdf").addEventListener("click",()=>{
   $("printarea").innerHTML=buildDocHTML();
   const q=sanitize(state.quote);
-  document.title = q?(q+" Test Specifications"):"Test Specifications";
+  document.title = q?("Test Specifications "+q):"Test Specifications";
   window.print();
 });
 window.addEventListener("afterprint",()=>{ document.title="NU Laboratories — Test Specifications Builder"; });

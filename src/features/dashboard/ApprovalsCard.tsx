@@ -38,7 +38,7 @@ function Section({ title, rows, tone, isApprover, onDecide, selectedIds, onToggl
         <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 36 }}>All caught up.</div>
       ) : (
         <div>
-          {rows.slice(0, 8).map((r) => (
+          {rows.map((r) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 0 8px 12px', borderBottom: '1px solid var(--border)' }}>
               {selectable ? (
                 <input type="checkbox" checked={selectedIds!.has(r.id)} onChange={() => onToggle!(r.id)} style={{ marginRight: 4, flexShrink: 0 }} />
@@ -56,7 +56,7 @@ function Section({ title, rows, tone, isApprover, onDecide, selectedIds, onToggl
               )}
             </div>
           ))}
-          {rows.length > 8 && <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 36, marginTop: 6 }}>+{rows.length - 8} more</div>}
+          
         </div>
       )}
     </div>
@@ -73,7 +73,7 @@ function ReopenSection({ rows, isApprover, busyId, onResolve }: { rows: Approval
         <span style={{ fontWeight: 600 }}>Reopen requests</span>
       </div>
       <div>
-        {rows.slice(0, 8).map((r) => {
+        {rows.map((r) => {
           const busy = busyId === r.id
           return (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 0 8px 36px', borderBottom: '1px solid var(--border)' }}>
@@ -90,7 +90,7 @@ function ReopenSection({ rows, isApprover, busyId, onResolve }: { rows: Approval
             </div>
           )
         })}
-        {rows.length > 8 && <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)', paddingLeft: 36, marginTop: 6 }}>+{rows.length - 8} more</div>}
+        
       </div>
     </div>
   )

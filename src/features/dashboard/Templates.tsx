@@ -14,6 +14,7 @@ import { fetchTemplate, saveTemplate, fillTemplate, DEFAULT_TEMPLATES, TOKENS, t
 
 const KEYS: Array<{ key: TemplateKey; label: string }> = [
   { key: 'quote', label: 'Quote email' },
+  { key: 'quote_combined', label: 'Combined quote' },
   { key: 'follow_up', label: 'Follow-up email' },
   { key: 'follow_up_combined', label: 'Combined follow-up' },
   { key: 'mass_all', label: 'Mass: All contacts' },
@@ -31,7 +32,7 @@ const legendFor = (key: TemplateKey): Array<{ token: string; desc: string }> => 
       { token: TOKENS.massFirstName, desc: 'Contact’s first name' },
       { token: '[Your Name]', desc: 'Your name (you type it in)' },
     ]
-  if (key === 'follow_up_combined')
+  if (key === 'follow_up_combined' || key === 'quote_combined')
     return [
       { token: TOKENS.contactFirstName, desc: 'Contact’s first name' },
       { token: TOKENS.quoteList, desc: 'List of quotes + items' },
@@ -51,7 +52,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
   const [active, setActive] = useState<TemplateKey>('quote')
-  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' }, mass_reengage: { subject: '', body: '' } })
+  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, quote_combined: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' }, mass_reengage: { subject: '', body: '' } })
   const [loaded, setLoaded] = useState(false)
   const [isManager, setIsManager] = useState(false)
   const [busy, setBusy] = useState(false)

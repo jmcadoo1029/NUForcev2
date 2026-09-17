@@ -58,9 +58,9 @@ function mapReopen(rows: RawRow[]): ApprovalRow[] {
 async function load(): Promise<ApprovalQueue> {
   const cols = 'id,opportunity,customer,total,data'
   const [q, w, ro] = await Promise.all([
-    restFetch<RawRow[]>('GET', `quotes?select=${cols}&approval_status=eq.pending&order=updated_at.desc&limit=50`),
-    restFetch<RawRow[]>('GET', `quotes?select=${cols}&won_approval_status=eq.pending_won&order=updated_at.desc&limit=50`),
-    restFetch<RawRow[]>('GET', `quotes?select=${cols}&data->reopenRequest->>status=eq.requested&order=updated_at.desc&limit=50`),
+    restFetch<RawRow[]>('GET', `quotes?select=${cols}&approval_status=eq.pending&order=updated_at.desc&limit=200`),
+    restFetch<RawRow[]>('GET', `quotes?select=${cols}&won_approval_status=eq.pending_won&order=updated_at.desc&limit=200`),
+    restFetch<RawRow[]>('GET', `quotes?select=${cols}&data->reopenRequest->>status=eq.requested&order=updated_at.desc&limit=200`),
   ])
   return { quote: mapRows(q, 'quote'), won: mapRows(w, 'won'), reopen: mapReopen(ro) }
 }

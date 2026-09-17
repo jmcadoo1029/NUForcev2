@@ -32,10 +32,34 @@ export function ReadyToSendCard() {
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [pdfLoadingId, setPdfLoadingId] = useState<string | null>(null)
   const [sendTarget, setSendTarget] = useState<SendTarget | null>(null)
+  // Combined send: rows the user has ticked to send together in one email.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [groupBusy, setGroupBusy] = useState(false)
+  const [groupTarget, setGroupTarget] = useState<{ contactName: string; contactEmail: string; ccEmails: string[]; quotes: { quoteId: string; opportunity: string; revision: string | null; testItem: string; pdfInput: SendTarget['pdfInput'] }[] } | null>(null)
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
   const rows = (data || []).filter((r) => !dismissedIds.has(r.id))
   const hide = (id: string) => setDismissedIds((cur) => new Set(cur).add(id))
+  const toggleSel = (id: string) => setSelected((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n })
+
+  // Load every ticked quote's send info and open the composer in combined mode —
+  // one email to the shared contact with each quote's PDF attached.
+  const sendTogether = async () => {
+    const chosen = rows.filter((r) => selected.has(r.id))
+    if (chosen.length < 2 || groupBusy) return
+    setGroupBusy(true)
+    try {
+      const infos = await Promise.all(chosen.map(async (r) => ({ r, info: await loadSendInfo(r.id) })))
+      const first = infos[0].info
+      const ccUnion = Array.from(new Set(infos.flatMap((x) => x.info.ccEmails).map((s) => s.trim()).filter(Boolean))).filter((e) => e !== first.contactEmail)
+      const quotes = infos.map(({ r, info }) => ({ quoteId: r.id, opportunity: r.opportunity, revision: info.revision, testItem: info.testItem, pdfInput: info.pdfInput }))
+      setGroupTarget({ contactName: first.contactName, contactEmail: first.contactEmail, ccEmails: ccUnion, quotes })
+    } catch (e) {
+      showToast('Couldn’t load the quotes: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setGroupBusy(false)
+    }
+  }
 
   // Load the quote's full data blob and assemble the send/PDF inputs (contacts +
   // the exact Quote-PDF source). Shared by "Send" and the "PDF" download so both
@@ -124,10 +148,19 @@ export function ReadyToSendCard() {
       {!err && !data && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Loading…</div>}
       {!err && data && rows.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Nothing waiting to send.</div>}
 
+      {!err && rows.length > 0 && selected.size > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', background: 'var(--info-soft)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 12px', marginBottom: 'var(--sp-3)' }}>
+          <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)' }}>{selected.size} selected</span>
+          <button onClick={() => setSelected(new Set())} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer' }}>Clear</button>
+          <button onClick={sendTogether} disabled={selected.size < 2 || groupBusy} title={selected.size < 2 ? 'Tick at least two quotes' : 'Send the selected quotes in one email'} style={{ marginLeft: 'auto', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 20, padding: '6px 16px', cursor: selected.size < 2 || groupBusy ? 'default' : 'pointer', opacity: selected.size < 2 || groupBusy ? 0.6 : 1 }}>{groupBusy ? 'Loading…' : `Send ${selected.size} together`}</button>
+        </div>
+      )}
+
       {!err && rows.length > 0 && (
-        <div style={{ maxHeight: 340, overflowY: 'auto' }}>
+        <div>
           {rows.map((r) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', borderBottom: '1px solid var(--border)' }}>
+              <input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleSel(r.id)} title="Select to send with others" style={{ flexShrink: 0, marginLeft: 4 }} />
               <Link
                 to={`/quote/${r.id}`}
                 style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '10px 4px', textDecoration: 'none', color: 'var(--text)', flex: 1, minWidth: 0 }}
@@ -175,6 +208,21 @@ export function ReadyToSendCard() {
           pdfInput={sendTarget.pdfInput}
           onClose={() => setSendTarget(null)}
           onSent={() => { hide(sendTarget.row.id); setSendTarget(null) }}
+        />
+      )}
+
+      {groupTarget && (
+        <SendComposer
+          mode="quote"
+          quoteId={groupTarget.quotes[0].quoteId}
+          opportunity={groupTarget.quotes[0].opportunity}
+          revision={groupTarget.quotes[0].revision}
+          contactName={groupTarget.contactName}
+          contactEmail={groupTarget.contactEmail}
+          ccEmails={groupTarget.ccEmails}
+          groupQuotes={groupTarget.quotes}
+          onClose={() => setGroupTarget(null)}
+          onSent={() => { setDismissedIds((cur) => { const n = new Set(cur); groupTarget.quotes.forEach((q) => n.add(q.quoteId)); return n }); setSelected(new Set()); setGroupTarget(null) }}
         />
       )}
 

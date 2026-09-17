@@ -7,6 +7,10 @@ import { restFetch } from './restFetch'
 
 export type TemplateKey =
   | 'quote'
+  // Combined quote send — several approved quotes to the SAME contact in one email,
+  // each quote's PDF attached. Uses {Quote List} instead of the singular {Quote #}/
+  // {Test Item}. The Ready-to-Send queue opens this when 2+ quotes are selected.
+  | 'quote_combined'
   | 'follow_up'
   | 'follow_up_combined'
   // Mass-email audience starters — editable here so the wording lives in one place;
@@ -59,6 +63,27 @@ const DEFAULT_QUOTE: EmailTemplate = {
   body: `Dear {First Name of contact},
 
 Please see the attached quotation #{Quote #} for testing the {Test Item}. If you have any questions, don't hesitate to reach out.
+
+Also attached is our Terms and Conditions page for your signature and return with your purchase order.
+
+Thank you,
+
+${SIGNATURE}`,
+}
+
+// Combined quote send — one email covering several quotes to the same contact,
+// each quote's PDF attached. {Quote List} expands to one "#number — test item"
+// line per quote (mirrors the combined follow-up).
+const DEFAULT_QUOTE_COMBINED: EmailTemplate = {
+  key: 'quote_combined',
+  subject: `NU Laboratories Quotations`,
+  body: `Dear {First Name of contact},
+
+Please see the attached quotations:
+
+{Quote List}
+
+If you have any questions on any of these, don't hesitate to reach out.
 
 Also attached is our Terms and Conditions page for your signature and return with your purchase order.
 
@@ -183,6 +208,7 @@ Looking forward to reconnecting!`,
 
 export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {
   quote: DEFAULT_QUOTE,
+  quote_combined: DEFAULT_QUOTE_COMBINED,
   follow_up: DEFAULT_FOLLOW_UP,
   follow_up_combined: DEFAULT_FOLLOW_UP_COMBINED,
   mass_all: DEFAULT_MASS_ALL,
