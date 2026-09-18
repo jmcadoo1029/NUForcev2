@@ -180,6 +180,16 @@ export async function unflagQuote(flagId: string, by: string): Promise<void> {
   })
 }
 
+/** Resolve any open flag on a quote, addressed by quote_id rather than flag-row id.
+ *  Used when a quote is approved: the attention flag is cleared automatically so it
+ *  drops off the Flagged board and the quote's Flag chip. quote_flags has a UNIQUE
+ *  quote_id, so this touches at most one row; if none is open it's a harmless no-op. */
+export async function resolveFlagsForQuote(quoteId: string, by: string): Promise<void> {
+  await restFetch('PATCH', `quote_flags?quote_id=eq.${encodeURIComponent(quoteId)}&resolved=eq.false`, {
+    body: { resolved: true, resolved_by: by, resolved_at: new Date().toISOString() },
+  })
+}
+
 export async function fetchQuoteActions(quoteId: string): Promise<QuoteActionsState> {
   const id = encodeURIComponent(quoteId)
   const [flags, sends] = await Promise.all([

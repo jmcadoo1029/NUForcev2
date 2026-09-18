@@ -38,7 +38,7 @@ import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
 import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
-import { markClosedLost, softDeleteQuote } from '../../lib/quoteActions'
+import { markClosedLost, softDeleteQuote, resolveFlagsForQuote } from '../../lib/quoteActions'
 import type { DraftImport } from '../../lib/importDraft'
 import { priceDraftLines } from '../../lib/importDraft'
 import { getSessionEmail } from '../../lib/auth'
@@ -377,6 +377,9 @@ export function QuotePage() {
     notifyQuoteSubmitted(ids.map((id) => ({ submittedById: id })))
   }
   const approveQuote = async (comments: string) => {
+    // The id the attention flag (if any) is attached to — captured before the
+    // edited-approve branch below may swap row.id for a new revision id.
+    const flaggedId = row?.id || ''
     const nextApproval: ApprovalState = { ...approval, status: 'approved', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'approved', comments) }
     // If the approver edited the quote in place before approving, persist the FULL
     // quote (capturing those edits) together with the approval — no reopen/resubmit.
@@ -395,6 +398,11 @@ export function QuotePage() {
       }
     } else {
       await applyApproval(nextApproval, true, 'Quote approved')
+    }
+    // Approving clears any open attention flag on this quote (best-effort). Bump
+    // sendNonce so the QuoteActions chip remounts and re-reads the now-cleared flag.
+    if (WRITES_ENABLED && flaggedId) {
+      try { await resolveFlagsForQuote(flaggedId, me); setSendNonce((n) => n + 1) } catch { /* leave the flag if this fails */ }
     }
     // Event 2: tell the send-group it's approved and ready to send (best-effort).
     if (!WRITES_ENABLED) return

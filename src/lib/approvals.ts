@@ -1,5 +1,6 @@
 import { restFetch } from './restFetch'
 import type { ApprovalBlock } from './quoteGuards'
+import { resolveFlagsForQuote } from './quoteActions'
 
 // Persist an approval decision directly (submit / approve / reject, and the won
 // variants). Updates both the status column the dashboards/queues read AND the
@@ -50,6 +51,11 @@ export async function decideApproval(quoteId: string, decision: 'approved' | 're
     history: [...(prev.history || []), { event: decision, by, at, comments }],
   }
   await persistApproval(quoteId, next, data)
+  // Approving a quote clears any open attention flag on it (best-effort; a flag
+  // failure must never fail the approval itself).
+  if (decision === 'approved') {
+    try { await resolveFlagsForQuote(quoteId, by) } catch { /* leave the flag if this fails */ }
+  }
 }
 
 /** Approve or reject a pending Closed-Won from the dashboard queue. */
