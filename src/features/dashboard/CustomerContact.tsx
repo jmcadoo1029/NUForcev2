@@ -5,6 +5,7 @@ import { ReEngageContacts } from './ReEngageContacts'
 import { MassEmails } from './MassEmails'
 import { BadContactsCard } from './BadContactsCard'
 import { CampaignsPanel } from './Campaigns'
+import { ScheduledPanel } from './ScheduledPanel'
 
 // Customer Contact — the home for outreach + contact hygiene. Visible to everyone,
 // organized into two groups:
@@ -14,13 +15,14 @@ import { CampaignsPanel } from './Campaigns'
 // non-managers and a non-manager can never land on it. Because a campaign is emailed
 // from the Mass Emails composer, sending from a campaign stays manager-gated there.
 
-type Sub = 'reengage' | 'badcontacts' | 'campaigns' | 'massemails'
+type Sub = 'reengage' | 'badcontacts' | 'campaigns' | 'massemails' | 'scheduled'
 
 interface Tab { key: Sub; label: string; managerOnly?: boolean }
 const GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Contacts', tabs: [{ key: 'reengage', label: 'Re-engage' }, { key: 'badcontacts', label: 'Bad contacts' }] },
-  { label: 'Outreach', tabs: [{ key: 'campaigns', label: 'Campaigns' }, { key: 'massemails', label: 'Mass Emails', managerOnly: true }] },
+  { label: 'Outreach', tabs: [{ key: 'campaigns', label: 'Campaigns' }, { key: 'massemails', label: 'Mass Emails', managerOnly: true }, { key: 'scheduled', label: 'Scheduled', managerOnly: true }] },
 ]
+const isManagerOnly = (t: Sub) => t === 'massemails' || t === 'scheduled'
 
 const seg = (active: boolean, first: boolean): CSSProperties => ({
   fontFamily: 'inherit',
@@ -40,11 +42,11 @@ export function CustomerContact() {
   const { canView } = useCanViewManager() // manager view — gates the Mass Emails send tab
   const [sub, setSub] = useState<Sub>('reengage')
 
-  // A non-manager can never sit on the manager-only Mass Emails view.
+  // A non-manager can never sit on a manager-only view (Mass Emails, Scheduled).
   useEffect(() => {
-    if (!canView && sub === 'massemails') setSub('reengage')
+    if (!canView && isManagerOnly(sub)) setSub('reengage')
   }, [canView, sub])
-  const view: Sub = !canView && sub === 'massemails' ? 'reengage' : sub
+  const view: Sub = !canView && isManagerOnly(sub) ? 'reengage' : sub
 
   return (
     <>
@@ -68,6 +70,7 @@ export function CustomerContact() {
       {view === 'reengage' ? <ReEngageContacts />
         : view === 'badcontacts' ? <BadContactsCard />
         : view === 'campaigns' ? <Card><CampaignsPanel /></Card>
+        : view === 'scheduled' ? <Card><ScheduledPanel /></Card>
         : <MassEmails />}
     </>
   )

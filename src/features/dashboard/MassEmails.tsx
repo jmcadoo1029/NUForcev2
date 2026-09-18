@@ -4,8 +4,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
-import { PCODE_OPTS } from '../../data/constants'
-import { buildCatalogRaw } from '../../data/catalog'
+import { CODE_OPTIONS, productNameForCode, fillProductToken } from '../../lib/productName'
 import { Autocomplete } from '../quote/form/Autocomplete'
 import { searchClients, type ClientRow } from '../../lib/directory'
 import {
@@ -42,53 +41,6 @@ const seedTpl = (m: AudienceMode) => ({ subject: DEFAULT_TEMPLATES[MASS_KEY[m]].
 
 // Distinct product codes for the audience dropdown (same catalog quotes use).
 // Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
-// Codes kept OFF the product-code email audience — reports, procedures, and misc
-// admin lines, not tests worth a "we quoted you this" blast.
-const EXCLUDE_CODES = new Set(['33', '41', '42', '43', '44', '59', '95'])
-const CODE_OPTIONS: { code: string; label: string }[] = (() => {
-  const byCode = new Map<string, string[]>()
-  for (const p of PCODE_OPTS) {
-    if (EXCLUDE_CODES.has(p.code)) continue
-    const arr = byCode.get(p.code) || []
-    if (!arr.includes(p.label)) arr.push(p.label)
-    byCode.set(p.code, arr)
-  }
-  return Array.from(byCode.entries())
-    .map(([code, labels]) => ({ code, label: labels.join(' / ') }))
-    .sort((a, b) => Number(a.code) - Number(b.code))
-})()
-
-// Clean product name per code, from the Product Picker catalog with the
-// "– Setup"/"– Testing" suffix stripped, falling back to PCODE_OPTS. Fills the
-// {product} token in the product-code email so it names the specific test.
-const PRODUCT_NAME_BY_CODE: Record<string, string> = (() => {
-  const strip = (s: string) => s.replace(/\s*[–—-]\s*(set[\s-]?up|testing)\s*$/i, '').trim()
-  const byCode = new Map<string, string[]>()
-  for (const p of buildCatalogRaw()) {
-    const nm = strip(p.label)
-    if (!nm) continue
-    const arr = byCode.get(p.code) || []
-    if (!arr.includes(nm)) arr.push(nm)
-    byCode.set(p.code, arr)
-  }
-  for (const p of PCODE_OPTS) if (!byCode.has(p.code)) byCode.set(p.code, [p.label])
-  const out: Record<string, string> = {}
-  byCode.forEach((names, code) => { out[code] = names.join(' / ') })
-  return out
-})()
-// Hand-set display names for codes that map to several tests, so the {product} token
-// reads cleanly in the email (per Jordan). Falls back to the catalog-derived name.
-const PRODUCT_NAME_OVERRIDE: Record<string, string> = {
-  '11': 'Acoustic Noise',
-  '12': 'Airborne Noise or Structureborne Noise',
-  '51': 'EMI',
-  '52': 'shock or vibration',
-  '53': 'Temperature & Humidity',
-  '56': 'Altitude',
-  '58': 'Enclosure Effectiveness',
-}
-const productNameForCode = (code: string) => PRODUCT_NAME_OVERRIDE[code] || PRODUCT_NAME_BY_CODE[code] || CODE_OPTIONS.find((o) => o.code === code)?.label || code
-
 const seg = (on: boolean, first: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
@@ -176,9 +128,8 @@ export function MassEmails() {
   // The set of current audience-starter bodies — switching audiences only swaps
   // the text when the body still matches one of these (i.e. hasn't been edited).
   const defaultBodies = useMemo(() => new Set([...Object.values(audienceTpl).map((t) => t.body), codePerformedTpl.body]), [audienceTpl, codePerformedTpl])
-  // The product name for the {product} token — the selected code's catalog name.
-  const productName = mode === 'code' && code ? productNameForCode(code) : ''
-  const fillProduct = (s: string) => s.replace(/\{product\}/gi, productName || '[product]')
+  // Fill the {product} token with the selected code's catalog name.
+  const fillProduct = (s: string) => fillProductToken(s, mode === 'code' ? code : '')
 
   // Resolve the product-code date window from the preset (or the custom inputs).
   // Compared against quotes.created_at; `to` is pushed to end-of-day so the whole
