@@ -41,8 +41,18 @@ async function hmacHex(message: string, key: string): Promise<string> {
 }
 // The CAN-SPAM footer appended to every marketing send, with the recipient's one-click
 // unsubscribe link.
+function escHtml(s: string): string {
+  return s.replace(/[&<>]/g, (c) => (c === '&' ? '&amp;' : c === '<' ? '&lt;' : '&gt;'))
+}
+// HTML version of the body so "unsubscribe here" is a real link (nicer than a bare URL).
+function htmlBody(textBody: string, url: string): string {
+  const safe = escHtml(textBody).replace(/\n/g, '<br>')
+  return `<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1c2430">`
+    + safe
+    + `<br><br><span style="color:#98a2b3;font-size:12px">You're receiving this because you've done business with NU Laboratories, Inc. (312 Old Allerton Rd., Annandale, NJ 08801). If you'd prefer not to receive these emails, <a href="${url}" style="color:#98a2b3">unsubscribe here</a>.</span></div>`
+}
 function unsubFooter(url: string): string {
-  return `\n\n\u2014\nYou're receiving this because you've done business with NU Laboratories, Inc. (312 Old Allerton Rd., Annandale, NJ 08801). If you'd prefer not to receive these emails, unsubscribe here:\n${url}`
+  return `\n\n--\nYou're receiving this because you've done business with NU Laboratories, Inc. (312 Old Allerton Rd., Annandale, NJ 08801). If you'd prefer not to receive these emails, unsubscribe here:\n${url}`
 }
 
 interface Recipient { email: string; name?: string }
@@ -141,6 +151,7 @@ serve(async (req: Request) => {
       reply_to: realEmail,
       subject,
       text: fill(body, r.name || '') + unsubFooter(unsubs[k]),
+      html: htmlBody(fill(body, r.name || ''), unsubs[k]),
       headers: {
         'List-Unsubscribe': `<mailto:${realEmail}?subject=unsubscribe>, <${unsubs[k]}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
