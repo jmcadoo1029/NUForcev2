@@ -4,7 +4,7 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { fetchIsApprover } from '../../lib/perms'
 import { fetchSelf, type Self } from '../../lib/me'
-import { applySenderIdentity } from '../../lib/massEmail'
+import { applySenderIdentity, fetchTemplates as fetchCustomTemplates, saveTemplate as createCustomTemplate, updateTemplate as updateCustomTemplate, deleteTemplate as deleteCustomTemplate, type EmailTemplate as CustomTemplate } from '../../lib/massEmail'
 import { fetchTemplate, saveTemplate, fillTemplate, DEFAULT_TEMPLATES, TOKENS, type TemplateKey, type TemplateVars } from '../../lib/emailTemplates'
 
 // Email Templates manager — the global send + follow-up templates, editable here
@@ -18,7 +18,8 @@ const KEYS: Array<{ key: TemplateKey; label: string }> = [
   { key: 'follow_up', label: 'Follow-up email' },
   { key: 'follow_up_combined', label: 'Combined follow-up' },
   { key: 'mass_all', label: 'Mass: All contacts' },
-  { key: 'mass_code', label: 'Mass: Product code' },
+  { key: 'mass_code', label: 'Mass: Product — quoted' },
+  { key: 'mass_code_performed', label: 'Mass: Product — performed' },
   { key: 'mass_campaign', label: 'Mass: Campaign' },
   { key: 'mass_account', label: 'Mass: Account' },
   { key: 'mass_reengage', label: 'Mass: Re-engage' },
@@ -27,11 +28,15 @@ const KEYS: Array<{ key: TemplateKey; label: string }> = [
 // Per-template token legend — the combined follow-up uses {Quote List} (all
 // quotes + their items) instead of the singular {Quote #}/{Test Item}.
 const legendFor = (key: TemplateKey): Array<{ token: string; desc: string }> => {
-  if (key.startsWith('mass_'))
-    return [
+  if (key.startsWith('mass_')) {
+    const base = [
       { token: TOKENS.massFirstName, desc: 'Contact’s first name' },
       { token: '[Your Name]', desc: 'Your name (you type it in)' },
     ]
+    // The product-code templates also name the specific test.
+    if (key === 'mass_code' || key === 'mass_code_performed') base.splice(1, 0, { token: TOKENS.product, desc: 'The test name (from the product code)' })
+    return base
+  }
   if (key === 'follow_up_combined' || key === 'quote_combined')
     return [
       { token: TOKENS.contactFirstName, desc: 'Contact’s first name' },
@@ -46,13 +51,13 @@ const legendFor = (key: TemplateKey): Array<{ token: string; desc: string }> => 
   ]
 }
 
-const SAMPLE: TemplateVars = { contactFirstName: 'John', quoteNumber: '26-1234B', testItem: 'Widget Assembly', quoteList: '#26-1234B — Widget Assembly\n#26-1235 — Gearbox Housing', senderName: 'Jane Tester' }
+const SAMPLE: TemplateVars = { contactFirstName: 'John', quoteNumber: '26-1234B', testItem: 'Widget Assembly', quoteList: '#26-1234B — Widget Assembly\n#26-1235 — Gearbox Housing', senderName: 'Jane Tester', product: 'Vibration' }
 
 export function Templates({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
   const [active, setActive] = useState<TemplateKey>('quote')
-  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, quote_combined: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' }, mass_reengage: { subject: '', body: '' } })
+  const [drafts, setDrafts] = useState<Record<TemplateKey, { subject: string; body: string }>>({ quote: { subject: '', body: '' }, quote_combined: { subject: '', body: '' }, follow_up: { subject: '', body: '' }, follow_up_combined: { subject: '', body: '' }, mass_all: { subject: '', body: '' }, mass_code: { subject: '', body: '' }, mass_code_performed: { subject: '', body: '' }, mass_campaign: { subject: '', body: '' }, mass_account: { subject: '', body: '' }, mass_reengage: { subject: '', body: '' } })
   const [loaded, setLoaded] = useState(false)
   const [isManager, setIsManager] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -61,6 +66,34 @@ export function Templates({ onClose }: { onClose: () => void }) {
   const subjectRef = useRef<HTMLInputElement>(null)
   const bodyRef = useRef<HTMLTextAreaElement>(null)
   const focusedRef = useRef<'subject' | 'body'>('body')
+
+  // Reusable (custom) templates — the named templates the Mass Emails composer loads.
+  // Managed here too so all template work lives in one place.
+  const [customTpls, setCustomTpls] = useState<CustomTemplate[]>([])
+  const [editId, setEditId] = useState<string | 'new' | null>(null)
+  const [cName, setCName] = useState('')
+  const [cSubject, setCSubject] = useState('')
+  const [cBody, setCBody] = useState('')
+  const [cBusy, setCBusy] = useState(false)
+  const loadCustom = () => fetchCustomTemplates().then(setCustomTpls).catch(() => {})
+  useEffect(() => { loadCustom() }, [])
+
+  const startNew = () => { setEditId('new'); setCName(''); setCSubject(''); setCBody('') }
+  const startEdit = (t: CustomTemplate) => { setEditId(t.id); setCName(t.name); setCSubject(t.subject); setCBody(t.body) }
+  const saveCustom = async () => {
+    if (!cName.trim() || !cSubject.trim() || !cBody.trim()) { showToast('Name, subject, and body are all required.', 'warn'); return }
+    if (!WRITES_ENABLED) { showToast('Preview — template writes are off.', 'warn'); return }
+    setCBusy(true)
+    try {
+      if (editId === 'new') await createCustomTemplate(cName.trim(), cSubject.trim(), cBody, me)
+      else if (editId) await updateCustomTemplate(editId, cName.trim(), cSubject.trim(), cBody)
+      showToast('Template saved', 'success'); setEditId(null); loadCustom()
+    } catch (e) { showToast('Save failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000) } finally { setCBusy(false) }
+  }
+  const deleteCustom = async (t: CustomTemplate) => {
+    if (!window.confirm(`Delete template “${t.name}”?`)) return
+    try { if (WRITES_ENABLED) await deleteCustomTemplate(t.id); if (editId === t.id) setEditId(null); loadCustom() } catch (e) { showToast('Delete failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000) }
+  }
 
   useEffect(() => {
     let alive = true
@@ -165,6 +198,42 @@ export function Templates({ onClose }: { onClose: () => void }) {
               <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{active.startsWith('mass_') && self ? applySenderIdentity(fillTemplate(cur.body, sample), self) : fillTemplate(cur.body, sample)}</div>
             </div>
           </div>
+
+          {isManager && (
+            <div style={{ marginTop: 'var(--sp-5)', borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-4)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', marginBottom: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Reusable templates <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic' }}>· your own, loadable in Mass Emails</span></div>
+                {editId === null && <Button variant="secondary" small onClick={startNew}>+ New template</Button>}
+              </div>
+
+              {editId !== null && (
+                <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)', marginBottom: 'var(--sp-3)', display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+                  <input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="Template name (e.g. Year-end thank you)" style={input} />
+                  <input value={cSubject} onChange={(e) => setCSubject(e.target.value)} placeholder="Subject" style={input} />
+                  <textarea value={cBody} onChange={(e) => setCBody(e.target.value)} placeholder="Body" rows={8} style={{ ...input, lineHeight: 1.6, resize: 'vertical', whiteSpace: 'pre-wrap' }} />
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+                    <Button variant="ghost" small onClick={() => setEditId(null)} disabled={cBusy}>Cancel</Button>
+                    <Button variant="primary" small onClick={saveCustom} disabled={cBusy}>{cBusy ? 'Saving…' : editId === 'new' ? 'Create template' : 'Save changes'}</Button>
+                  </div>
+                </div>
+              )}
+
+              {editId === null && (customTpls.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', fontStyle: 'italic' }}>No reusable templates yet. Create one to load it in the Mass Emails composer.</div>
+              ) : (
+                <div>
+                  {customTpls.map((t) => (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '8px 4px', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ fontWeight: 600 }}>{t.name}</span>
+                      <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
+                      <button onClick={() => startEdit(t)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                      <button onClick={() => deleteCustom(t)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
 
           {!WRITES_ENABLED && isManager && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>Preview — writes are off, so Save won’t persist yet.</div>}
         </>

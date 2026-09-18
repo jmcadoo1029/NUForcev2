@@ -85,11 +85,13 @@ export async function fetchAllContacts(): Promise<ContactLoad> {
  * ISO strings (YYYY-MM-DD or a full timestamp) compared against quotes.created_at
  * — the DB-stamped date the quote was first written.
  */
-export async function fetchContactsByProductCode(code: string, range?: { from?: string; to?: string }): Promise<Recipient[]> {
+export async function fetchContactsByProductCode(code: string, range?: { from?: string; to?: string }, wonOnly = false): Promise<Recipient[]> {
   const c = code.trim()
   if (!c) return []
   const filter = encodeURIComponent(JSON.stringify([{ code: c }]))
   let path = `quotes?select=em:data->qi->>email,nm:data->qi->>contact&line_items=cs.${filter}`
+  // 'Performed' audience: only contacts on a Closed-Won quote for this code.
+  if (wonOnly) path += `&stage=eq.${encodeURIComponent('Closed Won')}`
   if (range?.from) path += `&created_at=gte.${encodeURIComponent(range.from)}`
   if (range?.to) path += `&created_at=lte.${encodeURIComponent(range.to)}`
   path += `&order=id`
@@ -135,6 +137,9 @@ export async function fetchTemplates(): Promise<EmailTemplate[]> {
 }
 export async function saveTemplate(name: string, subject: string, body: string, by: string): Promise<void> {
   await restFetch('POST', 'email_templates', { body: { name, subject, body, created_by: by }, returnRepresentation: false })
+}
+export async function updateTemplate(id: string, name: string, subject: string, body: string): Promise<void> {
+  await restFetch('PATCH', `email_templates?id=eq.${encodeURIComponent(id)}`, { body: { name, subject, body } })
 }
 export async function deleteTemplate(id: string): Promise<void> {
   await restFetch('DELETE', `email_templates?id=eq.${encodeURIComponent(id)}`)

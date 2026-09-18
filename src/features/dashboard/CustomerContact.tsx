@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties } from 'react'
+import { Card } from '../../components'
 import { useCanViewManager } from '../../lib/perms'
 import { ReEngageContacts } from './ReEngageContacts'
 import { MassEmails } from './MassEmails'
@@ -66,7 +67,7 @@ export function CustomerContact() {
 
       {view === 'reengage' ? <ReEngageContacts />
         : view === 'badcontacts' ? <BadContactsCard />
-        : view === 'campaigns' ? <CampaignsPanel />
+        : view === 'campaigns' ? <Card><CampaignsPanel /></Card>
         : <MassEmails />}
     </>
   )

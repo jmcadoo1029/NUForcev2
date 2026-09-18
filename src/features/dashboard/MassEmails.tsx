@@ -5,6 +5,7 @@ import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { PCODE_OPTS } from '../../data/constants'
+import { buildCatalogRaw } from '../../data/catalog'
 import { Autocomplete } from '../quote/form/Autocomplete'
 import { searchClients, type ClientRow } from '../../lib/directory'
 import {
@@ -53,6 +54,28 @@ const CODE_OPTIONS: { code: string; label: string }[] = (() => {
     .sort((a, b) => Number(a.code) - Number(b.code))
 })()
 
+// Clean product name per code, from the Product Picker catalog with the
+// "– Setup"/"– Testing" suffix stripped, falling back to PCODE_OPTS. Fills the
+// {product} token in the product-code email so it names the specific test.
+const PRODUCT_NAME_BY_CODE: Record<string, string> = (() => {
+  const strip = (s: string) => s.replace(/\s*[–—-]\s*(set[\s-]?up|testing)\s*$/i, '').trim()
+  const byCode = new Map<string, string[]>()
+  for (const p of buildCatalogRaw()) {
+    const nm = strip(p.label)
+    if (!nm) continue
+    const arr = byCode.get(p.code) || []
+    if (!arr.includes(nm)) arr.push(nm)
+    byCode.set(p.code, arr)
+  }
+  for (const p of PCODE_OPTS) if (!byCode.has(p.code)) byCode.set(p.code, [p.label])
+  const out: Record<string, string> = {}
+  byCode.forEach((names, code) => { out[code] = names.join(' / ') })
+  return out
+})()
+const productNameForCode = (code: string) => PRODUCT_NAME_BY_CODE[code] || CODE_OPTIONS.find((o) => o.code === code)?.label || code
+
+const seg = (on: boolean, first: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
@@ -79,6 +102,10 @@ export function MassEmails() {
 
   const [mode, setMode] = useState<AudienceMode>('all')
   const [code, setCode] = useState('')
+  // Product-code split: 'quoted' = anyone we quoted this test; 'performed' = anyone
+  // with a Closed-Won quote for it. Each seeds a different starter template.
+  const [codeAudience, setCodeAudience] = useState<'quoted' | 'performed'>('quoted')
+  const [codePerformedTpl, setCodePerformedTpl] = useState<{ subject: string; body: string }>({ subject: DEFAULT_TEMPLATES.mass_code_performed.subject, body: DEFAULT_TEMPLATES.mass_code_performed.body })
   const [datePreset, setDatePreset] = useState<'any' | '1y' | '2y' | '3y' | '5y' | 'custom'>('any')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -119,6 +146,7 @@ export function MassEmails() {
   // refresh it to the saved version so edits made in the manager show up here.
   useEffect(() => {
     let alive = true
+    fetchTemplate('mass_code_performed').then((t) => { if (alive) setCodePerformedTpl({ subject: t.subject, body: t.body }) }).catch(() => {})
     Promise.all((['all', 'code', 'campaign', 'account'] as AudienceMode[]).map((m) => fetchTemplate(MASS_KEY[m])))
       .then(([a, c, cp, ac]) => {
         if (!alive) return
@@ -132,7 +160,10 @@ export function MassEmails() {
 
   // The set of current audience-starter bodies — switching audiences only swaps
   // the text when the body still matches one of these (i.e. hasn't been edited).
-  const defaultBodies = useMemo(() => new Set(Object.values(audienceTpl).map((t) => t.body)), [audienceTpl])
+  const defaultBodies = useMemo(() => new Set([...Object.values(audienceTpl).map((t) => t.body), codePerformedTpl.body]), [audienceTpl, codePerformedTpl])
+  // The product name for the {product} token — the selected code's catalog name.
+  const productName = mode === 'code' && code ? productNameForCode(code) : ''
+  const fillProduct = (s: string) => s.replace(/\{product\}/gi, productName || '[product]')
 
   // Resolve the product-code date window from the preset (or the custom inputs).
   // Compared against quotes.created_at; `to` is pushed to end-of-day so the whole
@@ -161,7 +192,7 @@ export function MassEmails() {
     try {
       let list: Recipient[] = []
       if (mode === 'all') { const load = await fetchAllContacts(); list = load.recipients; setScanned(load.scanned) }
-      else if (mode === 'code') { list = await fetchContactsByProductCode(code, computeRange()); setScanned(null) }
+      else if (mode === 'code') { list = await fetchContactsByProductCode(code, computeRange(), codeAudience === 'performed'); setScanned(null) }
       else if (mode === 'campaign') { list = await fetchContactsByCampaign(campaignId); setScanned(null) }
       else if (mode === 'account') { list = await fetchContactsByAccount(accountId); setScanned(null) }
       setRecipients(list)
@@ -214,7 +245,7 @@ export function MassEmails() {
     mode === 'all' ? 'All contacts'
       : mode === 'campaign' ? `Campaign: ${campaignName || '—'}`
         : mode === 'account' ? `Account: ${accountText || '—'}`
-          : `Quoted code ${code || '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
+          : `${codeAudience === 'performed' ? 'Performed' : 'Quoted'} ${code ? productNameForCode(code) : '—'}${datePreset !== 'any' ? ` · ${computeRange().label}` : ''}`
 
   // Switch audience: swap in that audience's starter template (only if the body
   // is still a pristine default — never overwrite custom text or a loaded
@@ -228,8 +259,20 @@ export function MassEmails() {
     setExcluded(new Set()); setInternalIncluded(new Set())
     if (next === 'all') { fetchAllContacts().then((l) => { setRecipients(l.recipients); setScanned(l.scanned) }).catch(() => {}) }
     else { setRecipients([]); setScanned(null) }
+    if (next === 'code') setCodeAudience('quoted')
     if (next === 'campaign') setCampaignId('')
     if (next === 'account') { setAccountId(''); setAccountText('') }
+  }
+
+  // Switch the product-code split (quoted ↔ performed): swap in that variant's
+  // starter template (only when the body is still a pristine default), and clear the
+  // loaded recipients so the next "Find contacts" re-queries with the right filter.
+  const pickCodeAudience = (next: 'quoted' | 'performed') => {
+    setCodeAudience(next)
+    const tpl = next === 'performed' ? codePerformedTpl : audienceTpl.code
+    if (defaultBodies.has(body) || !body.trim()) { setSubject(tpl.subject); setBody(tpl.body) }
+    setExcluded(new Set()); setInternalIncluded(new Set())
+    setRecipients([]); setScanned(null)
   }
 
   const applyTemplate = (id: string) => {
@@ -258,7 +301,7 @@ export function MassEmails() {
     if (finalRecipients.length === 0) { showToast('No recipients to send to.', 'warn'); return }
     setSending(true)
     try {
-      const res = await sendMassEmail({ subject: subject.trim(), body, audience: audienceLabel, recipients: finalRecipients })
+      const res = await sendMassEmail({ subject: fillProduct(subject.trim()), body: fillProduct(body), audience: audienceLabel, recipients: finalRecipients })
       if (res.notDeployed) { showToast('The mass-email function isn’t deployed yet — nothing sent.', 'warn', 7000); return }
       if (!res.ok) { showToast('Send failed: ' + (res.error || 'unknown'), 'error', 7000); return }
       showToast(`Sent to ${res.sent ?? finalRecipients.length}${res.failed ? ` (${res.failed} failed)` : ''}.`, 'success', 6000)
@@ -302,7 +345,7 @@ export function MassEmails() {
           {self && (
             <div style={{ marginTop: 'var(--sp-3)' }}>
               <label style={label}>Preview — as it sends <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>(your name and signature filled in; {'{first name}'} still merges per recipient)</span></label>
-              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', margin: 0 }}>{applySenderIdentity(body, self)}</pre>
+              <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', margin: 0 }}>{applySenderIdentity(fillProduct(body), self)}</pre>
             </div>
           )}
         </div>
@@ -326,6 +369,16 @@ export function MassEmails() {
           </div>
 
           {mode === 'code' && (
+            <>
+            <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+              <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
+                <button onClick={() => pickCodeAudience('quoted')} style={seg(codeAudience === 'quoted', true)}>Quoted before</button>
+                <button onClick={() => pickCodeAudience('performed')} style={seg(codeAudience === 'performed', false)}>Performed (Closed-Won)</button>
+              </div>
+              <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>
+                {code ? <>Email names the test as <b style={{ color: 'var(--muted)' }}>{productNameForCode(code)}</b> (the {'{product}'} token).</> : <>Pick a code — the {'{product}'} token fills with its name.</>}
+              </span>
+            </div>
             <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
               <select value={code} onChange={(e) => setCode(e.target.value)} style={{ ...inputStyle, width: 'auto', minWidth: 230 }}>
                 <option value="">— Product code —</option>
@@ -349,6 +402,7 @@ export function MassEmails() {
               )}
               <button onClick={loadRecipients} disabled={loadingRecips || !code.trim()} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: '#fff', background: code.trim() ? 'var(--accent)' : 'var(--border-strong)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: code.trim() ? 'pointer' : 'default' }}>{loadingRecips ? 'Loading…' : 'Find contacts'}</button>
             </div>
+            </>
           )}
 
           {mode === 'account' && (

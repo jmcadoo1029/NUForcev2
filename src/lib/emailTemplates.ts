@@ -17,7 +17,11 @@ export type TemplateKey =
   // the Mass Emails composer seeds each audience from these. They use the mass
   // merge token {first name} and a manual [Your Name] the sender fills in.
   | 'mass_all'
+  // Product-code audience, split by relationship: 'mass_code' = we've QUOTED you this
+  // test before; 'mass_code_performed' = we've PERFORMED it (a Closed-Won quote). Both
+  // name the specific test via the {product} token.
   | 'mass_code'
+  | 'mass_code_performed'
   | 'mass_campaign'
   | 'mass_account'
   // Re-engage — the starter for the Customer Contact → Re-engage list (dormant
@@ -26,7 +30,7 @@ export type TemplateKey =
   | 'mass_reengage'
 
 // The mass-email audience keys (subset of TemplateKey), in audience order.
-export const MASS_TEMPLATE_KEYS = ['mass_all', 'mass_code', 'mass_campaign', 'mass_account'] as const
+export const MASS_TEMPLATE_KEYS = ['mass_all', 'mass_code', 'mass_code_performed', 'mass_campaign', 'mass_account'] as const
 export type MassTemplateKey = (typeof MASS_TEMPLATE_KEYS)[number]
 
 export interface EmailTemplate {
@@ -48,6 +52,10 @@ export const TOKENS = {
   // Mass-email merge token — the composer/edge function fills each recipient's
   // first name at send. [Your Name] in a mass body is left literal for the sender.
   massFirstName: '{first name}',
+  // Product-code audience only — the specific test name (from the catalog, with the
+  // "– Setup"/"– Testing" suffix removed). Constant for the whole send, filled by the
+  // composer before it goes out.
+  product: '{product}',
 } as const
 
 const SIGNATURE = `{First & Last name of NU Labs person sending the quote}
@@ -147,16 +155,33 @@ Please contact me via phone or email to discuss any upcoming projects, it would 
 Looking forward to hearing from you soon!`,
 }
 
+// Product-code audience — QUOTED before. Names the specific test via {product}.
 const DEFAULT_MASS_CODE: EmailTemplate = {
   key: 'mass_code',
-  subject: 'NU Laboratories — Let’s line up your next test',
+  subject: 'NU Laboratories — {product} testing for your next project',
   body: `Hello, {first name}!
 
-This is [Your Name] at NU Laboratories. Our records show we’ve had the pleasure of quoting testing for you in the past, and I wanted to reach out to make sure we stay on your radar for any upcoming projects.
+This is [Your Name] at NU Laboratories. Our records show we’ve had the pleasure of quoting {product} testing for you in the past, and I wanted to reach out to make sure we stay on your radar for any upcoming {product} work.
 
-NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly. You can explore our full range of capabilities at www.nulabs.com.
+Beyond {product}, NU Laboratories offers a full range of testing services — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more. Whatever you have coming down the pipeline, there’s a good chance we can handle it in-house and turn it around quickly. You can explore our full range of capabilities at www.nulabs.com.
 
 If you have a project you’d like quoted, just reply to this email or give me a call — it would be our pleasure to support your testing needs again.
+
+Looking forward to hearing from you!`,
+}
+
+// Product-code audience — PERFORMED before (a Closed-Won quote for this test). Warmer,
+// "we've done this work for you" framing. Also names the test via {product}.
+const DEFAULT_MASS_CODE_PERFORMED: EmailTemplate = {
+  key: 'mass_code_performed',
+  subject: 'NU Laboratories — {product} testing for your next project',
+  body: `Hello, {first name}!
+
+This is [Your Name] at NU Laboratories. We’ve had the pleasure of performing {product} testing for you in the past, and I wanted to reach out to make sure we’re your first call whenever {product} comes up again.
+
+Beyond {product}, NU Laboratories offers a full range of testing under one roof — shock (medium and lightweight), vibration, acoustic and high-intensity noise, EMI, Power Quality, DC Magnetics, temperature/humidity, salt fog, altitude, and more — most of it handled in-house with fast turnaround. You can see everything we do at www.nulabs.com.
+
+If you have {product} (or anything else) coming down the pipeline, just reply to this email or give me a call — it would be our pleasure to work with you again.
 
 Looking forward to hearing from you!`,
 }
@@ -213,6 +238,7 @@ export const DEFAULT_TEMPLATES: Record<TemplateKey, EmailTemplate> = {
   follow_up_combined: DEFAULT_FOLLOW_UP_COMBINED,
   mass_all: DEFAULT_MASS_ALL,
   mass_code: DEFAULT_MASS_CODE,
+  mass_code_performed: DEFAULT_MASS_CODE_PERFORMED,
   mass_campaign: DEFAULT_MASS_CAMPAIGN,
   mass_account: DEFAULT_MASS_ACCOUNT,
   mass_reengage: DEFAULT_MASS_REENGAGE,
@@ -224,6 +250,7 @@ export interface TemplateVars {
   testItem?: string
   quoteList?: string
   senderName?: string
+  product?: string
 }
 
 function sub(text: string, token: string, value: string | undefined, fallback: string): string {
@@ -242,6 +269,8 @@ export function fillTemplate(text: string, vars: TemplateVars): string {
   out = sub(out, TOKENS.senderName, vars.senderName, '[your name]')
   // Mass merge token (harmless for quote templates, which don't contain it).
   out = sub(out, TOKENS.massFirstName, vars.contactFirstName, '[first name]')
+  // Product-code token (harmless where absent).
+  out = sub(out, TOKENS.product, vars.product, '[product]')
   return out
 }
 
