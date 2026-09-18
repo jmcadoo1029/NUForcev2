@@ -42,9 +42,13 @@ const seedTpl = (m: AudienceMode) => ({ subject: DEFAULT_TEMPLATES[MASS_KEY[m]].
 
 // Distinct product codes for the audience dropdown (same catalog quotes use).
 // Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
+// Codes kept OFF the product-code email audience — reports, procedures, and misc
+// admin lines, not tests worth a "we quoted you this" blast.
+const EXCLUDE_CODES = new Set(['33', '41', '42', '43', '44', '59', '95'])
 const CODE_OPTIONS: { code: string; label: string }[] = (() => {
   const byCode = new Map<string, string[]>()
   for (const p of PCODE_OPTS) {
+    if (EXCLUDE_CODES.has(p.code)) continue
     const arr = byCode.get(p.code) || []
     if (!arr.includes(p.label)) arr.push(p.label)
     byCode.set(p.code, arr)
@@ -72,7 +76,18 @@ const PRODUCT_NAME_BY_CODE: Record<string, string> = (() => {
   byCode.forEach((names, code) => { out[code] = names.join(' / ') })
   return out
 })()
-const productNameForCode = (code: string) => PRODUCT_NAME_BY_CODE[code] || CODE_OPTIONS.find((o) => o.code === code)?.label || code
+// Hand-set display names for codes that map to several tests, so the {product} token
+// reads cleanly in the email (per Jordan). Falls back to the catalog-derived name.
+const PRODUCT_NAME_OVERRIDE: Record<string, string> = {
+  '11': 'Acoustic Noise',
+  '12': 'Airborne Noise or Structureborne Noise',
+  '51': 'EMI',
+  '52': 'shock or vibration',
+  '53': 'Temperature & Humidity',
+  '56': 'Altitude',
+  '58': 'Enclosure Effectiveness',
+}
+const productNameForCode = (code: string) => PRODUCT_NAME_OVERRIDE[code] || PRODUCT_NAME_BY_CODE[code] || CODE_OPTIONS.find((o) => o.code === code)?.label || code
 
 const seg = (on: boolean, first: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 

@@ -159,6 +159,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
         <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center' }}>
           {isManager ? (
             <>
+              {editId === null && <Button variant="secondary" small onClick={startNew}>+ New template</Button>}
               <Button variant="ghost" small onClick={resetToDefault} disabled={busy}>Reset to default</Button>
               <Button variant="primary" small onClick={save} disabled={busy || !loaded}>{busy ? 'Saving…' : 'Save'}</Button>
             </>
@@ -202,8 +203,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
           {isManager && (
             <div style={{ marginTop: 'var(--sp-5)', borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-4)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', marginBottom: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Reusable templates <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic' }}>· your own, loadable in Mass Emails</span></div>
-                {editId === null && <Button variant="secondary" small onClick={startNew}>+ New template</Button>}
+                <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Reusable templates <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic' }}>· your own, loadable in Mass Emails · use “+ New template” above</span></div>
               </div>
 
               {editId !== null && (
