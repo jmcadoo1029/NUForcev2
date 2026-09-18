@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { restFetchAll } from '../../lib/restFetch'
+import { restFetch, restFetchAll } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
 
 // Dormant contacts — people we've quoted in the past who've gone quiet. Activity is
@@ -44,6 +44,15 @@ async function load(): Promise<DormantRow[]> {
       .filter(Boolean),
   )
 
+  // Addresses the user has snoozed (Snooze 6/12mo) and whose window hasn't elapsed —
+  // hidden until snooze_until passes, then they return to the list on their own.
+  const nowIso = new Date().toISOString()
+  const snoozed = new Set(
+    ((await restFetchAll<{ email: string | null }>(`reengage_snooze?select=email&snooze_until=gt.${encodeURIComponent(nowIso)}&order=email`).catch(() => [])) || [])
+      .map((r) => (r.email || '').trim().toLowerCase())
+      .filter(Boolean),
+  )
+
   const rows = (await restFetchAll<QRow>(
     'quotes?select=id,opportunity,revision,total,stage,created_at,won_date,customer,em:data->qi->>email,nm:data->qi->>contact,acct:data->qi->>account&order=id',
   )) || []
@@ -52,7 +61,7 @@ async function load(): Promise<DormantRow[]> {
   const byEmail = new Map<string, Acc>()
   for (const r of rows) {
     const email = (r.em || '').trim().toLowerCase()
-    if (!email.includes('@') || invalid.has(email)) continue
+    if (!email.includes('@') || invalid.has(email) || snoozed.has(email)) continue
     const rec = byEmail.get(email) || { name: '', company: '', lastMs: 0, fams: new Map() }
     const cms = msOf(r.created_at)
     if (cms >= rec.lastMs) { rec.lastMs = cms; if (r.nm) rec.name = r.nm; rec.company = r.customer || r.acct || rec.company } // freshest name/company
@@ -66,6 +75,7 @@ async function load(): Promise<DormantRow[]> {
   const list: DormantRow[] = []
   byEmail.forEach((rec, email) => {
     if (!rec.lastMs) return
+    if (!rec.name || !rec.name.trim()) return // no contact name on any of their quotes — skip (belongs in Bad contacts, not Re-engage)
     let totalQuoted = 0
     let wonValue = 0
     rec.fams.forEach((f) => { totalQuoted += f.total; if (f.won) wonValue += f.total })
@@ -89,4 +99,28 @@ export function useDormantContacts() {
     return () => { alive = false }
   }, [])
   return { data, err, loading }
+}
+
+// ── Snooze writes ────────────────────────────────────────────────────────────
+// Hide a dormant contact from Re-engage for a while (6 or 12 months). Upsert by
+// email (lowercased) so re-snoozing just moves the date. Requires the
+// reengage_snooze table (see supabase/migrations). Callers gate on WRITES_ENABLED.
+
+/** Snooze a contact for `months`; they drop off Re-engage until the window passes. */
+export async function snoozeReengage(email: string, months: number, by: string): Promise<void> {
+  const e = (email || '').trim().toLowerCase()
+  if (!e) return
+  const until = new Date()
+  until.setMonth(until.getMonth() + months)
+  await restFetch('POST', 'reengage_snooze?on_conflict=email', {
+    body: { email: e, snooze_until: until.toISOString(), snoozed_by: by || null, snoozed_at: new Date().toISOString() },
+    upsert: true,
+  })
+}
+
+/** Undo a snooze (removes the row) so the contact can surface again immediately. */
+export async function unsnoozeReengage(email: string): Promise<void> {
+  const e = (email || '').trim().toLowerCase()
+  if (!e) return
+  await restFetch('DELETE', `reengage_snooze?email=eq.${encodeURIComponent(e)}`)
 }

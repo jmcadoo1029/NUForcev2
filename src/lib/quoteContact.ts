@@ -47,9 +47,21 @@ export async function linkQuoteAccount(quoteId: string, clientId: string, accoun
 export async function flagContactInvalid(email: string, reason: string): Promise<void> {
   const e = email.trim()
   if (!e) return
-  await restFetch('PATCH', `contacts?email=eq.${enc(e)}`, {
-    body: { email_invalid: true, email_invalid_at: new Date().toISOString(), email_invalid_reason: reason || 'manually flagged' },
-  })
+  const body = { email_invalid: true, email_invalid_at: new Date().toISOString(), email_invalid_reason: reason || 'manually flagged' }
+  // Case-insensitive match: quote emails are lowercased, but the stored contact may
+  // be mixed-case — an exact (eq) match would silently miss and the flag wouldn't stick.
+  const patched = await restFetch<Array<{ email: string }>>('PATCH', `contacts?email=ilike.${enc(e)}`, {
+    body,
+    returnRepresentation: true,
+  }).catch(() => [] as Array<{ email: string }>)
+  if (Array.isArray(patched) && patched.length > 0) return
+  // No contact row for this address — it only ever lived on quotes. Record one so the
+  // address shows up in Bad Contacts and is excluded from Re-engage going forward.
+  // Best-effort: if the contacts schema won't take a bare row, we leave it (the caller
+  // still hides it for this session).
+  try {
+    await restFetch('POST', 'contacts', { body: { email: e.toLowerCase(), ...body } })
+  } catch { /* no-op — flag just won't persist for a non-directory address */ }
 }
 
 /** Clear a stale "bad address" flag — the address is reachable after all. Sets

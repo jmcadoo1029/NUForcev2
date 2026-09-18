@@ -27,13 +27,13 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 async function loadBadContacts(): Promise<BadGroup[]> {
   const bad = await restFetch<Array<{ email: string | null; first_name?: string | null; last_name?: string | null; email_invalid_reason?: string | null }>>(
     'GET',
-    `contacts?select=email,first_name,last_name,email_invalid_reason&email_invalid=eq.true&email=not.is.null&order=email_invalid_at.desc.nullslast&limit=30`,
+    `contacts?select=email,first_name,last_name,email_invalid_reason&email_invalid=eq.true&email=not.is.null&order=email_invalid_at.desc.nullslast&limit=300`,
   )
   const emails = Array.from(new Set((bad || []).map((c) => (c.email || '').trim()).filter(Boolean)))
   if (!emails.length) return []
   const groups = await Promise.all(
     emails.map(async (email) => {
-      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,clientId:data->qi->>client_id&data->qi->>email=eq.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
+      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,clientId:data->qi->>client_id&data->qi->>email=ilike.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
       const c = bad.find((b) => (b.email || '').trim() === email)
       const name = [c?.first_name, c?.last_name].filter(Boolean).join(' ').trim()
       // Default account = the account on these quotes (they almost always share one).
@@ -90,6 +90,29 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
   return Array.from(byEmail.values()).sort((a, b) => b.quotes.length - a.quotes.length)
 }
 
+// No-name POCs: open quotes addressed to an email but with no contact name captured
+// (data.qi.contact is blank). These belong in Bad contacts to be reassigned to the
+// real person — they're also excluded from Re-engage. On-demand (heavier scan), so
+// it's behind its own button.
+async function loadNoNameContacts(): Promise<BadGroup[]> {
+  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
+    `quotes?select=id,opportunity,customer,total,stage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&data->qi->>stage=not.in.("Closed Won","Closed Lost")&order=id`,
+  ).catch(() => [])
+  const byEmail = new Map<string, BadGroup>()
+  for (const r of quotes) {
+    const email = (r.email || '').trim()
+    const key = email.toLowerCase()
+    const name = (r.poc || '').trim()
+    if (!email.includes('@') || name) continue // only quotes that HAVE an email but NO contact name
+    const g = byEmail.get(key) || { email, name: '', reason: 'no contact name on this quote', quotes: [], account: (r.customer || '').trim(), clientId: (r.clientId || '').trim() }
+    if (!g.account && r.customer) g.account = r.customer.trim()
+    if (!g.clientId && r.clientId) g.clientId = (r.clientId || '').trim()
+    g.quotes.push({ id: r.id, opportunity: r.opportunity, customer: r.customer, total: r.total, stage: r.stage, clientId: r.clientId })
+    byEmail.set(key, g)
+  }
+  return Array.from(byEmail.values()).sort((a, b) => b.quotes.length - a.quotes.length)
+}
+
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 3 }
 
@@ -106,6 +129,8 @@ export function BadContactsCard() {
   const [flagBusy, setFlagBusy] = useState(false)
   // Scan for orphaned POCs (contact deleted, quotes still point at them).
   const [scanBusy, setScanBusy] = useState(false)
+  // Scan for no-name POCs (open quotes with an email but no contact name).
+  const [noNameBusy, setNoNameBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -145,6 +170,22 @@ export function BadContactsCard() {
       showToast('Couldn’t scan: ' + errMsg(e), 'error', 6000)
     } finally {
       setScanBusy(false)
+    }
+  }
+
+  // Scan open quotes for POCs with an email but no contact name, and surface them to fix.
+  const scanNoName = async () => {
+    if (noNameBusy) return
+    setNoNameBusy(true)
+    try {
+      const found = await loadNoNameContacts()
+      mergeGroups(found)
+      const n = found.reduce((a, g) => a + g.quotes.length, 0)
+      showToast(found.length ? `Found ${found.length} no-name contact${found.length !== 1 ? 's' : ''} on ${n} open quote${n !== 1 ? 's' : ''}.` : 'No no-name contacts — every open quote has a contact name.', found.length ? 'info' : 'success', 6000)
+    } catch (e) {
+      showToast('Couldn’t scan: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setNoNameBusy(false)
     }
   }
 
@@ -276,7 +317,8 @@ export function BadContactsCard() {
         <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 4 }}>Marks the address bad and pulls their quotes below to reassign. Won’t be re-emailed.</div>
         <div style={{ marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
           <button onClick={scanOrphans} disabled={scanBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: scanBusy ? 'default' : 'pointer' }}>{scanBusy ? 'Scanning…' : 'Scan for deleted contacts'}</button>
-          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds open quotes whose POC was deleted from your contacts (so they don’t show in search) and lists them to reassign.</span>
+          <button onClick={scanNoName} disabled={noNameBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: '#fff', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: noNameBusy ? 'default' : 'pointer' }}>{noNameBusy ? 'Scanning…' : 'Scan for no-name contacts'}</button>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds open quotes whose POC was deleted from your contacts (so they don’t show in search) or has no name, and lists them to reassign.</span>
         </div>
       </div>
 
@@ -288,11 +330,11 @@ export function BadContactsCard() {
         return (
           <div key={g.email} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
-              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>{/bounce/i.test(g.reason) ? 'Bounced' : /orphan/i.test(g.reason) ? 'Deleted' : 'Flagged'}</span>
+              <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: '#fff', background: 'var(--accent)', padding: '2px 9px', borderRadius: 20 }}>{/bounce/i.test(g.reason) ? 'Bounced' : /orphan/i.test(g.reason) ? 'Deleted' : /no name/i.test(g.reason) ? 'No name' : 'Flagged'}</span>
               <span style={{ fontWeight: 700 }}>{g.name || '(no name)'}</span>
               <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{g.email}</span>
               <span style={{ marginLeft: 'auto', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{g.quotes.length} quote{g.quotes.length !== 1 ? 's' : ''}</span>
-              {!/orphan/i.test(g.reason) && (
+              {!/orphan/i.test(g.reason) && !/no name/i.test(g.reason) && (
                 <button onClick={() => clearGroup(g)} disabled={busy === g.email} title="This address is reachable — clear the bad flag and remove it from this list" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 10px', cursor: busy === g.email ? 'default' : 'pointer', whiteSpace: 'nowrap' }}>{busy === g.email ? '…' : 'Address is fine'}</button>
               )}
             </div>
