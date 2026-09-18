@@ -31,6 +31,20 @@ const str = (v: unknown) => (v === null || v === undefined ? '' : String(v).trim
 const localPart = (email: string) => (email.split('@')[0] || 'sales').trim() || 'sales'
 const firstNameOf = (name: string) => (name || '').trim().split(/\s+/)[0] || ''
 
+// HMAC-SHA256 hex, keyed by a server-only secret — signs unsubscribe links so a
+// recipient can only opt THEMSELVES out (the token can't be forged for other addresses).
+async function hmacHex(message: string, key: string): Promise<string> {
+  const enc = new TextEncoder()
+  const k = await crypto.subtle.importKey('raw', enc.encode(key), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'])
+  const sig = await crypto.subtle.sign('HMAC', k, enc.encode(message))
+  return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('')
+}
+// The CAN-SPAM footer appended to every marketing send, with the recipient's one-click
+// unsubscribe link.
+function unsubFooter(url: string): string {
+  return `\n\n\u2014\nYou're receiving this because you've done business with NU Laboratories, Inc. (312 Old Allerton Rd., Annandale, NJ 08801). If you'd prefer not to receive these emails, unsubscribe here:\n${url}`
+}
+
 interface Recipient { email: string; name?: string }
 interface Req { subject: string; body: string; audience?: string; recipients: Recipient[] }
 
@@ -78,6 +92,20 @@ serve(async (req: Request) => {
 
   const svcHeaders = { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'application/json' }
 
+  // Compliance: drop anyone on the unsubscribe list. If the check itself fails we
+  // ABORT rather than risk emailing someone who opted out.
+  let optedOut = new Set<string>()
+  try {
+    const ores = await fetch(`${SUPABASE_URL}/rest/v1/email_optouts?select=email`, { headers: svcHeaders })
+    if (!ores.ok) throw new Error('optout query failed')
+    const orows = await ores.json()
+    if (Array.isArray(orows)) optedOut = new Set(orows.map((r: any) => str(r.email).toLowerCase()))
+  } catch {
+    return json(500, { ok: false, error: 'Could not check the unsubscribe list — send aborted.' })
+  }
+  const sendable = list.filter((r) => !optedOut.has(r.email))
+  if (!sendable.length) return json(400, { ok: false, error: 'Every recipient has unsubscribed — nothing to send.' })
+
   // 3) Resolve the sender (from/reply-to) from the employee record.
   let emp: any = null
   try {
@@ -94,16 +122,30 @@ serve(async (req: Request) => {
   try {
     const cres = await fetch(`${SUPABASE_URL}/rest/v1/mass_emails`, {
       method: 'POST', headers: { ...svcHeaders, Prefer: 'return=representation' },
-      body: JSON.stringify({ subject, body, audience: str(payload.audience) || null, sent_by: userEmail, recipient_count: list.length }),
+      body: JSON.stringify({ subject, body, audience: str(payload.audience) || null, sent_by: userEmail, recipient_count: sendable.length }),
     })
     massId = (await cres.json())?.[0]?.id || ''
   } catch { /* ignore */ }
 
   // 5) Send in batches; record each recipient.
   let sent = 0, failed = 0
-  for (let i = 0; i < list.length; i += BATCH_SIZE) {
-    const chunk = list.slice(i, i + BATCH_SIZE)
-    const emails = chunk.map((r) => ({ from: `${fromName} <${fromEmail}>`, to: [r.email], reply_to: realEmail, subject, text: fill(body, r.name || '') }))
+  for (let i = 0; i < sendable.length; i += BATCH_SIZE) {
+    const chunk = sendable.slice(i, i + BATCH_SIZE)
+    const unsubs = await Promise.all(chunk.map(async (r) => {
+      const tok = await hmacHex(r.email, SERVICE)
+      return `${SUPABASE_URL}/functions/v1/unsubscribe?e=${encodeURIComponent(r.email)}&t=${tok}`
+    }))
+    const emails = chunk.map((r, k) => ({
+      from: `${fromName} <${fromEmail}>`,
+      to: [r.email],
+      reply_to: realEmail,
+      subject,
+      text: fill(body, r.name || '') + unsubFooter(unsubs[k]),
+      headers: {
+        'List-Unsubscribe': `<mailto:${realEmail}?subject=unsubscribe>, <${unsubs[k]}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
+    }))
     let ids: (string | null)[] = chunk.map(() => null)
     try {
       const rres = await fetch(RESEND_BATCH, { method: 'POST', headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify(emails) })
@@ -123,5 +165,5 @@ serve(async (req: Request) => {
     try { await fetch(`${SUPABASE_URL}/rest/v1/mass_emails?id=eq.${massId}`, { method: 'PATCH', headers: { ...svcHeaders, Prefer: 'return=minimal' }, body: JSON.stringify({ sent_count: sent, failed_count: failed }) }) } catch { /* ignore */ }
   }
 
-  return json(200, { ok: true, massId, total: list.length, sent, failed })
+  return json(200, { ok: true, massId, total: sendable.length, sent, failed })
 })
