@@ -83,6 +83,29 @@ async function load(): Promise<FollowUpRow[]> {
     }
   }
 
+  // Collapse multiple pending follow_up rows for the SAME quote down to one
+  // canonical row. Duplicates arise because every "quote"-mode send inserts its own
+  // follow_ups row (markQuoteSent) — so a re-sent quote, or a Salesforce-imported
+  // pending follow-up sitting alongside a NUForce send, leaves two+ rows pointing at
+  // the same quote, and the quote would otherwise appear once per row. We key by the
+  // full opportunity (revision included, so 26-060 and 26-060B stay separate — those
+  // are handled by the revision-supersede below) and keep the latest send as the live
+  // timeline: newest sent_at wins, then a row that's been rescheduled, then highest id.
+  const oppKey = (fu: Raw) => (fu.quotes?.opportunity || fu.opportunity || '').toUpperCase().trim() || `id:${fu.id}`
+  const sentMs = (fu: Raw) => (fu.sent_at ? new Date(fu.sent_at).getTime() : 0)
+  const canonical = new Map<string, Raw>()
+  for (const fu of rows) {
+    const k = oppKey(fu)
+    const cur = canonical.get(k)
+    if (!cur) { canonical.set(k, fu); continue }
+    const better =
+      sentMs(fu) !== sentMs(cur) ? sentMs(fu) > sentMs(cur)
+        : (!!fu.followup_again_at !== !!cur.followup_again_at) ? !!fu.followup_again_at
+          : String(fu.id) > String(cur.id)
+    if (better) canonical.set(k, fu)
+  }
+  const deduped = Array.from(canonical.values())
+
   const todayMs = new Date(new Date().toISOString().slice(0, 10) + 'T00:00:00').getTime()
   const thirtyMs = Date.now() - 30 * 24 * 60 * 60 * 1000
   const isDue = (fu: Raw): boolean =>
@@ -90,7 +113,7 @@ async function load(): Promise<FollowUpRow[]> {
   const dueAt = (fu: Raw): number =>
     fu.followup_again_at ? new Date(fu.followup_again_at).getTime() : fu.sent_at ? new Date(fu.sent_at).getTime() + 30 * 24 * 60 * 60 * 1000 : Infinity
 
-  return rows
+  return deduped
     .filter((fu) => {
       const stage = fu.quotes?.data?.qi?.stage || ''
       if (stage === 'Closed Won' || stage === 'Closed Lost') return false
