@@ -4,6 +4,7 @@ import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
 import { updateQuoteContact } from '../../lib/quoteContact'
+import { useFeature } from '../../lib/perms'
 import { fetchClientContacts, searchPeople, searchClients, personName, type PersonRow, type ClientRow } from '../../lib/directory'
 import { Autocomplete } from './form/Autocomplete'
 import { WRITES_ENABLED } from '../../lib/config'
@@ -122,7 +123,9 @@ export function QuoteActions({
   const [entries, setEntries] = useState<ChatterEntry[]>(chatter)
   const [chatterOpen, setChatterOpen] = useState(false)
   // Contact editor — targeted update (data.qi.contact/email only), so it never
-  // resets an approval or needs a reopen.
+  // resets an approval or needs a reopen. Gated by the edit_contact feature (on for
+  // everyone by default; a manager can revoke it for a specific person in Users).
+  const canEditContact = useFeature('edit_contact')
   const [contactOpen, setContactOpen] = useState(false)
   const [cName, setCName] = useState(contactName)
   const [cEmail, setCEmail] = useState(contactEmail)
@@ -278,7 +281,7 @@ export function QuoteActions({
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}
       </button>
       <div style={{ position: 'relative' }}>
-        <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setAcctId(clientId); setAcctText(customer || ''); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>
+        {canEditContact && <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setAcctId(clientId); setAcctText(customer || ''); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>}
         {contactOpen && (
           <>
             <div onClick={() => setContactOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />

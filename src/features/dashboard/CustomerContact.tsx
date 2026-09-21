@@ -38,19 +38,30 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({
 const groupLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 5 }
 
 export function CustomerContact() {
-  // Per-feature access (Users area overrides, defaulting to the manager role). Mass
-  // Emails and Scheduled are gated independently so a manager can grant/revoke either
-  // for a specific person.
+  // Per-feature access (Users area overrides, defaulting to the role). Every tab is
+  // gated independently so a manager can grant/revoke any one for a specific person.
+  // Re-engage, Bad contacts and Campaigns default on for everyone; Mass Emails and
+  // Scheduled default to managers.
+  const canReengage = useFeature('reengage')
+  const canBad = useFeature('bad_contacts')
+  const canCampaigns = useFeature('campaigns')
   const canMass = useFeature('mass_emails')
   const canSched = useFeature('scheduled')
-  const allowed = (t: Sub) => (t === 'massemails' ? canMass : t === 'scheduled' ? canSched : true)
+  const allowed = (t: Sub) =>
+    t === 'reengage' ? canReengage
+      : t === 'badcontacts' ? canBad
+        : t === 'campaigns' ? canCampaigns
+          : t === 'massemails' ? canMass
+            : canSched
+  const ORDER: Sub[] = ['reengage', 'badcontacts', 'campaigns', 'massemails', 'scheduled']
+  const firstAllowed = ORDER.find(allowed) || null
   const [sub, setSub] = useState<Sub>('reengage')
 
-  // Never sit on a tab this person can't access.
+  // Never sit on a tab this person can't access — fall back to the first they can.
   useEffect(() => {
-    if (!allowed(sub)) setSub('reengage')
-  }, [canMass, canSched, sub])
-  const view: Sub = allowed(sub) ? sub : 'reengage'
+    if (!allowed(sub) && firstAllowed) setSub(firstAllowed)
+  }, [canReengage, canBad, canCampaigns, canMass, canSched, sub]) // eslint-disable-line react-hooks/exhaustive-deps
+  const view: Sub | null = allowed(sub) ? sub : firstAllowed
 
   return (
     <>
@@ -71,7 +82,9 @@ export function CustomerContact() {
         })}
       </div>
 
-      {view === 'reengage' ? <ReEngageContacts />
+      {view === null ? (
+        <Card><div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>You don't have access to any outreach tools. Ask a manager if you think this is a mistake.</div></Card>
+      ) : view === 'reengage' ? <ReEngageContacts />
         : view === 'badcontacts' ? <BadContactsCard />
         : view === 'campaigns' ? <Card><CampaignsPanel /></Card>
         : view === 'scheduled' ? <Card><ScheduledPanel /></Card>

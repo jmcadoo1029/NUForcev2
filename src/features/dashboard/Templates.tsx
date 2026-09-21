@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Modal, Button, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
-import { fetchIsApprover } from '../../lib/perms'
+import { fetchFeature } from '../../lib/perms'
 import { fetchSelf, type Self } from '../../lib/me'
 import { applySenderIdentity, fetchTemplates as fetchCustomTemplates, saveTemplate as createCustomTemplate, updateTemplate as updateCustomTemplate, deleteTemplate as deleteCustomTemplate, type EmailTemplate as CustomTemplate } from '../../lib/massEmail'
 import { fetchTemplate, saveTemplate, fillTemplate, DEFAULT_TEMPLATES, TOKENS, type TemplateKey, type TemplateVars } from '../../lib/emailTemplates'
@@ -108,7 +108,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
       setSample((s) => ({ ...s, senderName: selfInfo.name || s.senderName }))
       setLoaded(true)
     })
-    fetchIsApprover().then((v) => alive && setIsManager(v))
+    fetchFeature('edit_templates').then((v) => alive && setIsManager(v))
     return () => { alive = false }
   }, [])
 

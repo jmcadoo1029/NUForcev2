@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardLabel, Modal, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
+import { useFeature } from '../../lib/perms'
 import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
@@ -60,6 +61,10 @@ const isInternal = (email: string) => email.toLowerCase().trim().endsWith(INTERN
 export function MassEmails() {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
+  // Action-level access within this (manager-gated) tab: a manager can let someone
+  // compose but not send, or send but not rewrite the saved templates.
+  const canSend = useFeature('send_mass_email')
+  const canEditTpl = useFeature('edit_templates')
 
   const [subject, setSubject] = useState(DEFAULT_TEMPLATES.mass_all.subject)
   const [body, setBody] = useState(DEFAULT_TEMPLATES.mass_all.body)
@@ -247,6 +252,7 @@ export function MassEmails() {
   }
 
   const doSaveTemplate = async () => {
+    if (!canEditTpl) { showToast('You don’t have permission to save templates.', 'warn'); return }
     const name = tplName.trim()
     if (!name) return
     try {
@@ -257,12 +263,14 @@ export function MassEmails() {
   }
 
   const doDeleteTemplate = async (t: EmailTemplate) => {
+    if (!canEditTpl) { showToast('You don’t have permission to delete templates.', 'warn'); return }
     if (!window.confirm(`Delete template “${t.name}”?`)) return
     try { if (WRITES_ENABLED) await deleteTemplate(t.id); loadTemplates() } catch (e) { showToast('Couldn’t delete: ' + errMsg(e), 'error', 6000) }
   }
 
   const doSend = async () => {
     if (sending) return
+    if (!canSend) { showToast('You don’t have permission to send mass emails.', 'warn'); return }
     if (!subject.trim() || !body.trim()) { showToast('Subject and body are required.', 'warn'); return }
     if (finalRecipients.length === 0) { showToast('No recipients to send to.', 'warn'); return }
     setSending(true)
@@ -297,7 +305,7 @@ export function MassEmails() {
             <option value="">— Load a saved template —</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          <button onClick={() => { setTplName(''); setSaveOpen(true) }} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: 'pointer' }}>Save current as template</button>
+          {canEditTpl && <button onClick={() => { setTplName(''); setSaveOpen(true) }} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: 'pointer' }}>Save current as template</button>}
           {templates.length > 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{templates.length} saved</span>}
         </div>
 
@@ -479,8 +487,9 @@ export function MassEmails() {
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 'var(--sp-4)' }}>
-          <button onClick={() => setSendOpen(true)} disabled={finalRecipients.length === 0 || loadingRecips} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-base)', fontWeight: 700, color: '#fff', background: finalRecipients.length === 0 ? 'var(--border-strong)' : 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '10px 22px', cursor: finalRecipients.length === 0 ? 'default' : 'pointer' }}>Send to {finalRecipients.length}</button>
+          <button onClick={() => setSendOpen(true)} disabled={finalRecipients.length === 0 || loadingRecips || !canSend} title={!canSend ? 'You don’t have permission to send mass emails — ask a manager.' : undefined} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-base)', fontWeight: 700, color: '#fff', background: (finalRecipients.length === 0 || !canSend) ? 'var(--border-strong)' : 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '10px 22px', cursor: (finalRecipients.length === 0 || !canSend) ? 'default' : 'pointer' }}>Send to {finalRecipients.length}</button>
         </div>
+        {!canSend && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', fontStyle: 'italic', marginTop: 'var(--sp-2)', textAlign: 'right' }}>You can compose and preview, but sending is restricted. A manager can enable it for you in Users.</div>}
         {!WRITES_ENABLED && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', fontStyle: 'italic', marginTop: 'var(--sp-2)', textAlign: 'right' }}>Preview — writes are off, so nothing sends yet.</div>}
       </Card>
 
@@ -494,7 +503,7 @@ export function MassEmails() {
                 <span style={{ fontWeight: 600 }}>{t.name}</span>
                 <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.subject}</span>
                 <button onClick={() => applyTemplate(t.id)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>Use</button>
-                <button onClick={() => doDeleteTemplate(t)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                {canEditTpl && <button onClick={() => doDeleteTemplate(t)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>}
               </div>
             ))}
           </div>

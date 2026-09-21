@@ -4,11 +4,31 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { prettifyEmail } from '../../lib/text'
 import { fetchUsers, saveUserSettings, saveUserFeature, capsSummary, effective, type UserRow } from '../../lib/userAdmin'
+import { featureDefaultFor } from '../../lib/perms'
 
 // Users — a managers-only directory (More → Users). Lists everyone with their role
 // and what that role grants (read-only baseline), then per-user NUForce toggles for
-// email notifications. Overrides live in nuforce_user_settings; the shared user
-// tables are never written.
+// email notifications, page access, and actions. Overrides live in
+// nuforce_user_settings; the shared user tables are never written.
+
+// Page/tab visibility overrides. Each defaults to the person's role (see
+// featureDefaultFor) unless a manager flips it here.
+const PAGE_FEATURES: { key: string; label: string; help: string }[] = [
+  { key: 'manager_dashboard', label: 'Manager dashboard', help: 'The Manager view — the dashboard route, the Manager tab, and its tiles. Off means this person only sees their own quotes.' },
+  { key: 'reengage', label: 'Re-engage tab', help: 'Customer Contact → Contacts → Re-engage: the dormant-contact outreach list.' },
+  { key: 'bad_contacts', label: 'Bad contacts tab', help: 'Customer Contact → Contacts → Bad contacts: the contact-hygiene / reassignment tool.' },
+  { key: 'campaigns', label: 'Campaigns tab', help: 'Customer Contact → Outreach → Campaigns: building and managing outreach lists.' },
+  { key: 'mass_emails', label: 'Mass Emails tab', help: 'Customer Contact → Outreach → Mass Emails: the composer for campaigns and bulk follow-ups.' },
+  { key: 'scheduled', label: 'Scheduled tab', help: 'Customer Contact → Outreach → Scheduled: setting up and reviewing scheduled email runs.' },
+]
+
+// Action-level overrides — what a person can DO on a page they can already see.
+const ACTION_FEATURES: { key: string; label: string; help: string }[] = [
+  { key: 'send_mass_email', label: 'Send mass emails', help: 'Actually send from the Mass Emails composer. Off lets them compose and preview, but not send.' },
+  { key: 'edit_templates', label: 'Create & edit email templates', help: 'Edit the shared email templates and manage reusable templates. Off is view-only — they can still use existing templates.' },
+  { key: 'schedule_sends', label: 'Create & edit schedules', help: 'Add, edit, pause, or delete scheduled sends. Off lets them view the schedule list read-only.' },
+  { key: 'edit_contact', label: 'Change a quote’s contact', help: 'Use the “Change Contact” action on a quote to swap its contact/email.' },
+]
 
 const input: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
 const secLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }
@@ -145,35 +165,37 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
 
                 <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Page access</div>
                 <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 6 }}>
-                  These default to what this person’s role grants. Flip one to give or remove access for just this user.
+                  Which pages this person sees. Each defaults to what their role grants — flip one to give or remove access for just this user.
                 </div>
-                <Toggle
-                  label="Manager dashboard"
-                  help="The Manager view — the dashboard route, the Manager tab, and its tiles. Off means this person only sees their own quotes."
-                  on={effective(sel.features['manager_dashboard'] ?? null, sel.managerDefault)}
-                  isDefault={sel.features['manager_dashboard'] === undefined}
-                  disabled={busy}
-                  onChange={(v) => setFeature(sel, 'manager_dashboard', v)}
-                  onReset={() => setFeature(sel, 'manager_dashboard', null)}
-                />
-                <Toggle
-                  label="Mass Emails tab"
-                  help="The Mass Emails composer under Customer Contact → Outreach, used to send campaigns and bulk follow-ups."
-                  on={effective(sel.features['mass_emails'] ?? null, sel.managerDefault)}
-                  isDefault={sel.features['mass_emails'] === undefined}
-                  disabled={busy}
-                  onChange={(v) => setFeature(sel, 'mass_emails', v)}
-                  onReset={() => setFeature(sel, 'mass_emails', null)}
-                />
-                <Toggle
-                  label="Scheduled tab"
-                  help="The Scheduled view under Customer Contact → Outreach, used to set up and review scheduled email runs."
-                  on={effective(sel.features['scheduled'] ?? null, sel.managerDefault)}
-                  isDefault={sel.features['scheduled'] === undefined}
-                  disabled={busy}
-                  onChange={(v) => setFeature(sel, 'scheduled', v)}
-                  onReset={() => setFeature(sel, 'scheduled', null)}
-                />
+                {PAGE_FEATURES.map((f) => (
+                  <Toggle
+                    key={f.key}
+                    label={f.label}
+                    help={f.help}
+                    on={effective(sel.features[f.key] ?? null, featureDefaultFor(sel.caps, f.key))}
+                    isDefault={sel.features[f.key] === undefined}
+                    disabled={busy}
+                    onChange={(v) => setFeature(sel, f.key, v)}
+                    onReset={() => setFeature(sel, f.key, null)}
+                  />
+                ))}
+
+                <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Actions</div>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 6 }}>
+                  What this person can do on a page they can already see — e.g. compose vs. actually send.
+                </div>
+                {ACTION_FEATURES.map((f) => (
+                  <Toggle
+                    key={f.key}
+                    label={f.label}
+                    help={f.help}
+                    on={effective(sel.features[f.key] ?? null, featureDefaultFor(sel.caps, f.key))}
+                    isDefault={sel.features[f.key] === undefined}
+                    disabled={busy}
+                    onChange={(v) => setFeature(sel, f.key, v)}
+                    onReset={() => setFeature(sel, f.key, null)}
+                  />
+                ))}
 
                 {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>Preview — writes are off, changes won’t save.</div>}
                 <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>Signed in as {prettifyEmail(me)} · changes are logged with your name.</div>

@@ -37,6 +37,36 @@ async function loadMyFeatures(): Promise<Record<string, unknown>> {
 }
 const roleCanView = (caps: Record<string, any>) => !!(caps[CAP_APPROVE] || caps[CAP_VIEW])
 
+// Every per-user page/feature and how it defaults from the role when the user has
+// no explicit override in nuforce_user_settings.features:
+//   'manager'  → managers + view-only roles (e.g. Accounting) — roleCanView
+//   'approver' → full managers only (approve authority)
+//   'all'      → everyone (the feature ships on for all users)
+// A manager can still flip any of these on/off per person in the Users area.
+export type FeatureBasis = 'manager' | 'approver' | 'all'
+export const FEATURE_DEFAULTS: Record<string, FeatureBasis> = {
+  // Page / tab visibility
+  manager_dashboard: 'manager',
+  mass_emails: 'manager',
+  scheduled: 'manager',
+  campaigns: 'all',
+  bad_contacts: 'all',
+  reengage: 'all',
+  // Action-level (what you can DO on a page you can see)
+  send_mass_email: 'manager',
+  edit_templates: 'approver',
+  schedule_sends: 'manager',
+  edit_contact: 'all',
+}
+
+/** The role default for a feature (used when the user has no explicit override). */
+export function featureDefaultFor(caps: Record<string, any>, name: string): boolean {
+  const basis = FEATURE_DEFAULTS[name] || 'manager'
+  if (basis === 'all') return true
+  if (basis === 'approver') return !!caps[CAP_APPROVE]
+  return roleCanView(caps)
+}
+
 /** Fetch (and cache for the session) the current user's role capabilities. Throws
  *  on network error so callers can fail closed WITHOUT caching a transient miss. */
 async function loadCaps(): Promise<Record<string, any>> {
@@ -102,7 +132,7 @@ export async function fetchFeature(name: string): Promise<boolean> {
   try {
     const [caps, feats] = await Promise.all([loadCaps(), loadMyFeatures()])
     const ov = feats[name]
-    return typeof ov === 'boolean' ? ov : roleCanView(caps)
+    return typeof ov === 'boolean' ? ov : featureDefaultFor(caps, name)
   } catch {
     return false
   }

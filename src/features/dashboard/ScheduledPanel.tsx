@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { CardLabel, Button, Modal, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
+import { useFeature } from '../../lib/perms'
 import { getSessionEmail } from '../../lib/auth'
 import { fmtDate } from '../../lib/format'
 import { CODE_OPTIONS } from '../../lib/productName'
@@ -51,6 +52,9 @@ function summaryText(s: Schedule): string {
 export function ScheduledPanel() {
   const { showToast } = useToast()
   const me = getSessionEmail() || ''
+  // Creating/editing schedules is separate from viewing this tab — a manager can let
+  // someone watch the queue without letting them change what's scheduled.
+  const canManage = useFeature('schedule_sends')
   const [list, setList] = useState<Schedule[] | null>(null)
   const [err, setErr] = useState('')
   const [campaigns, setCampaigns] = useState<CampaignOption[]>([])
@@ -95,6 +99,7 @@ export function ScheduledPanel() {
   }
 
   const save = async () => {
+    if (!canManage) { showToast('You don’t have permission to change schedules.', 'warn'); return }
     if (!name.trim()) { showToast('Give the schedule a name.', 'warn'); return }
     if (cadence === 'once' && !runOn) { showToast('Pick a date for a one-time send.', 'warn'); return }
     if (cadence === 'annually' && !runOn) { showToast('Pick the annual date.', 'warn'); return }
@@ -114,10 +119,11 @@ export function ScheduledPanel() {
           ...(audience === 'campaign' ? { campaignId, campaignName: campaigns.find((c) => c.id === campaignId)?.name || '' } : {}),
           ...(audience === 'account' ? { clientId, accountName: accountText } : {}),
         }
+    const effCadence: Cadence = kind === 'rule' && cadence === 'once' ? 'monthly' : cadence
     const payload: NewSchedule = {
       name: name.trim(), kind, enabled: true, template_key, template_id, config,
-      cadence, run_on: cadence === 'monthly' ? null : (runOn || null),
-      day_of_month: cadence === 'monthly' ? dayOfMonth : null,
+      cadence: effCadence, run_on: effCadence === 'monthly' ? null : (runOn || null),
+      day_of_month: effCadence === 'monthly' ? dayOfMonth : null,
       cooldown_months: cooldownMonths, created_by: me,
     }
     setBusy(true)
@@ -130,10 +136,12 @@ export function ScheduledPanel() {
   }
 
   const toggle = async (s: Schedule) => {
+    if (!canManage) { showToast('You don’t have permission to change schedules.', 'warn'); return }
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     try { await setScheduleEnabled(s.id, !s.enabled); load() } catch (e) { showToast('Couldn’t update: ' + errMsg(e), 'error', 6000) }
   }
   const del = async (s: Schedule) => {
+    if (!canManage) { showToast('You don’t have permission to change schedules.', 'warn'); return }
     if (!window.confirm(`Delete schedule “${s.name}”? Its pending review items are removed too.`)) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     try { await deleteSchedule(s.id); showToast('Deleted', 'info'); load() } catch (e) { showToast('Delete failed: ' + errMsg(e), 'error', 6000) }
@@ -148,7 +156,9 @@ export function ScheduledPanel() {
           <CardLabel>Scheduled sends</CardLabel>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 2 }}>Calendar blasts and rule-based drips. Due sends queue into “Needs your attention” for review before anything goes out.</div>
         </div>
-        <Button variant="primary" small onClick={openNew}>+ New schedule</Button>
+        {canManage
+          ? <Button variant="primary" small onClick={openNew}>+ New schedule</Button>
+          : <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)', fontStyle: 'italic' }}>View only — a manager can add or change schedules</span>}
       </div>
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {err}</div>}
@@ -163,9 +173,15 @@ export function ScheduledPanel() {
                 <div style={{ fontWeight: 700 }}>{s.name} <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 600, color: s.kind === 'rule' ? 'var(--info)' : 'var(--muted)' }}>· {s.kind === 'rule' ? 'Rule drip' : 'Calendar'}</span></div>
                 <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>{summaryText(s)} · {cadenceText(s)}{s.next_fire_at ? ` · next ${fmtDate(s.next_fire_at)}` : ''}</div>
               </div>
-              <button onClick={() => toggle(s)} title={s.enabled ? 'Pause' : 'Resume'} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: s.enabled ? 'var(--pos)' : 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{s.enabled ? 'On' : 'Paused'}</button>
-              <button onClick={() => openEdit(s)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
-              <button onClick={() => del(s)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+              {canManage ? (
+                <>
+                  <button onClick={() => toggle(s)} title={s.enabled ? 'Pause' : 'Resume'} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: s.enabled ? 'var(--pos)' : 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }}>{s.enabled ? 'On' : 'Paused'}</button>
+                  <button onClick={() => openEdit(s)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer' }}>Edit</button>
+                  <button onClick={() => del(s)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--dim)', background: 'none', border: 'none', cursor: 'pointer' }}>Delete</button>
+                </>
+              ) : (
+                <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: s.enabled ? 'var(--pos)' : 'var(--muted)', whiteSpace: 'nowrap' }}>{s.enabled ? 'On' : 'Paused'}</span>
+              )}
             </div>
           ))}
         </div>
@@ -179,7 +195,7 @@ export function ScheduledPanel() {
           <label style={label}>Type</label>
           <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
             <button onClick={() => setKind('calendar')} style={seg(kind === 'calendar', true)}>Calendar send</button>
-            <button onClick={() => setKind('rule')} style={seg(kind === 'rule', false)}>Rule-based drip</button>
+            <button onClick={() => { setKind('rule'); if (cadence === 'once') setCadence('monthly') }} style={seg(kind === 'rule', false)}>Rule-based drip</button>
           </div>
 
           <label style={label}>Template</label>

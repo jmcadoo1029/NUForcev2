@@ -22,8 +22,7 @@ export interface UserRow {
   approvalsDefault: boolean
   notifyDelivery: boolean | null // null = use deliveryDefault
   notifyApprovals: boolean | null // null = use approvalsDefault
-  managerDefault: boolean // role default for page access (manager/view-only can see)
-  features: Record<string, boolean> // per-user page-access overrides; key absent = use managerDefault
+  features: Record<string, boolean> // per-user page/action overrides; key absent = use the role default (see featureDefaultFor)
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -88,9 +87,6 @@ export async function fetchUsers(): Promise<UserRow[]> {
     const role = roleId ? roleById.get(roleId) : undefined
     const st = setByEmail.get(emailLc)
     const caps = (role?.capabilities as Record<string, unknown>) || {}
-    // Page-access default follows the role: managers (approve) and view-only roles can
-    // see the manager pages; everyone else can't — unless a per-user override says so.
-    const managerDefault = !!(caps['nuforce_approve_quotes'] || caps['nuforce_view_dashboard'])
     const rawFeat = (st && st.features && typeof st.features === 'object') ? (st.features as Record<string, unknown>) : {}
     const features: Record<string, boolean> = {}
     for (const [k, v] of Object.entries(rawFeat)) if (typeof v === 'boolean') features[k] = v
@@ -104,7 +100,6 @@ export async function fetchUsers(): Promise<UserRow[]> {
       approvalsDefault: isManager || isActive,
       notifyDelivery: st ? st.notify_delivery : null,
       notifyApprovals: st ? st.notify_approvals : null,
-      managerDefault,
       features,
     })
   }
