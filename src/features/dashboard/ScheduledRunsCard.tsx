@@ -30,6 +30,9 @@ function ReviewModal({ run, me, onClose, onDone }: { run: ScheduledRun; me: stri
   const [tpl, setTpl] = useState<{ subject: string; body: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  const [excluded, setExcluded] = useState<Set<string>>(new Set()) // addresses the reviewer removed before sending
+  const toggleExclude = (email: string) => setExcluded((s) => { const n = new Set(s); const k = email.toLowerCase(); n.has(k) ? n.delete(k) : n.add(k); return n })
+  const finalRecipients = (recipients || []).filter((r) => !excluded.has(r.email.toLowerCase()))
 
   useEffect(() => {
     let alive = true
@@ -47,14 +50,14 @@ function ReviewModal({ run, me, onClose, onDone }: { run: ScheduledRun; me: stri
 
   const approve = async () => {
     if (!schedule || !recipients || !tpl || busy) return
-    if (recipients.length === 0) { showToast('No one matches right now — dismiss it instead.', 'warn'); return }
+    if (finalRecipients.length === 0) { showToast('No one left to send to — dismiss it instead.', 'warn'); return }
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     setBusy(true)
     try {
-      const res = await approveRun(run, schedule, recipients, tpl.subject, tpl.body, me)
+      const res = await approveRun(run, schedule, finalRecipients, tpl.subject, tpl.body, me)
       if (res.notDeployed) { showToast('The mass-email function isn’t deployed.', 'error', 7000); return }
       if (!res.ok) { showToast('Send failed: ' + (res.error || 'unknown'), 'error', 7000); return }
-      showToast(`Sent to ${res.sent ?? recipients.length}.`, 'success', 6000)
+      showToast(`Sent to ${res.sent ?? finalRecipients.length}.`, 'success', 6000)
       onDone()
     } catch (e) {
       showToast('Send failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 7000)
@@ -85,30 +88,34 @@ function ReviewModal({ run, me, onClose, onDone }: { run: ScheduledRun; me: stri
       ) : (
         <>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)' }}>
-            {schedule && audienceLabel(schedule)} · <b>{recipients!.length}</b> recipient{recipients!.length !== 1 ? 's' : ''}
+            {schedule && audienceLabel(schedule)} · <b>{finalRecipients.length}</b> recipient{finalRecipients.length !== 1 ? 's' : ''}{excluded.size > 0 ? ` (${excluded.size} excluded)` : ''}
             {schedule?.kind === 'rule' && <span style={{ color: 'var(--dim)' }}> · cooldown {schedule.cooldown_months} mo</span>}
           </div>
           <label style={label}>Subject</label>
           <div style={{ fontWeight: 700, color: 'var(--text)' }}>{tpl!.subject}</div>
           <label style={label}>Body <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>· {'{first name}'} merges per recipient; your name/signature fill in on send</span></label>
           <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, color: 'var(--text)', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', margin: 0, maxHeight: 200, overflowY: 'auto' }}>{tpl!.body}</pre>
-          <label style={label}>Recipients</label>
+          <label style={label}>Recipients <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--dim)' }}>· click Exclude to drop anyone before sending</span></label>
           {recipients!.length === 0 ? (
             <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', fontStyle: 'italic' }}>No one matches right now — you can dismiss this.</div>
           ) : (
-            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 180, overflowY: 'auto' }}>
-              {recipients!.slice(0, 300).map((r) => (
-                <div key={r.email} style={{ display: 'flex', gap: 'var(--sp-3)', padding: '5px 10px', borderBottom: '1px solid var(--border)', fontSize: 'var(--fs-sm)' }}>
-                  <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}</span>
-                  <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
-                </div>
-              ))}
-              {recipients!.length > 300 && <div style={{ padding: '6px 10px', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>…and {recipients!.length - 300} more</div>}
+            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', maxHeight: 220, overflowY: 'auto' }}>
+              {recipients!.slice(0, 300).map((r) => {
+                const ex = excluded.has(r.email.toLowerCase())
+                return (
+                  <div key={r.email} style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', padding: '5px 10px', borderBottom: '1px solid var(--border)', fontSize: 'var(--fs-sm)', opacity: ex ? 0.45 : 1 }}>
+                    <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{r.name || '(no name)'}</span>
+                    <span style={{ flex: 1, minWidth: 0, color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.email}</span>
+                    <button onClick={() => toggleExclude(r.email)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: ex ? 'var(--pos)' : 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }}>{ex ? 'Include' : 'Exclude'}</button>
+                  </div>
+                )
+              })}
+              {recipients!.length > 300 && <div style={{ padding: '6px 10px', fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>…and {recipients!.length - 300} more (excluding individually is limited to the first 300; narrow the schedule if you need finer control)</div>}
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)', marginTop: 'var(--sp-4)' }}>
             <Button variant="secondary" small disabled={busy} onClick={dismiss}>Dismiss</Button>
-            <Button variant="primary" small disabled={busy || recipients!.length === 0} onClick={approve}>{busy ? 'Sending…' : `Send to ${recipients!.length}`}</Button>
+            <Button variant="primary" small disabled={busy || finalRecipients.length === 0} onClick={approve}>{busy ? 'Sending…' : `Send to ${finalRecipients.length}`}</Button>
           </div>
           {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-2)', textAlign: 'right' }}>Preview — writes are off, nothing sends.</div>}
         </>

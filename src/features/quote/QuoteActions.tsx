@@ -196,7 +196,7 @@ export function QuoteActions({
     if (!WRITES_ENABLED) { onContactUpdated?.(name, email); setContactOpen(false); showToast('Contact updated (preview — writes off)', 'warn'); return }
     setContactBusy(true)
     try {
-      await updateQuoteContact(quoteId, name, email)
+      await updateQuoteContact(quoteId, name, email, me)
       onContactUpdated?.(name, email)
       showToast('Contact updated', 'success')
       setContactOpen(false)

@@ -95,19 +95,28 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
 // real person — they're also excluded from Re-engage. On-demand (heavier scan), so
 // it's behind its own button.
 async function loadNoNameContacts(): Promise<BadGroup[]> {
-  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
-    `quotes?select=id,opportunity,customer,total,stage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&data->qi->>stage=not.in.("Closed Won","Closed Lost")&order=id`,
+  // Fetch ALL non-deleted quotes (deleted are filtered at the client) with BOTH stage
+  // sources. We DON'T filter stage in the query: stage lives in the top-level column
+  // on many quotes and data.qi.stage is null on those, and a PostgREST `not.in` drops
+  // null rows (SQL: null NOT IN (...) is not true) — which was silently hiding most
+  // no-names. So we page everything and decide "open" client-side, treating an
+  // unknown/blank stage as open (better to surface than to miss).
+  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; qstage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
+    `quotes?select=id,opportunity,customer,total,stage,qstage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&order=id`,
   ).catch(() => [])
+  const isClosed = (s: string | null) => { const v = (s || '').trim(); return v === 'Closed Won' || v === 'Closed Lost' }
   const byEmail = new Map<string, BadGroup>()
   for (const r of quotes) {
+    if (isClosed(r.stage) || isClosed(r.qstage)) continue // open (or unknown-stage) quotes only
     const email = (r.email || '').trim()
     const key = email.toLowerCase()
     const name = (r.poc || '').trim()
     if (!email.includes('@') || name) continue // only quotes that HAVE an email but NO contact name
+    const st = r.stage || r.qstage || null
     const g = byEmail.get(key) || { email, name: '', reason: 'no contact name on this quote', quotes: [], account: (r.customer || '').trim(), clientId: (r.clientId || '').trim() }
     if (!g.account && r.customer) g.account = r.customer.trim()
     if (!g.clientId && r.clientId) g.clientId = (r.clientId || '').trim()
-    g.quotes.push({ id: r.id, opportunity: r.opportunity, customer: r.customer, total: r.total, stage: r.stage, clientId: r.clientId })
+    g.quotes.push({ id: r.id, opportunity: r.opportunity, customer: r.customer, total: r.total, stage: st, clientId: r.clientId })
     byEmail.set(key, g)
   }
   return Array.from(byEmail.values()).sort((a, b) => b.quotes.length - a.quotes.length)
@@ -268,7 +277,7 @@ export function BadContactsCard() {
     try {
       if (WRITES_ENABLED) {
         for (const q of g.quotes) {
-          await updateQuoteContact(q.id, name, email)
+          await updateQuoteContact(q.id, name, email, me)
           await resolveBounceFlag(q.id, me).catch(() => {}) // clear the bounce flag too (best-effort)
         }
         showToast(`Updated ${g.quotes.length} quote${g.quotes.length !== 1 ? 's' : ''} to ${email}`, 'success', 5000)
@@ -339,7 +348,8 @@ export function BadContactsCard() {
               )}
             </div>
 
-            <div style={{ marginBottom: 'var(--sp-3)' }}>
+            <div style={{ marginBottom: 'var(--sp-3)', ...(g.quotes.length > 5 ? { maxHeight: 200, overflowY: 'auto', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '0 8px' } : {}) }}>
+              {g.quotes.length > 5 && <div style={{ position: 'sticky', top: 0, background: 'var(--card)', fontSize: 'var(--fs-caption)', color: 'var(--dim)', padding: '4px 0', borderBottom: '1px solid var(--border)' }}>Showing all {g.quotes.length} quotes — scroll</div>}
               {g.quotes.map((q) => (
                 <Link key={q.id} to={`/quote/${q.id}`} style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '6px 4px', borderBottom: '1px solid var(--border)', textDecoration: 'none', color: 'var(--text)' }}>
                   <span style={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{q.opportunity || q.id}</span>

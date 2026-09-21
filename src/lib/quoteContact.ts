@@ -8,10 +8,24 @@ import { restFetch } from './restFetch'
 
 const enc = (v: string) => encodeURIComponent(v)
 
-export async function updateQuoteContact(quoteId: string, contact: string, email: string): Promise<void> {
+export async function updateQuoteContact(quoteId: string, contact: string, email: string, by = ''): Promise<void> {
   const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?select=data&id=eq.${enc(quoteId)}&limit=1`)
   const data = (rows?.[0]?.data || {}) as Record<string, any>
-  const nextData = { ...data, qi: { ...(data.qi || {}), contact, email } }
+  const qi = (data.qi || {}) as Record<string, any>
+  const oldName = String(qi.contact || '').trim()
+  const oldEmail = String(qi.email || '').trim()
+  const newName = String(contact || '').trim()
+  const newEmail = String(email || '').trim()
+  const nextData: Record<string, any> = { ...data, qi: { ...qi, contact, email } }
+  // Log the change to chatter so a later follow-up can see who the quote originally
+  // went to (e.g. "this was sent to X before"). A no-name side is shown as just the
+  // email. Visible in the Feed (not an auto/system-suppressed entry).
+  if (oldName !== newName || oldEmail.toLowerCase() !== newEmail.toLowerCase()) {
+    const who = (n: string, e: string) => (n ? `${n} <${e || 'no email'}>` : (e || '(none)'))
+    const msg = `Contact changed: was ${who(oldName, oldEmail)}, now ${who(newName, newEmail)}`
+    const prev: Array<Record<string, unknown>> = Array.isArray(data.chatterEntries) ? data.chatterEntries : []
+    nextData.chatterEntries = [...prev, { by: by || 'system', at: new Date().toISOString(), msg }]
+  }
   await restFetch('PATCH', `quotes?id=eq.${enc(quoteId)}`, {
     body: { data: nextData, updated_at: new Date().toISOString() },
   })
