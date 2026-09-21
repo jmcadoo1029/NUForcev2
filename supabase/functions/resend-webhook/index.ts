@@ -143,6 +143,10 @@ async function sendStatusAlert(opts: {
   bounceKind?: BounceKind | null;
 }): Promise<void> {
   if (!RESEND_API_KEY) return;
+  // Successful deliveries are already recorded in-app (quote status + metrics), so
+  // don't email the sender on every delivery — only problems (bounce / complaint /
+  // delay) are worth an inbox alert. (Mass-email sends never reach this path.)
+  if (opts.status === 'delivered') return;
   const isProblem = opts.status !== 'delivered';
   const to = Array.from(new Set(
     [opts.sentByEmail, ...(isProblem ? [OVERSIGHT_EMAIL] : [])]
