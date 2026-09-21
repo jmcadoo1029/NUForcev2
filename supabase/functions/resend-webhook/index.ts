@@ -137,6 +137,20 @@ function classifyBounce(bounce: any): { kind: BounceKind; detail: string } {
 
 // Email the send's owner about a delivery-status event; problems (bounce /
 // complaint / delay) are also copied to oversight. Best-effort; needs RESEND_API_KEY.
+// Per-user NUForce preference (Users area → nuforce_user_settings). Only an explicit
+// opt-out suppresses; a missing row / null means the default (on). Best-effort: on
+// any error we send (fail open, so a lookup blip never hides a real problem alert).
+async function senderWantsDeliveryAlert(email: string): Promise<boolean> {
+  const e = (email || '').trim().toLowerCase();
+  if (!e) return false;
+  try {
+    const { data } = await sb.from('nuforce_user_settings').select('notify_delivery').eq('email', e).limit(1);
+    return (data?.[0]?.notify_delivery ?? true) !== false;
+  } catch {
+    return true;
+  }
+}
+
 async function sendStatusAlert(opts: {
   opportunity: string | null; recipient: string; status: SendStatus;
   reason: string; sendKind: string | null; sentByEmail: string | null;
@@ -148,8 +162,10 @@ async function sendStatusAlert(opts: {
   // delay) are worth an inbox alert. (Mass-email sends never reach this path.)
   if (opts.status === 'delivered') return;
   const isProblem = opts.status !== 'delivered';
+  // Honor the sender's per-user notification toggle; oversight still gets problems.
+  const senderOk = await senderWantsDeliveryAlert(opts.sentByEmail || '');
   const to = Array.from(new Set(
-    [opts.sentByEmail, ...(isProblem ? [OVERSIGHT_EMAIL] : [])]
+    [...(senderOk && opts.sentByEmail ? [opts.sentByEmail] : []), ...(isProblem ? [OVERSIGHT_EMAIL] : [])]
       .map((e) => (e || '').trim())
       .filter((e) => e.includes('@')),
   ));

@@ -5,6 +5,7 @@ import { ProductCatalog } from './ProductCatalog'
 import { Templates } from './Templates'
 import { StandardsMiner } from './StandardsMiner'
 import { DeletedQuotes } from './DeletedQuotes'
+import { UsersAdmin } from './UsersAdmin'
 import { useCanViewManager, useIsApprover } from '../../lib/perms'
 
 // Overflow menu for the occasional dashboard tools: Monthly snapshot, Recently
@@ -12,7 +13,7 @@ import { useCanViewManager, useIsApprover } from '../../lib/perms'
 // the top bar uncluttered. (Campaigns is a top-list tab, not in here.)
 export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTogglePrivacy: () => void }) {
   const [open, setOpen] = useState(false)
-  const [modal, setModal] = useState<null | 'snapshot' | 'recent' | 'catalog' | 'templates' | 'standards' | 'deleted'>(null)
+  const [modal, setModal] = useState<null | 'snapshot' | 'recent' | 'catalog' | 'templates' | 'standards' | 'deleted' | 'users'>(null)
   const { canView } = useCanViewManager() // Standards ↔ codes is manager-only
   const { isApprover } = useIsApprover() // Deleted quotes (restore) is approver-only
   const ref = useRef<HTMLDivElement>(null)
@@ -76,6 +77,11 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
               Deleted quotes
             </button>
           )}
+          {isApprover && (
+            <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('users'); setOpen(false) }}>
+              Users
+            </button>
+          )}
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { onTogglePrivacy(); setOpen(false) }}>
             Privacy mode <span style={{ color: privacy ? 'var(--pos)' : 'var(--dim)', fontWeight: 700 }}>· {privacy ? 'On' : 'Off'}</span>
@@ -88,6 +94,7 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
       {modal === 'templates' && <Templates onClose={() => setModal(null)} />}
       {modal === 'standards' && canView && <StandardsMiner onClose={() => setModal(null)} />}
       {modal === 'deleted' && isApprover && <DeletedQuotes onClose={() => setModal(null)} />}
+      {modal === 'users' && isApprover && <UsersAdmin onClose={() => setModal(null)} />}
     </div>
   )
 }
