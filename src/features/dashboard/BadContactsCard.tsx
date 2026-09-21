@@ -94,7 +94,7 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
 // (data.qi.contact is blank). These belong in Bad contacts to be reassigned to the
 // real person — they're also excluded from Re-engage. On-demand (heavier scan), so
 // it's behind its own button.
-async function loadNoNameContacts(): Promise<BadGroup[]> {
+async function loadNoNameContacts(includeClosedLost = false): Promise<BadGroup[]> {
   // Fetch ALL non-deleted quotes (deleted are filtered at the client) with BOTH stage
   // sources. We DON'T filter stage in the query: stage lives in the top-level column
   // on many quotes and data.qi.stage is null on those, and a PostgREST `not.in` drops
@@ -104,10 +104,14 @@ async function loadNoNameContacts(): Promise<BadGroup[]> {
   const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; qstage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
     `quotes?select=id,opportunity,customer,total,stage,qstage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&order=id`,
   ).catch(() => [])
-  const isClosed = (s: string | null) => { const v = (s || '').trim(); return v === 'Closed Won' || v === 'Closed Lost' }
+  const isWon = (s: string | null) => (s || '').trim() === 'Closed Won'
+  const isLost = (s: string | null) => (s || '').trim() === 'Closed Lost'
   const byEmail = new Map<string, BadGroup>()
   for (const r of quotes) {
-    if (isClosed(r.stage) || isClosed(r.qstage)) continue // open (or unknown-stage) quotes only
+    // Closed Won never matters — we won those, the contact is moot. Closed Lost is
+    // opt-in. Everything else (open, or unknown/blank stage) always counts.
+    if (isWon(r.stage) || isWon(r.qstage)) continue
+    if (!includeClosedLost && (isLost(r.stage) || isLost(r.qstage))) continue
     const email = (r.email || '').trim()
     const key = email.toLowerCase()
     const name = (r.poc || '').trim()
@@ -138,8 +142,9 @@ export function BadContactsCard() {
   const [flagBusy, setFlagBusy] = useState(false)
   // Scan for orphaned POCs (contact deleted, quotes still point at them).
   const [scanBusy, setScanBusy] = useState(false)
-  // Scan for no-name POCs (open quotes with an email but no contact name).
+  // Scan for no-name POCs (quotes with an email but no contact name).
   const [noNameBusy, setNoNameBusy] = useState(false)
+  const [noNameLost, setNoNameLost] = useState(false) // include Closed Lost quotes in the no-name scan (they can reopen); Won is always excluded
 
   useEffect(() => {
     let alive = true
@@ -187,7 +192,7 @@ export function BadContactsCard() {
     if (noNameBusy) return
     setNoNameBusy(true)
     try {
-      const found = await loadNoNameContacts()
+      const found = await loadNoNameContacts(noNameLost)
       mergeGroups(found)
       const n = found.reduce((a, g) => a + g.quotes.length, 0)
       showToast(found.length ? `Found ${found.length} no-name contact${found.length !== 1 ? 's' : ''} on ${n} open quote${n !== 1 ? 's' : ''}.` : 'No no-name contacts — every open quote has a contact name.', found.length ? 'info' : 'success', 6000)
@@ -327,7 +332,10 @@ export function BadContactsCard() {
         <div style={{ marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
           <button onClick={scanOrphans} disabled={scanBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: scanBusy ? 'default' : 'pointer' }}>{scanBusy ? 'Scanning…' : 'Scan for deleted contacts'}</button>
           <button onClick={scanNoName} disabled={noNameBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: '#fff', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: noNameBusy ? 'default' : 'pointer' }}>{noNameBusy ? 'Scanning…' : 'Scan for no-name contacts'}</button>
-          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds open quotes whose POC was deleted from your contacts (so they don’t show in search) or has no name, and lists them to reassign.</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--muted)', cursor: 'pointer' }}>
+            <input type="checkbox" checked={noNameLost} onChange={(e) => setNoNameLost(e.target.checked)} /> include Closed Lost
+          </label>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds quotes whose POC was deleted from your contacts (so they don’t show in search) or has no name, and lists them to reassign. No-name covers open quotes; tick the box to include Closed Lost too (they can reopen). Closed Won is always excluded.</span>
         </div>
       </div>
 
