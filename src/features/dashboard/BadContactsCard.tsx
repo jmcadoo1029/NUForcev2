@@ -94,19 +94,20 @@ async function loadOrphanContacts(): Promise<BadGroup[]> {
 // (data.qi.contact is blank). These belong in Bad contacts to be reassigned to the
 // real person — they're also excluded from Re-engage. On-demand (heavier scan), so
 // it's behind its own button.
-async function loadNoNameContacts(includeClosedLost = false): Promise<BadGroup[]> {
+async function loadNoNameContacts(includeClosedLost = false, maxAgeYears: number | null = 5): Promise<BadGroup[]> {
   // Fetch ALL non-deleted quotes (deleted are filtered at the client) with BOTH stage
   // sources. We DON'T filter stage in the query: stage lives in the top-level column
   // on many quotes and data.qi.stage is null on those, and a PostgREST `not.in` drops
   // null rows (SQL: null NOT IN (...) is not true) — which was silently hiding most
   // no-names. So we page everything and decide "open" client-side, treating an
   // unknown/blank stage as open (better to surface than to miss).
-  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; qstage: string | null; poc: string | null; email: string | null; clientId: string | null }>(
-    `quotes?select=id,opportunity,customer,total,stage,qstage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id&order=id`,
+  const quotes = await restFetchAll<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; qstage: string | null; poc: string | null; email: string | null; clientId: string | null; created_at: string | null }>(
+    `quotes?select=id,opportunity,customer,total,stage,qstage:data->qi->>stage,poc:data->qi->>contact,email:data->qi->>email,clientId:data->qi->>client_id,created_at&order=id`,
   ).catch(() => [])
   const isWon = (s: string | null) => (s || '').trim() === 'Closed Won'
   const isLost = (s: string | null) => (s || '').trim() === 'Closed Lost'
   const byEmail = new Map<string, BadGroup>()
+  const latest = new Map<string, number>() // most-recent quote (ms) per contact, for the age filter
   for (const r of quotes) {
     // Closed Won never matters — we won those, the contact is moot. Closed Lost is
     // opt-in. Everything else (open, or unknown/blank stage) always counts.
@@ -117,13 +118,22 @@ async function loadNoNameContacts(includeClosedLost = false): Promise<BadGroup[]
     const name = (r.poc || '').trim()
     if (!email.includes('@') || name) continue // only quotes that HAVE an email but NO contact name
     const st = r.stage || r.qstage || null
+    const ms = r.created_at ? new Date(r.created_at).getTime() : 0
+    if (ms > (latest.get(key) || 0)) latest.set(key, ms)
     const g = byEmail.get(key) || { email, name: '', reason: 'no contact name on this quote', quotes: [], account: (r.customer || '').trim(), clientId: (r.clientId || '').trim() }
     if (!g.account && r.customer) g.account = r.customer.trim()
     if (!g.clientId && r.clientId) g.clientId = (r.clientId || '').trim()
     g.quotes.push({ id: r.id, opportunity: r.opportunity, customer: r.customer, total: r.total, stage: st, clientId: r.clientId })
     byEmail.set(key, g)
   }
-  return Array.from(byEmail.values()).sort((a, b) => b.quotes.length - a.quotes.length)
+  // Age filter: keep a contact only if their MOST RECENT quote is within the window
+  // (default 5 years). null = any time. Drops truly-cold contacts you won't chase.
+  let groups = Array.from(byEmail.values())
+  if (maxAgeYears) {
+    const cutoff = Date.now() - maxAgeYears * 365.25 * 864e5
+    groups = groups.filter((g) => (latest.get(g.email.toLowerCase()) || 0) >= cutoff)
+  }
+  return groups.sort((a, b) => b.quotes.length - a.quotes.length)
 }
 
 const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
@@ -145,6 +155,7 @@ export function BadContactsCard() {
   // Scan for no-name POCs (quotes with an email but no contact name).
   const [noNameBusy, setNoNameBusy] = useState(false)
   const [noNameLost, setNoNameLost] = useState(false) // include Closed Lost quotes in the no-name scan (they can reopen); Won is always excluded
+  const [noNameYears, setNoNameYears] = useState<number | null>(5) // only contacts quoted within this many years (null = any time)
 
   useEffect(() => {
     let alive = true
@@ -192,7 +203,7 @@ export function BadContactsCard() {
     if (noNameBusy) return
     setNoNameBusy(true)
     try {
-      const found = await loadNoNameContacts(noNameLost)
+      const found = await loadNoNameContacts(noNameLost, noNameYears)
       mergeGroups(found)
       const n = found.reduce((a, g) => a + g.quotes.length, 0)
       showToast(found.length ? `Found ${found.length} no-name contact${found.length !== 1 ? 's' : ''} on ${n} open quote${n !== 1 ? 's' : ''}.` : 'No no-name contacts — every open quote has a contact name.', found.length ? 'info' : 'success', 6000)
@@ -335,7 +346,17 @@ export function BadContactsCard() {
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--muted)', cursor: 'pointer' }}>
             <input type="checkbox" checked={noNameLost} onChange={(e) => setNoNameLost(e.target.checked)} /> include Closed Lost
           </label>
-          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds quotes whose POC was deleted from your contacts (so they don’t show in search) or has no name, and lists them to reassign. No-name covers open quotes; tick the box to include Closed Lost too (they can reopen). Closed Won is always excluded.</span>
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>
+            quoted within
+            <select value={noNameYears === null ? 'any' : String(noNameYears)} onChange={(e) => setNoNameYears(e.target.value === 'any' ? null : Number(e.target.value))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}>
+              <option value="2">2 years</option>
+              <option value="3">3 years</option>
+              <option value="5">5 years</option>
+              <option value="10">10 years</option>
+              <option value="any">any time</option>
+            </select>
+          </label>
+          <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>Finds quotes whose POC was deleted from your contacts (so they don’t show in search) or has no name, and lists them to reassign. No-name covers open quotes; tick the box to include Closed Lost too (they can reopen). Closed Won is always excluded, and only contacts whose most recent quote is within the chosen window are shown.</span>
         </div>
       </div>
 
