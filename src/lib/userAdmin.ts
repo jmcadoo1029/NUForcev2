@@ -1,10 +1,16 @@
 import { restFetch, restFetchAll } from './restFetch'
 
-// Users area (More → Users, managers only) — read the shared employees +
-// permission_roles (NUForce never writes them) to show who's who and what their
-// role grants, and read/write per-user NUForce preferences in our own
-// nuforce_user_settings table. A NULL toggle means "use the role default";
-// an explicit boolean is a manager override.
+// Users area (More → Users, managers only). Lists only ACTUAL NUForce users — people
+// with a NUForce role, or who've submitted/approved a quote — not the whole shared
+// workspace. Reads the shared employees + permission_roles (never writes them) and
+// reads/writes per-user NUForce prefs in our own nuforce_user_settings table.
+//
+// Toggle defaults reflect "who gets them today":
+//   deliveryDefault  = true only for active senders (people who submit quotes) — the
+//                      folks a delivery alert can actually reach right now.
+//   approvalsDefault = true for managers and active users (roughly who's in the
+//                      approval loop today).
+// A NULL setting means "use that default"; an explicit boolean is a manager override.
 
 export interface UserRow {
   id: string
@@ -12,11 +18,14 @@ export interface UserRow {
   name: string
   roleName: string
   caps: Record<string, unknown>
-  notifyDelivery: boolean | null // null = default (see defaultDelivery)
-  notifyApprovals: boolean | null // null = default (see defaultApprovals)
+  deliveryDefault: boolean
+  approvalsDefault: boolean
+  notifyDelivery: boolean | null // null = use deliveryDefault
+  notifyApprovals: boolean | null // null = use approvalsDefault
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
+const lc = (v: unknown) => str(v).toLowerCase()
 
 function nameFrom(emp: Record<string, unknown>, email: string): string {
   const first = str(emp.first_name) || str(emp.firstname) || str(emp.given_name)
@@ -30,45 +39,60 @@ function roleNameFrom(role: Record<string, unknown> | undefined, hasRoleId: bool
   const n = role ? (str(role.name) || str(role.label) || str(role.title)) : ''
   return n || (hasRoleId ? 'Assigned role' : 'No role')
 }
+const isNuforceRole = (caps: Record<string, unknown>) => Object.keys(caps || {}).some((k) => k.startsWith('nuforce_') && (caps as Record<string, unknown>)[k])
 
-// Human-readable list of what a role grants — shown read-only in the detail so the
-// baseline is always visible.
+// Human-readable list of what a role grants — shown read-only so the baseline is clear.
 export function capsSummary(caps: Record<string, unknown>): string[] {
   if (caps['nuforce_approve_quotes']) return ['Sees the Manager dashboard', 'Can approve / reject quotes', 'Full manager tools (Mass Emails, Scheduled, etc.)']
   if (caps['nuforce_view_dashboard']) return ['Sees the Manager dashboard (view-only)', 'No approve / edit authority']
   return ['Standard user — builds and sends their own quotes', 'No Manager dashboard']
 }
 
-// Toggle defaults from role. Delivery-problem alerts default on for everyone who
-// sends quotes. Approval-workflow emails default on (managers get the approval
-// queue notes; senders get the "approved & ready" note).
-export function defaultDelivery(_caps: Record<string, unknown>): boolean { return true }
-export function defaultApprovals(_caps: Record<string, unknown>): boolean { return true }
-
-/** Effective on/off for a toggle: the override if set, else the role default. */
+/** Effective on/off: the override if set, else the default. */
 export const effective = (override: boolean | null, def: boolean): boolean => (override === null || override === undefined ? def : override)
 
 export async function fetchUsers(): Promise<UserRow[]> {
-  const [emps, roles, settings] = await Promise.all([
+  const [emps, roles, settings, quotes] = await Promise.all([
     restFetchAll<Record<string, unknown>>('employees?select=*&order=email,id').catch(() => [] as Record<string, unknown>[]),
     restFetch<Record<string, unknown>[]>('GET', 'permission_roles?select=*&limit=200').catch(() => [] as Record<string, unknown>[]),
     restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals&limit=5000').catch(() => []),
+    restFetchAll<{ submitted_by: string | null; approved_by: string | null }>('quotes?select=submitted_by,approved_by&order=id').catch(() => [] as { submitted_by: string | null; approved_by: string | null }[]),
   ])
+
+  // Active NUForce participants, from real quote activity.
+  const submitters = new Set<string>() // people who submit quotes ≈ who sends them (gets delivery alerts today)
+  const active = new Set<string>() // anyone who has submitted OR approved a quote
+  for (const q of quotes || []) {
+    const sb = lc(q.submitted_by); if (sb.includes('@')) { submitters.add(sb); active.add(sb) }
+    const ab = lc(q.approved_by); if (ab.includes('@')) active.add(ab)
+  }
   const roleById = new Map((roles || []).map((r) => [String(r.id), r]))
+  const nuforceRoleIds = new Set((roles || []).filter((r) => isNuforceRole((r.capabilities as Record<string, unknown>) || {})).map((r) => String(r.id)))
   const setByEmail = new Map((settings || []).map((s) => [(s.email || '').toLowerCase(), s]))
+
   const rows: UserRow[] = []
   for (const e of emps || []) {
     const email = str(e.email) || str(e.personal_email)
     if (!email) continue
+    const emailLc = email.toLowerCase()
+    const personalLc = lc(e.personal_email)
     const roleId = e.role_id ? String(e.role_id) : ''
+    const isManager = !!roleId && nuforceRoleIds.has(roleId)
+    const isSender = submitters.has(emailLc) || (!!personalLc && submitters.has(personalLc))
+    const isActive = active.has(emailLc) || (!!personalLc && active.has(personalLc))
+    // NUForce users only — everyone else in the shared workspace is dropped.
+    if (!isManager && !isActive) continue
+
     const role = roleId ? roleById.get(roleId) : undefined
-    const st = setByEmail.get(email.toLowerCase())
+    const st = setByEmail.get(emailLc)
     rows.push({
       id: String(e.id ?? email),
       email,
       name: nameFrom(e, email),
       roleName: roleNameFrom(role, !!roleId),
       caps: (role?.capabilities as Record<string, unknown>) || {},
+      deliveryDefault: isSender, // on for active senders — who gets delivery alerts today
+      approvalsDefault: isManager || isActive,
       notifyDelivery: st ? st.notify_delivery : null,
       notifyApprovals: st ? st.notify_approvals : null,
     })

@@ -3,9 +3,7 @@ import { Modal, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { prettifyEmail } from '../../lib/text'
-import {
-  fetchUsers, saveUserSettings, capsSummary, defaultDelivery, defaultApprovals, effective, type UserRow,
-} from '../../lib/userAdmin'
+import { fetchUsers, saveUserSettings, capsSummary, effective, type UserRow } from '../../lib/userAdmin'
 
 // Users — a managers-only directory (More → Users). Lists everyone with their role
 // and what that role grants (read-only baseline), then per-user NUForce toggles for
@@ -112,7 +110,7 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                 <Toggle
                   label="Delivery-problem alerts"
                   help="Emails this person when one of their quote/follow-up sends bounces, is marked spam, or is delayed. Enforced by NUForce."
-                  on={effective(sel.notifyDelivery, defaultDelivery(sel.caps))}
+                  on={effective(sel.notifyDelivery, sel.deliveryDefault)}
                   isDefault={sel.notifyDelivery === null}
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_delivery', v)}
@@ -121,7 +119,7 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                 <Toggle
                   label="Approval & workflow emails"
                   help="Submitted / approved / reopen / lost notifications. These are sent by the shared workspace mailer, so this preference is saved but only takes effect once that mailer honors it."
-                  on={effective(sel.notifyApprovals, defaultApprovals(sel.caps))}
+                  on={effective(sel.notifyApprovals, sel.approvalsDefault)}
                   isDefault={sel.notifyApprovals === null}
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_approvals', v)}
