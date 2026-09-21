@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react'
 import { Card } from '../../components'
-import { useCanViewManager } from '../../lib/perms'
+import { useFeature } from '../../lib/perms'
 import { ReEngageContacts } from './ReEngageContacts'
 import { MassEmails } from './MassEmails'
 import { BadContactsCard } from './BadContactsCard'
@@ -22,7 +22,6 @@ const GROUPS: { label: string; tabs: Tab[] }[] = [
   { label: 'Contacts', tabs: [{ key: 'reengage', label: 'Re-engage' }, { key: 'badcontacts', label: 'Bad contacts' }] },
   { label: 'Outreach', tabs: [{ key: 'campaigns', label: 'Campaigns' }, { key: 'massemails', label: 'Mass Emails', managerOnly: true }, { key: 'scheduled', label: 'Scheduled', managerOnly: true }] },
 ]
-const isManagerOnly = (t: Sub) => t === 'massemails' || t === 'scheduled'
 
 const seg = (active: boolean, first: boolean): CSSProperties => ({
   fontFamily: 'inherit',
@@ -39,20 +38,25 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({
 const groupLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 5 }
 
 export function CustomerContact() {
-  const { canView } = useCanViewManager() // manager view — gates the Mass Emails send tab
+  // Per-feature access (Users area overrides, defaulting to the manager role). Mass
+  // Emails and Scheduled are gated independently so a manager can grant/revoke either
+  // for a specific person.
+  const canMass = useFeature('mass_emails')
+  const canSched = useFeature('scheduled')
+  const allowed = (t: Sub) => (t === 'massemails' ? canMass : t === 'scheduled' ? canSched : true)
   const [sub, setSub] = useState<Sub>('reengage')
 
-  // A non-manager can never sit on a manager-only view (Mass Emails, Scheduled).
+  // Never sit on a tab this person can't access.
   useEffect(() => {
-    if (!canView && isManagerOnly(sub)) setSub('reengage')
-  }, [canView, sub])
-  const view: Sub = !canView && isManagerOnly(sub) ? 'reengage' : sub
+    if (!allowed(sub)) setSub('reengage')
+  }, [canMass, canSched, sub])
+  const view: Sub = allowed(sub) ? sub : 'reengage'
 
   return (
     <>
       <div style={{ display: 'flex', gap: 'var(--sp-6)', alignItems: 'flex-end', flexWrap: 'wrap', marginBottom: 'var(--sp-4)' }}>
         {GROUPS.map((group) => {
-          const tabs = group.tabs.filter((t) => canView || !t.managerOnly)
+          const tabs = group.tabs.filter((t) => allowed(t.key))
           if (!tabs.length) return null
           return (
             <div key={group.label}>

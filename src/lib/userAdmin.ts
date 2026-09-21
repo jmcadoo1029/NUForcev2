@@ -22,6 +22,8 @@ export interface UserRow {
   approvalsDefault: boolean
   notifyDelivery: boolean | null // null = use deliveryDefault
   notifyApprovals: boolean | null // null = use approvalsDefault
+  managerDefault: boolean // role default for page access (manager/view-only can see)
+  features: Record<string, boolean> // per-user page-access overrides; key absent = use managerDefault
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v.trim() : '')
@@ -55,7 +57,7 @@ export async function fetchUsers(): Promise<UserRow[]> {
   const [emps, roles, settings, quotes] = await Promise.all([
     restFetchAll<Record<string, unknown>>('employees?select=*&order=email,id').catch(() => [] as Record<string, unknown>[]),
     restFetch<Record<string, unknown>[]>('GET', 'permission_roles?select=*&limit=200').catch(() => [] as Record<string, unknown>[]),
-    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals&limit=5000').catch(() => []),
+    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null; features: Record<string, unknown> | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals,features&limit=5000').catch(() => []),
     restFetchAll<{ submitted_by: string | null; approved_by: string | null }>('quotes?select=submitted_by,approved_by&order=id').catch(() => [] as { submitted_by: string | null; approved_by: string | null }[]),
   ])
 
@@ -85,20 +87,50 @@ export async function fetchUsers(): Promise<UserRow[]> {
 
     const role = roleId ? roleById.get(roleId) : undefined
     const st = setByEmail.get(emailLc)
+    const caps = (role?.capabilities as Record<string, unknown>) || {}
+    // Page-access default follows the role: managers (approve) and view-only roles can
+    // see the manager pages; everyone else can't — unless a per-user override says so.
+    const managerDefault = !!(caps['nuforce_approve_quotes'] || caps['nuforce_view_dashboard'])
+    const rawFeat = (st && st.features && typeof st.features === 'object') ? (st.features as Record<string, unknown>) : {}
+    const features: Record<string, boolean> = {}
+    for (const [k, v] of Object.entries(rawFeat)) if (typeof v === 'boolean') features[k] = v
     rows.push({
       id: String(e.id ?? email),
       email,
       name: nameFrom(e, email),
       roleName: roleNameFrom(role, !!roleId),
-      caps: (role?.capabilities as Record<string, unknown>) || {},
+      caps,
       deliveryDefault: isSender, // on for active senders — who gets delivery alerts today
       approvalsDefault: isManager || isActive,
       notifyDelivery: st ? st.notify_delivery : null,
       notifyApprovals: st ? st.notify_approvals : null,
+      managerDefault,
+      features,
     })
   }
   rows.sort((a, b) => a.name.localeCompare(b.name))
   return rows
+}
+
+/** Set (or clear) a single page-access override for a user, preserving the rest of the
+ *  features map. value=null removes the key so the feature falls back to the role default.
+ *  Read-merge-write because the whole `features` jsonb is stored as one column. */
+export async function saveUserFeature(
+  email: string,
+  name: string,
+  value: boolean | null,
+  by: string,
+): Promise<void> {
+  const e = (email || '').trim().toLowerCase()
+  if (!e || !name) return
+  const rows = await restFetch<{ features: Record<string, unknown> | null }[]>('GET', `nuforce_user_settings?select=features&email=eq.${encodeURIComponent(e)}&limit=1`).catch(() => [])
+  const cur = (rows?.[0]?.features && typeof rows[0].features === 'object') ? { ...(rows[0].features as Record<string, unknown>) } : {}
+  if (value === null) delete cur[name]
+  else cur[name] = value
+  await restFetch('POST', 'nuforce_user_settings?on_conflict=email', {
+    body: { email: e, features: cur, updated_by: by || null, updated_at: new Date().toISOString() },
+    upsert: true,
+  })
 }
 
 export async function saveUserSettings(

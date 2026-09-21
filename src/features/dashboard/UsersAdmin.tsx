@@ -3,7 +3,7 @@ import { Modal, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
 import { getSessionEmail } from '../../lib/auth'
 import { prettifyEmail } from '../../lib/text'
-import { fetchUsers, saveUserSettings, capsSummary, effective, type UserRow } from '../../lib/userAdmin'
+import { fetchUsers, saveUserSettings, saveUserFeature, capsSummary, effective, type UserRow } from '../../lib/userAdmin'
 
 // Users — a managers-only directory (More → Users). Lists everyone with their role
 // and what that role grants (read-only baseline), then per-user NUForce toggles for
@@ -63,10 +63,27 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
     } finally { setBusy(false) }
   }
 
+  const setFeature = async (u: UserRow, name: string, value: boolean | null) => {
+    if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    setBusy(true)
+    try {
+      await saveUserFeature(u.email, name, value, me)
+      setUsers((prev) => (prev || []).map((x) => {
+        if (x.email !== u.email) return x
+        const features = { ...x.features }
+        if (value === null) delete features[name]
+        else features[name] = value
+        return { ...x, features }
+      }))
+    } catch (e) {
+      showToast('Save failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
+    } finally { setBusy(false) }
+  }
+
   return (
     <Modal title="Users" onClose={onClose} width={860}>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
-        Everyone in the system and what their role grants. Roles are managed in your shared workspace — here you tailor each person’s NUForce email notifications.
+        NUForce users and what their role grants. Roles are managed in your shared workspace — here you tailor each person’s NUForce email notifications and page access.
       </div>
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load users: {err}</div>}
@@ -81,10 +98,10 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                 <div style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No matches.</div>
               ) : filtered.map((u) => {
                 const active = u.email === selEmail
-                const tailored = u.notifyDelivery !== null || u.notifyApprovals !== null
+                const tailored = u.notifyDelivery !== null || u.notifyApprovals !== null || Object.keys(u.features).length > 0
                 return (
                   <div key={u.email} onClick={() => setSelEmail(u.email)} style={{ padding: '9px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer', background: active ? 'var(--accent-soft)' : 'transparent' }}>
-                    <div style={{ fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text)' }}>{u.name}{tailored && <span title="Has custom notification settings" style={{ color: 'var(--accent)' }}> •</span>}</div>
+                    <div style={{ fontWeight: 600, color: active ? 'var(--accent)' : 'var(--text)' }}>{u.name}{tailored && <span title="Has custom NUForce settings" style={{ color: 'var(--accent)' }}> •</span>}</div>
                     <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email} · {u.roleName}</div>
                   </div>
                 )
@@ -124,6 +141,38 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_approvals', v)}
                   onReset={() => setToggle(sel, 'notify_approvals', null)}
+                />
+
+                <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Page access</div>
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 6 }}>
+                  These default to what this person’s role grants. Flip one to give or remove access for just this user.
+                </div>
+                <Toggle
+                  label="Manager dashboard"
+                  help="The Manager view — the dashboard route, the Manager tab, and its tiles. Off means this person only sees their own quotes."
+                  on={effective(sel.features['manager_dashboard'] ?? null, sel.managerDefault)}
+                  isDefault={sel.features['manager_dashboard'] === undefined}
+                  disabled={busy}
+                  onChange={(v) => setFeature(sel, 'manager_dashboard', v)}
+                  onReset={() => setFeature(sel, 'manager_dashboard', null)}
+                />
+                <Toggle
+                  label="Mass Emails tab"
+                  help="The Mass Emails composer under Customer Contact → Outreach, used to send campaigns and bulk follow-ups."
+                  on={effective(sel.features['mass_emails'] ?? null, sel.managerDefault)}
+                  isDefault={sel.features['mass_emails'] === undefined}
+                  disabled={busy}
+                  onChange={(v) => setFeature(sel, 'mass_emails', v)}
+                  onReset={() => setFeature(sel, 'mass_emails', null)}
+                />
+                <Toggle
+                  label="Scheduled tab"
+                  help="The Scheduled view under Customer Contact → Outreach, used to set up and review scheduled email runs."
+                  on={effective(sel.features['scheduled'] ?? null, sel.managerDefault)}
+                  isDefault={sel.features['scheduled'] === undefined}
+                  disabled={busy}
+                  onChange={(v) => setFeature(sel, 'scheduled', v)}
+                  onReset={() => setFeature(sel, 'scheduled', null)}
                 />
 
                 {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-3)' }}>Preview — writes are off, changes won’t save.</div>}

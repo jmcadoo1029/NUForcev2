@@ -18,6 +18,25 @@ let _approverCache: boolean | null = null
 let _viewCache: boolean | null = null
 let _empIdCache: string | null | undefined = undefined
 
+// Per-user page/feature overrides (Users area → nuforce_user_settings.features).
+// A key present as true/false overrides the role default for that feature.
+let _featCache: Record<string, unknown> | null = null
+let _featLoaded = false
+async function loadMyFeatures(): Promise<Record<string, unknown>> {
+  if (_featLoaded) return _featCache || {}
+  const email = getSessionEmail()
+  if (!email) return {}
+  try {
+    const rows = await restFetch<{ features: Record<string, unknown> | null }[]>('GET', `nuforce_user_settings?select=features&email=eq.${encodeURIComponent(email.toLowerCase())}&limit=1`)
+    _featCache = rows?.[0]?.features || {}
+    _featLoaded = true
+  } catch {
+    return {} // don't cache a transient miss — fall back to role default
+  }
+  return _featCache
+}
+const roleCanView = (caps: Record<string, any>) => !!(caps[CAP_APPROVE] || caps[CAP_VIEW])
+
 /** Fetch (and cache for the session) the current user's role capabilities. Throws
  *  on network error so callers can fail closed WITHOUT caching a transient miss. */
 async function loadCaps(): Promise<Record<string, any>> {
@@ -67,12 +86,37 @@ export async function fetchIsApprover(): Promise<boolean> {
 export async function fetchCanViewManager(): Promise<boolean> {
   if (_viewCache !== null) return _viewCache
   try {
-    const caps = await loadCaps()
-    _viewCache = !!(caps[CAP_APPROVE] || caps[CAP_VIEW])
+    const [caps, feats] = await Promise.all([loadCaps(), loadMyFeatures()])
+    const ov = feats['manager_dashboard']
+    _viewCache = typeof ov === 'boolean' ? ov : roleCanView(caps)
     return _viewCache
   } catch {
     return false // don't cache transient failures
   }
+}
+
+/** Effective access to a named page/feature: the per-user override if set, else the
+ *  role default (same as manager-view: approvers + view-only roles). Used to gate the
+ *  Mass Emails / Scheduled tabs independently of the overall Manager view. */
+export async function fetchFeature(name: string): Promise<boolean> {
+  try {
+    const [caps, feats] = await Promise.all([loadCaps(), loadMyFeatures()])
+    const ov = feats[name]
+    return typeof ov === 'boolean' ? ov : roleCanView(caps)
+  } catch {
+    return false
+  }
+}
+
+/** Reactive feature check. */
+export function useFeature(name: string): boolean {
+  const [on, setOn] = useState(false)
+  useEffect(() => {
+    let alive = true
+    fetchFeature(name).then((v) => { if (alive) setOn(v) })
+    return () => { alive = false }
+  }, [name])
+  return on
 }
 
 /** Reactive approver check: { isApprover, loading }. Gates approve/edit authority. */
