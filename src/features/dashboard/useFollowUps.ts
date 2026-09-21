@@ -21,6 +21,7 @@ interface Raw {
   quote_id?: string | null
   opportunity?: string | null
   sent_at?: string | null
+  followed_up_at?: string | null
   followup_again_at?: string | null
   quotes?: {
     id?: string
@@ -89,17 +90,22 @@ async function load(): Promise<FollowUpRow[]> {
   // pending follow-up sitting alongside a NUForce send, leaves two+ rows pointing at
   // the same quote, and the quote would otherwise appear once per row. We key by the
   // full opportunity (revision included, so 26-060 and 26-060B stay separate — those
-  // are handled by the revision-supersede below) and keep the latest send as the live
-  // timeline: newest sent_at wins, then a row that's been rescheduled, then highest id.
+  // are handled by the revision-supersede below) and keep the row acted on MOST
+  // RECENTLY as the live timeline — not merely the latest send. A follow-up sent today
+  // (followed_up_at) advances the timeline past a duplicate initial send, so that row
+  // wins and its +90d reschedule governs; keying on send date alone would keep a stale
+  // duplicate that's due and re-nag a quote already followed up on. Tiebreak: a
+  // rescheduled/snoozed row, then highest id.
   const oppKey = (fu: Raw) => (fu.quotes?.opportunity || fu.opportunity || '').toUpperCase().trim() || `id:${fu.id}`
-  const sentMs = (fu: Raw) => (fu.sent_at ? new Date(fu.sent_at).getTime() : 0)
+  const ms = (v?: string | null) => (v ? new Date(v).getTime() : 0)
+  const actMs = (fu: Raw) => Math.max(ms(fu.sent_at), ms(fu.followed_up_at)) // last time this row was touched
   const canonical = new Map<string, Raw>()
   for (const fu of rows) {
     const k = oppKey(fu)
     const cur = canonical.get(k)
     if (!cur) { canonical.set(k, fu); continue }
     const better =
-      sentMs(fu) !== sentMs(cur) ? sentMs(fu) > sentMs(cur)
+      actMs(fu) !== actMs(cur) ? actMs(fu) > actMs(cur)
         : (!!fu.followup_again_at !== !!cur.followup_again_at) ? !!fu.followup_again_at
           : String(fu.id) > String(cur.id)
     if (better) canonical.set(k, fu)
