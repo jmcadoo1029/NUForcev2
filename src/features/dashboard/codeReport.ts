@@ -16,6 +16,9 @@ export interface CodeEntry {
   year: string
   code: string
   price: number
+  createdAt: string | null // quotes.created_at — real creation for NUForce quotes; import date for source='salesforce'
+  wonDate: string | null // won_date (or data.wonInfo.wonDate) when Closed Won, else null
+  source: string | null // 'salesforce' for imported quotes; null/other for NUForce-created
 }
 
 interface Raw {
@@ -24,6 +27,8 @@ interface Raw {
   customer?: string | null
   stage?: string | null
   won_date?: string | null
+  created_at?: string | null
+  source?: string | null
   data?: QuoteData & {
     qi?: { account?: string; stage?: string }
     wonInfo?: { wonDate?: string }
@@ -59,8 +64,19 @@ function yearFromDate(s?: string | null): string | null {
   return null
 }
 
-export async function fetchCodeEntries(): Promise<CodeEntry[]> {
-  const cols = 'id,opportunity,customer,total,stage,won_date,data'
+// Session cache — the all-history pull is heavy and several dashboard widgets
+// (deep dive, win-time) want the same data. Memoize the promise so it's fetched
+// once; drop it on failure so a later call can retry.
+let _entriesCache: Promise<CodeEntry[]> | null = null
+export function fetchCodeEntries(): Promise<CodeEntry[]> {
+  if (!_entriesCache) {
+    _entriesCache = _fetchCodeEntries().catch((e) => { _entriesCache = null; throw e })
+  }
+  return _entriesCache
+}
+
+async function _fetchCodeEntries(): Promise<CodeEntry[]> {
+  const cols = 'id,opportunity,customer,total,stage,won_date,created_at,source,data'
   let all: Raw[] = []
   let offset = 0
   const batch = 500
@@ -78,7 +94,12 @@ export async function fetchCodeEntries(): Promise<CodeEntry[]> {
     const stage = q.stage || blob.qi?.stage || ''
     const isWon = stage === 'Closed Won'
     const year = isWon ? yearFromDate(q.won_date) || yearFromDate(blob.wonInfo?.wonDate) || yearFromOpp(q.opportunity) : yearFromOpp(q.opportunity)
-    const common = { quoteId: q.id, opp: q.opportunity || '', customer: q.customer || blob.qi?.account || '(Unknown)', stage, year }
+    const common = {
+      quoteId: q.id, opp: q.opportunity || '', customer: q.customer || blob.qi?.account || '(Unknown)', stage, year,
+      createdAt: q.created_at || null,
+      wonDate: isWon ? (q.won_date || blob.wonInfo?.wonDate || null) : null,
+      source: q.source || null,
+    }
 
     ;(blob.pickerLines || []).forEach((l) => {
       const code = String(l.code || '').trim()

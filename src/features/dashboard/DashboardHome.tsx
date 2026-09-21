@@ -6,6 +6,7 @@ import { ApprovalsCard } from './ApprovalsCard'
 import { ScheduledRunsCard } from './ScheduledRunsCard'
 import { TrendChart } from './TrendChart'
 import { ProductCodeDeepDive } from './ProductCodeDeepDive'
+import { WinTimeCard } from './WinTimeCard'
 import { WonBreakdown } from './WonBreakdown'
 import { YtdMetrics } from './YtdMetrics'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
@@ -81,6 +82,8 @@ export function DashboardHome() {
       <TrendChart />
 
       <ThreeMonthWidgets />
+
+      <WinTimeCard />
 
       <ProductCodeDeepDive />
     </>
