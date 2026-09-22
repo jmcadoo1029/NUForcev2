@@ -102,6 +102,7 @@ export function QuotePage() {
   const [editing, setEditing] = useState(false)
   const [revOpen, setRevOpen] = useState(false)
   const [specMenuOpen, setSpecMenuOpen] = useState(false)
+  const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
   // "Populate from CRR" — pull a Workspace CRR workup into this quote (fill-empty +
   // append line items/budget/notes). The modal previews before applying.
   const [crrOpen, setCrrOpen] = useState(false)
@@ -536,7 +537,7 @@ export function QuotePage() {
   // PDF export — ports Classic's buildPDF (Letter, jsPDF). Line items come from
   // the unified list (drag order preserved); descriptions wrap in the PDF now.
   const [pdfBusy, setPdfBusy] = useState<'' | 'quote' | 'budget'>('')
-  const exportPdf = async (budgetOnly: boolean) => {
+  const exportPdf = async (budgetOnly: boolean, action: 'save' | 'print' = 'save') => {
     setPdfBusy(budgetOnly ? 'budget' : 'quote')
     try {
       // Lazy-load the PDF builder (jsPDF + assets) only on export, so the heavy
@@ -548,6 +549,7 @@ export function QuotePage() {
         lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })),
         budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup },
         budgetOnly,
+        output: action,
       })
     } catch (e) {
       console.error('PDF export failed', e)
@@ -1040,7 +1042,18 @@ export function QuotePage() {
                 {row.id && <Button variant="secondary" small onClick={() => setSendOpen(true)}>Send</Button>}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(false)}>{pdfBusy === 'quote' ? 'Generating…' : 'Quote PDF'}</Button>
+                <div style={{ position: 'relative' }}>
+                  <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => setPdfMenuOpen((v) => !v)}>{pdfBusy === 'quote' ? 'Generating…' : 'Quote PDF ▾'}</Button>
+                  {pdfMenuOpen && (
+                    <>
+                      <div onClick={() => setPdfMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                        <button onClick={() => { setPdfMenuOpen(false); exportPdf(false, 'save') }} style={menuItemStyle}>Save as PDF</button>
+                        <button onClick={() => { setPdfMenuOpen(false); exportPdf(false, 'print') }} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Print…</button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 {budgetEdit.rows.length > 0 && <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(true)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF'}</Button>}
                 {editing && <Button variant="secondary" small onClick={() => setCrrOpen(true)} title="Pull a Workspace CRR workup into this quote (fills empty fields, adds EMI/PQ/DC-Mag line items, appends notes)">Populate from CRR</Button>}
                 <div style={{ position: 'relative' }}>

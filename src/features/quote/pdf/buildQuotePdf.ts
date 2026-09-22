@@ -1,5 +1,5 @@
 import { jsPDF } from 'jspdf'
-import { savePdfAs } from './savePdf'
+import { savePdfAs, printPdf } from './savePdf'
 import { NU_LOGO_PDF, JORDAN_SIG_PDF } from './assets'
 
 // Quote + Budget PDF, ported from Classic's buildPDF so output matches Classic
@@ -29,8 +29,9 @@ export interface QuotePdfInput {
    * 'save' (default) triggers a browser download, matching Classic. 'return'
    * skips the download and hands back the rendered bytes + filename instead, so
    * the same exact PDF can be attached to a send and/or uploaded to Storage.
+   * 'print' sends the same PDF straight to the printer's print dialog (no download).
    */
-  output?: 'save' | 'return'
+  output?: 'save' | 'return' | 'print'
 }
 
 export interface QuotePdfBytes { blob: Blob; fileName: string; mime: 'application/pdf' }
@@ -525,6 +526,10 @@ export async function buildQuotePdf({ qi, ti, lines, budget, budgetOnly = false,
   if (output === 'return') {
     const blob = doc.output('blob') as Blob
     return { blob, fileName: fname, mime: 'application/pdf' }
+  }
+  if (output === 'print') {
+    printPdf(doc)
+    return
   }
   await savePdfAs(doc, fname)
 }
