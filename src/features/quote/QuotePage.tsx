@@ -1255,7 +1255,7 @@ export function QuotePage() {
                 <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600 }}>{s(qi.stage) || row.stage || '—'}</div>
               )}
             </Card>
-            <Card><CardLabel>Total</CardLabel><div style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{money(Number(row.total) || 0)}</div></Card>
+            <Card><CardLabel>Total</CardLabel><div style={{ fontSize: 'var(--fs-md)', fontWeight: 700 }}>{money(lineItems.reduce((a, l) => a + (l.price || 0) * Math.max(1, l.qty || 1), 0))}</div></Card>
           </div>
 
           {editing && !WRITES_ENABLED && (
