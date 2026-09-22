@@ -40,6 +40,7 @@ export const PCODE_OPTS: ProductCode[] = [
   { code: '57', label: 'Acceleration' },
   { code: '58', label: 'Drip/Sub/Spray' },
   { code: '59', label: 'Insulation Resistance' },
+  { code: '67', label: 'Modal Analysis' },
   { code: '91', label: 'MW Shock' },
   { code: '92', label: 'LW Shock' },
   { code: '93', label: 'Inclination' },
