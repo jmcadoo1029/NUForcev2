@@ -103,6 +103,7 @@ export function QuotePage() {
   const [revOpen, setRevOpen] = useState(false)
   const [specMenuOpen, setSpecMenuOpen] = useState(false)
   const [pdfMenuOpen, setPdfMenuOpen] = useState(false)
+  const [budgetMenuOpen, setBudgetMenuOpen] = useState(false)
   // "Populate from CRR" — pull a Workspace CRR workup into this quote (fill-empty +
   // append line items/budget/notes). The modal previews before applying.
   const [crrOpen, setCrrOpen] = useState(false)
@@ -1054,7 +1055,20 @@ export function QuotePage() {
                     </>
                   )}
                 </div>
-                {budgetEdit.rows.length > 0 && <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => exportPdf(true)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF'}</Button>}
+                {budgetEdit.rows.length > 0 && (
+                  <div style={{ position: 'relative' }}>
+                    <Button variant="secondary" small disabled={pdfBusy !== ''} onClick={() => setBudgetMenuOpen((v) => !v)}>{pdfBusy === 'budget' ? 'Generating…' : 'Budget PDF ▾'}</Button>
+                    {budgetMenuOpen && (
+                      <>
+                        <div onClick={() => setBudgetMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                          <button onClick={() => { setBudgetMenuOpen(false); exportPdf(true, 'save') }} style={menuItemStyle}>Save as PDF</button>
+                          <button onClick={() => { setBudgetMenuOpen(false); exportPdf(true, 'print') }} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Print…</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
                 {editing && <Button variant="secondary" small onClick={() => setCrrOpen(true)} title="Pull a Workspace CRR workup into this quote (fills empty fields, adds EMI/PQ/DC-Mag line items, appends notes)">Populate from CRR</Button>}
                 <div style={{ position: 'relative' }}>
                   <Button variant="secondary" small onClick={() => setSpecMenuOpen((v) => !v)}>Spec Builder</Button>
