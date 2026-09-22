@@ -64,15 +64,15 @@ function wonDeals(entries: CodeEntry[], code: string | null): WonDeal[] {
   return out
 }
 
-interface Stat { n: number; mean: number; median: number }
+interface Stat { n: number; mean: number; sd: number }
 function summarize(deals: WonDeal[]): Stat {
   const n = deals.length
-  if (!n) return { n: 0, mean: 0, median: 0 }
-  const days = deals.map((d) => d.winDays).sort((a, b) => a - b)
-  const mean = Math.round(days.reduce((a, d) => a + d, 0) / n)
-  const mid = Math.floor(n / 2)
-  const median = n % 2 ? days[mid] : Math.round((days[mid - 1] + days[mid]) / 2)
-  return { n, mean, median }
+  if (!n) return { n: 0, mean: 0, sd: 0 }
+  const days = deals.map((d) => d.winDays)
+  const mean = days.reduce((a, d) => a + d, 0) / n
+  // Sample standard deviation (n−1). Needs at least 2 deals; a single deal has no spread.
+  const sd = n > 1 ? Math.sqrt(days.reduce((a, d) => a + (d - mean) * (d - mean), 0) / (n - 1)) : 0
+  return { n, mean: Math.round(mean), sd: Math.round(sd) }
 }
 
 function WinTile({ label, stat }: { label: string; stat: Stat }) {
@@ -80,8 +80,8 @@ function WinTile({ label, stat }: { label: string; stat: Stat }) {
   return (
     <StatTile
       label={label}
-      value={`${stat.median}d`}
-      sub={`avg ${stat.mean}d · ${stat.n} deal${stat.n !== 1 ? 's' : ''}`}
+      value={stat.n > 1 ? `${stat.mean} ± ${stat.sd}d` : `${stat.mean}d`}
+      sub={stat.n > 1 ? `mean ±1 SD · ${stat.n} deals` : `1 deal`}
       tone="pos"
     />
   )
@@ -128,7 +128,7 @@ export function WinTimeCard() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
         <div>
           <CardLabel>Deal win time</CardLabel>
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 2 }}>Days from quote created to Closed Won · median headline, average in gray</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 2 }}>Days from quote created to Closed Won · mean ±1 standard deviation</div>
         </div>
         <select value={scope} onChange={(e) => setScope(e.target.value)} style={selectStyle} disabled={loading || !!err}>
           <option value="all">All products (company-wide)</option>
