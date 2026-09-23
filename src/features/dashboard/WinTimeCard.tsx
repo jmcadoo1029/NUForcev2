@@ -64,26 +64,96 @@ function wonDeals(entries: CodeEntry[], code: string | null): WonDeal[] {
   return out
 }
 
-interface Stat { n: number; mean: number; sd: number }
+// Median + quartiles — robust to the long right tail that skews cycle times, so
+// they never produce the nonsensical negative lows a mean±SD does. Values kept
+// unrounded for plotting; rounded only for display.
+interface Stat { n: number; min: number; q1: number; median: number; q3: number; max: number }
+function quantile(sorted: number[], p: number): number {
+  if (sorted.length === 1) return sorted[0]
+  const idx = (sorted.length - 1) * p
+  const lo = Math.floor(idx), hi = Math.ceil(idx)
+  return lo === hi ? sorted[lo] : sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+}
 function summarize(deals: WonDeal[]): Stat {
   const n = deals.length
-  if (!n) return { n: 0, mean: 0, sd: 0 }
-  const days = deals.map((d) => d.winDays)
-  const mean = days.reduce((a, d) => a + d, 0) / n
-  // Sample standard deviation (n−1). Needs at least 2 deals; a single deal has no spread.
-  const sd = n > 1 ? Math.sqrt(days.reduce((a, d) => a + (d - mean) * (d - mean), 0) / (n - 1)) : 0
-  return { n, mean: Math.round(mean), sd: Math.round(sd) }
+  if (!n) return { n: 0, min: 0, q1: 0, median: 0, q3: 0, max: 0 }
+  const s = deals.map((d) => d.winDays).sort((a, b) => a - b)
+  return { n, min: s[0], q1: quantile(s, 0.25), median: quantile(s, 0.5), q3: quantile(s, 0.75), max: s[s.length - 1] }
 }
+const r = (v: number) => Math.round(v)
 
 function WinTile({ label, stat }: { label: string; stat: Stat }) {
   if (!stat.n) return <StatTile label={label} value="—" sub="no won deals yet" />
   return (
     <StatTile
       label={label}
-      value={stat.n > 1 ? `${stat.mean} ± ${stat.sd}d` : `${stat.mean}d`}
-      sub={stat.n > 1 ? `mean ±1 SD · ${stat.n} deals` : `1 deal`}
+      value={`${r(stat.median)}d`}
+      sub={stat.n > 1 ? `middle half ${r(stat.q1)}–${r(stat.q3)}d · ${stat.n} deals` : `1 deal`}
       tone="pos"
     />
+  )
+}
+
+// Horizontal box plots — one row per window, all on a SHARED day-axis so the three
+// are directly comparable. Box = middle 50% (Q1–Q3), line = median, whiskers = full
+// range. Single hue (win = good = --pos), recessive axis, native <title> tooltips.
+function BoxPlots({ rows }: { rows: { label: string; stat: Stat }[] }) {
+  const plotted = rows.filter((row) => row.stat.n > 0)
+  const anySpread = rows.some((row) => row.stat.n > 1)
+  if (!plotted.length || !anySpread) {
+    return <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>Not enough closed deals to chart a distribution yet.</div>
+  }
+  const maxX = Math.max(...rows.map((row) => row.stat.max), 1)
+  const W = 620, rowH = 34, padT = 6, padB = 22, Lw = 78, padR = 46
+  const H = padT + rows.length * rowH + padB
+  const plotL = Lw, plotR = W - padR, plotW = plotR - plotL
+  const x = (v: number) => plotL + (v / maxX) * plotW
+  const ticks = [0, maxX / 2, maxX]
+  return (
+    <div style={{ marginTop: 'var(--sp-4)' }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label="Win-time distribution by window">
+        {/* vertical gridlines at the ticks */}
+        {ticks.map((t, i) => (
+          <line key={'g' + i} x1={x(t)} x2={x(t)} y1={padT} y2={padT + rows.length * rowH} stroke="var(--border)" strokeWidth={1} />
+        ))}
+        {rows.map((row, i) => {
+          const cy = padT + i * rowH + rowH / 2
+          const st = row.stat
+          return (
+            <g key={row.label}>
+              <text x={Lw - 10} y={cy + 4} textAnchor="end" fontSize={11} fontWeight={600} fill="var(--muted)">{row.label}</text>
+              {st.n === 0 ? (
+                <text x={plotL} y={cy + 4} fontSize={11} fill="var(--dim)">no deals</text>
+              ) : st.n === 1 ? (
+                <>
+                  <circle cx={x(st.median)} cy={cy} r={4} fill="var(--pos)" />
+                  <title>{`${row.label}: 1 deal at ${r(st.median)}d`}</title>
+                </>
+              ) : (
+                <>
+                  {/* whisker */}
+                  <line x1={x(st.min)} x2={x(st.max)} y1={cy} y2={cy} stroke="var(--dim)" strokeWidth={1.5} />
+                  <line x1={x(st.min)} x2={x(st.min)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
+                  <line x1={x(st.max)} x2={x(st.max)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
+                  {/* box (IQR) */}
+                  <rect x={x(st.q1)} y={cy - 9} width={Math.max(1, x(st.q3) - x(st.q1))} height={18} rx={3} fill="var(--pos)" fillOpacity={0.16} stroke="var(--pos)" strokeWidth={1.5} />
+                  {/* median */}
+                  <line x1={x(st.median)} x2={x(st.median)} y1={cy - 9} y2={cy + 9} stroke="var(--pos)" strokeWidth={2.5} />
+                  <title>{`${row.label} · ${st.n} deals\nmin ${r(st.min)}d · 25% ${r(st.q1)}d · median ${r(st.median)}d · 75% ${r(st.q3)}d · max ${r(st.max)}d`}</title>
+                </>
+              )}
+            </g>
+          )
+        })}
+        {/* x-axis ticks (days) */}
+        {ticks.map((t, i) => (
+          <text key={'t' + i} x={x(t)} y={H - 7} textAnchor="middle" fontSize={10} fill="var(--dim)">{r(t)}d</text>
+        ))}
+      </svg>
+      <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 2 }}>
+        Box = middle 50% of deals (25th–75th percentile) · line = median · whiskers = full range. Hover a box for the exact figures.
+      </div>
+    </div>
   )
 }
 
@@ -128,7 +198,7 @@ export function WinTimeCard() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
         <div>
           <CardLabel>Deal win time</CardLabel>
-          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 2 }}>Days from quote created to Closed Won · mean ±1 standard deviation</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 2 }}>Days from quote created to Closed Won · median, with the middle half of deals</div>
         </div>
         <select value={scope} onChange={(e) => setScope(e.target.value)} style={selectStyle} disabled={loading || !!err}>
           <option value="all">All products (company-wide)</option>
@@ -146,6 +216,9 @@ export function WinTimeCard() {
             <WinTile label="This year" stat={stats.year} />
             <WinTile label="All time" stat={stats.all} />
           </div>
+
+          <BoxPlots rows={[{ label: 'This month', stat: stats.month }, { label: 'This year', stat: stats.year }, { label: 'All time', stat: stats.all }]} />
+
           <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>
             Windows are by won date. NUForce-created quotes only — Salesforce-imported quotes are excluded because their created date is the import date, not the real one.
           </div>
