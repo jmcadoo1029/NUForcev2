@@ -162,18 +162,22 @@ export function parseDraftImport(text: string): { ok: true; draft: DraftImport }
 // A setup line ("Vibration – Setup") — priced from holes/fab in NUForce, so it
 // comes in at $0 and the user prices it once holes/cables are confirmed.
 const isSetupLabel = (label: string) => /[–-]\s*setup\s*$/i.test(label)
-// EMI / Power Quality / DC Magnetics — every line in these families (setup,
-// testing, teardown, procedure, report) is calculator-driven, so all come in $0.
-const isEmiFamilyLabel = (label: string) => /^\s*(emi|pq|dc\s*mag)/i.test(label)
+// EMI / Power Quality / DC Magnetics — the SETUP / TESTING / TEARDOWN lines (code 51)
+// are calculator-driven (shift rates), so those come in at $0. Their Procedure (code
+// 44) and Report (code 43) lines are NOT calculator-driven — they carry a standard
+// catalog price, so they must NOT be zeroed. Match only the setup/testing/teardown
+// family lines here; "EMI Procedure"/"EMI Report"/"PQ Report"/… fall through to pricing.
+const isEmiFamilyLabel = (label: string) => /^\s*(emi|pq|dc\s*mag)\b.*[–—-]\s*(setup|testing|teardown)\s*$/i.test(label)
 
 /**
  * Assisted pricing for an imported draft. Fills in each line's price from the
  * NUForce catalog (which applies manager overrides), so the user opens a mostly-
  * priced quote instead of an all-zero one. Rules agreed with the estimators:
  *   - Setup lines            → $0  (priced from holes/cables/fab in NUForce)
- *   - EMI / PQ / DC Magnetics → $0  (calculator-driven)
+ *   - EMI/PQ/DC-Mag setup/testing/teardown (code 51) → $0  (calculator-driven)
  *   - everything else        → its standard catalog price (regular testing lines,
- *                              Test Procedure / Report / Tear Down)
+ *                              Test Procedure / Report / Tear Down, AND the EMI/PQ/
+ *                              DC-Mag Procedure (44) / Report (43) lines)
  *   - shock testing is weight-based — the catalog derives it from `weightLbs`.
  * Any line whose label doesn't resolve to a catalog entry stays $0.
  */
