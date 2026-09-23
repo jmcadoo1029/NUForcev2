@@ -633,6 +633,31 @@ function specFname(){
   return (q ? q+" Test Specifications" : "Test Specifications") + ".pdf";
 }
 
+// jsPDF's core (helvetica) font only draws Windows-1252 glyphs. ANY other character
+// — a ≤/≥, a unicode space or zero-width char an OCR/paste wedged between letters —
+// draws as a blank .notdef box WITH WIDTH, which is what makes "≤ 1 kVA" garble and
+// otherwise-clean text render letter-spaced. So: map the common technical symbols to
+// plain ASCII, normalize any unicode space to a normal space, keep the rest of the
+// CP1252 set, and drop anything else the font can't draw. Mirrors the quote PDF's clean().
+function pdfText(v){
+  if(v==null) return "";
+  var s=String(v);
+  var MAP={"≤":"<=","≥":">=","≠":"!=","≈":"~","×":"x","÷":"/","−":"-","→":"->","←":"<-","⇒":"=>","·":"-"};
+  var EXTRA={0x20AC:1,0x201A:1,0x0192:1,0x201E:1,0x2026:1,0x2020:1,0x2021:1,0x02C6:1,0x2030:1,0x0160:1,0x2039:1,0x0152:1,0x017D:1,0x2018:1,0x2019:1,0x201C:1,0x201D:1,0x2022:1,0x2013:1,0x2014:1,0x02DC:1,0x2122:1,0x0161:1,0x203A:1,0x0153:1,0x017E:1,0x0178:1};
+  var SPACE={0xA0:1,0x2000:1,0x2001:1,0x2002:1,0x2003:1,0x2004:1,0x2005:1,0x2006:1,0x2007:1,0x2008:1,0x2009:1,0x200A:1,0x202F:1,0x205F:1,0x3000:1};
+  var out="";
+  for(var i=0;i<s.length;i++){
+    var ch=s[i], cp=s.charCodeAt(i);
+    if(MAP[ch]!==undefined){ out+=MAP[ch]; continue; }
+    if(cp===0x0A||cp===0x0D||cp===0x09){ out+=ch; continue; }   // keep newlines/tabs
+    if(SPACE[cp]){ out+=" "; continue; }                        // any unicode space -> plain space
+    if(cp===0xAD) continue;                                     // soft hyphen -> drop
+    if((cp>=0x20&&cp<=0x7E)||(cp>=0xA1&&cp<=0xFF)||EXTRA[cp]) out+=ch;
+    // anything else can't be drawn -> would print as a spacing box -> drop it
+  }
+  return out;
+}
+
 // Reproduce the on-screen document (header, title, per-section intro + table) as a
 // real vector PDF. Returns a jsPDF doc, or null if the library didn't load.
 function buildSpecPdfDoc(){
@@ -666,14 +691,14 @@ function buildSpecPdfDoc(){
 
   // Title.
   doc.setFont("helvetica","bold"); doc.setFontSize(13); doc.setTextColor(0,0,0);
-  doc.text("Test Specifications for Quote #" + (state.quote || ""), pageW/2, y, { align:"center" });
+  doc.text(pdfText("Test Specifications for Quote #" + (state.quote || "")), pageW/2, y, { align:"center" });
   y += 24;
 
   // Sections.
   state.sections.forEach(sec => {
     if(sec.intro && sec.intro.trim()){
       doc.setFont("helvetica","normal"); doc.setFontSize(10.5); doc.setTextColor(0,0,0);
-      const lines = doc.splitTextToSize(sec.intro, contentW);
+      const lines = doc.splitTextToSize(pdfText(sec.intro), contentW);
       if(y + lines.length*13 > pageH - M){ doc.addPage(); y = M; }
       doc.text(lines, M, y); y += lines.length*13 + 6;
     }
@@ -681,8 +706,8 @@ function buildSpecPdfDoc(){
     if(rows.length){
       if(y > pageH - 120){ doc.addPage(); y = M; }
       doc.autoTable({
-        head: [ sec.columns.map(c => c || " ") ],
-        body: rows.map(r => sec.columns.map((_,i) => (r[i] || ""))),
+        head: [ sec.columns.map(c => pdfText(c) || " ") ],
+        body: rows.map(r => sec.columns.map((_,i) => pdfText(r[i] || ""))),
         startY: y,
         margin: { left:M, right:M },
         theme: "grid",
