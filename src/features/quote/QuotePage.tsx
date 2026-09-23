@@ -645,9 +645,13 @@ export function QuotePage() {
     // Line items — append, skipping any whose label already exists on the quote
     // (so re-running doesn't duplicate). CRR lines arrive in the right order
     // (procedures → setup/test/teardown → reports).
-    const have = new Set(lineItems.map((l) => l.label.trim().toLowerCase()))
+    // Dedup on label + description so per-unit CRR lines (same clean label, different
+    // unit carried in the desc) aren't collapsed into one — while a plain re-run still
+    // skips lines already on the quote.
+    const dedupKey = (label: unknown, desc: unknown) => `${String(label ?? '').trim().toLowerCase()}|${String(desc ?? '').trim().toLowerCase()}`
+    const have = new Set(lineItems.map((l) => dedupKey(l.label, l.desc)))
     const toAdd = (draft.lineItems || [])
-      .filter((l) => l.label && !have.has(l.label.trim().toLowerCase()))
+      .filter((l) => l.label && !have.has(dedupKey(l.label, l.desc)))
       .map((l) => ({ key: lineSeq.current++, code: String(l.code ?? ''), label: String(l.label), desc: l.desc != null ? String(l.desc) : '', price: Number(l.price) || 0, qty: Math.max(1, Math.round(Number(l.qty) || 1)), added: true }))
     if (toAdd.length) {
       // Slot the new lines into NU's preferred order — Procedures (44), then

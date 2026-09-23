@@ -8,10 +8,10 @@ import { fetchCodeEntries, codeReportLabel, type CodeEntry } from './codeReport'
 // this year / all time), with both the median (typical) and the average, plus the
 // deal count so small samples read honestly.
 //
-// Salesforce-imported quotes are EXCLUDED: their created_at is the import date, not
-// when the quote was really created, so their win time is meaningless (often
-// negative). That means the numbers reflect NUForce-created quotes only and will
-// look sparse until more history accrues — that's expected, and why n is shown.
+// Pre-NUForce (Salesforce-imported) quotes carry an import date for created_at, not
+// their real creation date. Rather than drop them, we ESTIMATE their created date from
+// the quote number (see estimatedCreatedMs) so they can join the distribution. Those
+// win times are approximate and informational only — a footer note keeps that honest.
 
 // Latest revision per family wins, so a quote revised B→D counts once.
 function revRankOfOpp(opp: string): number {
@@ -34,11 +34,52 @@ function dayMs(s: string | null): number | null {
   return null
 }
 
-interface WonDeal { winDays: number; wonMs: number }
+// ── Estimated created date for pre-NUForce (Salesforce) quotes ─────────────────
+// Their stored created_at is the import date, so we approximate the ACTUAL creation
+// from the quote number. Numbers run YY-NNN sequentially within a year, so if a year
+// produced ~T quotes that's ~T/12 per month; quote NNN therefore lands in month
+// ceil(NNN ÷ (T/12)), placed on the 15th (mid-month, since it's an average). Purely an
+// estimate for the win-time view — never written back to the quote.
+
+// { year (4-digit), seq } from an opp like "26-123" / "26-123A"; null if unparseable.
+function parseOpp(opp: string): { year: number; seq: number } | null {
+  const m = String(opp || '').match(/^\s*(\d{2})-0*(\d+)/)
+  if (!m) return null
+  return { year: 2000 + parseInt(m[1], 10), seq: parseInt(m[2], 10) }
+}
+
+// Per-year quote volume = the highest sequence number that year across ALL quotes
+// (numbers are sequential, so the max ≈ how many were created). The ÷12 base.
+function yearTotals(entries: CodeEntry[]): Map<number, number> {
+  const seen = new Set<string>()
+  const totals = new Map<number, number>()
+  for (const e of entries) {
+    if (!e.opp || seen.has(e.opp)) continue
+    seen.add(e.opp)
+    const p = parseOpp(e.opp)
+    if (!p) continue
+    totals.set(p.year, Math.max(totals.get(p.year) || 0, p.seq))
+  }
+  return totals
+}
+
+// Estimated created date (UTC-midnight ms) for a pre-NUForce quote. null if the opp
+// can't be parsed or the year has no volume to divide by.
+function estimatedCreatedMs(opp: string, totals: Map<number, number>): number | null {
+  const p = parseOpp(opp)
+  if (!p) return null
+  const total = totals.get(p.year) || 0
+  if (total <= 0) return null
+  const perMonth = total / 12
+  const month = Math.max(1, Math.min(12, Math.ceil(p.seq / perMonth)))
+  return Date.UTC(p.year, month - 1, 15)
+}
+
+interface WonDeal { winDays: number; wonMs: number; estimated: boolean }
 
 // One qualifying win-time sample per won quote (latest revision per family) in scope.
 // Excludes imports, missing/bad dates, and any negative span.
-function wonDeals(entries: CodeEntry[], code: string | null): WonDeal[] {
+function wonDeals(entries: CodeEntry[], code: string | null, totals: Map<number, number>): WonDeal[] {
   const byQuote = new Map<string, CodeEntry>()
   for (const e of entries) {
     if (code && e.code !== code) continue
@@ -53,13 +94,15 @@ function wonDeals(entries: CodeEntry[], code: string | null): WonDeal[] {
   const out: WonDeal[] = []
   for (const e of byFamily.values()) {
     if (e.stage !== 'Closed Won') continue
-    if (e.source === 'salesforce') continue // import date, not real creation
-    const c = dayMs(e.createdAt)
+    // Pre-NUForce quotes: estimate the created date from the quote number; NUForce
+    // quotes use their real created_at.
+    const estimated = e.source === 'salesforce'
+    const c = estimated ? estimatedCreatedMs(e.opp, totals) : dayMs(e.createdAt)
     const w = dayMs(e.wonDate)
     if (c == null || w == null) continue
     const winDays = Math.round((w - c) / 86400000)
-    if (winDays < 0) continue
-    out.push({ winDays, wonMs: w })
+    if (winDays < 0) continue // estimate landed after the win — drop rather than distort
+    out.push({ winDays, wonMs: w, estimated })
   }
   return out
 }
@@ -178,7 +221,8 @@ export function WinTimeCard() {
   }, [entries])
 
   const stats = useMemo(() => {
-    const deals = wonDeals(entries || [], scope === 'all' ? null : scope)
+    const totals = yearTotals(entries || [])
+    const deals = wonDeals(entries || [], scope === 'all' ? null : scope, totals)
     const now = new Date()
     const curY = now.getFullYear()
     const curM = now.getMonth()
@@ -188,6 +232,7 @@ export function WinTimeCard() {
       month: summarize(deals.filter((d) => inMonth(d.wonMs))),
       year: summarize(deals.filter((d) => inYear(d.wonMs))),
       all: summarize(deals),
+      estCount: deals.filter((d) => d.estimated).length, // pre-NUForce deals with an estimated created date
     }
   }, [entries, scope])
 
@@ -220,7 +265,7 @@ export function WinTimeCard() {
           <BoxPlots rows={[{ label: 'This month', stat: stats.month }, { label: 'This year', stat: stats.year }, { label: 'All time', stat: stats.all }]} />
 
           <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>
-            Windows are by won date. NUForce-created quotes only — Salesforce-imported quotes are excluded because their created date is the import date, not the real one.
+            Windows are by won date. Pre-NUForce quotes{stats.estCount ? ` (${stats.estCount} here)` : ''} use an <em>estimated</em> created date from their quote number — placed mid-month by that year’s quote volume — since their stored created date is the import date. Those win times are approximate.
           </div>
         </>
       )}

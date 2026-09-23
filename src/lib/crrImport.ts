@@ -52,10 +52,13 @@ export function buildCrrLineItems(w: CrrWorkup | null | undefined): DraftLineIte
     return p ? Math.round(p.price) : 0
   }
   // Per-unit full stack: every unit gets its own procedure / setup / testing / teardown /
-  // report for its enabled families. When there's more than one unit the labels are
-  // suffixed with the unit name — both so the estimator can tell them apart AND so the
-  // apply step (which dedups by label) doesn't collapse unit 2's lines into unit 1's.
-  const out: DraftLineItem[] = []
+  // report for its enabled families. Ordered by NU's line rules ACROSS all units — every
+  // procedure (44) first, then setup/testing/teardown (51), then every report (43) — with
+  // units kept in order within each tier. The unit is carried in the line DESCRIPTION (not
+  // the label), so labels stay clean and identical while the desc tells the units apart.
+  const procs: DraftLineItem[] = []
+  const bodies: DraftLineItem[] = []
+  const reps: DraftLineItem[] = []
   for (const unit of units) {
     const en = crrEnabledForUnit(unit)
     const sh = {
@@ -63,22 +66,18 @@ export function buildCrrLineItems(w: CrrWorkup | null | undefined): DraftLineIte
       pq: crrShiftsForUnit(unit, PQ_SPECS).suggestedShifts,
       dcm: crrShiftsForUnit(unit, DCM_SPECS).suggestedShifts,
     }
-    const sfx = multi && unit.name ? ` — ${unit.name}` : ''
-    const procs: DraftLineItem[] = []
-    const bodies: DraftLineItem[] = []
-    const reps: DraftLineItem[] = []
+    const desc = multi ? (unit.name || '') : ''
     for (const f of FAMILIES) {
       if (!en[f.key]) continue
       const shifts = sh[f.key]
-      procs.push({ code: '44', label: f.proc + sfx, price: catPrice(f.proc), qty: 1 })
-      bodies.push({ code: '51', label: f.setup + sfx, price: 0, qty: 1 })
-      bodies.push({ code: '51', label: f.test + sfx, price: shifts * f.sr, qty: 1 })
-      bodies.push({ code: '51', label: f.td + sfx, price: f.teardown, qty: 1 })
-      reps.push({ code: '43', label: f.rep + sfx, price: catPrice(f.rep), qty: 1 })
+      procs.push({ code: '44', label: f.proc, desc, price: catPrice(f.proc), qty: 1 })
+      bodies.push({ code: '51', label: f.setup, desc, price: 0, qty: 1 })
+      bodies.push({ code: '51', label: f.test, desc, price: shifts * f.sr, qty: 1 })
+      bodies.push({ code: '51', label: f.td, desc, price: f.teardown, qty: 1 })
+      reps.push({ code: '43', label: f.rep, desc, price: catPrice(f.rep), qty: 1 })
     }
-    out.push(...procs, ...bodies, ...reps)
   }
-  return out
+  return [...procs, ...bodies, ...reps]
 }
 
 // Each enabled spec (family + the revision picked in Workspace) → the standard it
