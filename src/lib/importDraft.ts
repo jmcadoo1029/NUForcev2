@@ -195,6 +195,177 @@ export function priceDraftLines(lines: DraftLineItem[], weightLbs: number): Draf
   })
 }
 
+// ── Ambiguous test-type resolution ──────────────────────────────────────────
+// The reader can only see the words on the page, so "shock" and "vibration" arrive
+// ambiguous: shock is 3 tests (Medium Weight 91 / Lightweight 92 / generic 52) and
+// plain vibration is really Vibration (94), HF Vibration (52), or — for Type II —
+// Structureborne Noise (12). We resolve them at import, where the unit weights and a
+// reviewing human both exist, rather than letting the reader guess a code.
+//
+// Shock class is a weight question, so it's derived, not asked: with per-unit weights
+// we split into Medium/Lightweight by the 250 lb line the calculator already uses;
+// with one overall weight we pick a class; with no weight we ask. Vibration isn't
+// weight-based — Type I → 94, Type II → Structureborne Noise (12), plain → default 94.
+
+export const SHOCK_WEIGHT_THRESHOLD_LBS = 250
+
+const numOf = (s: unknown): number => { const n = Number(String(s ?? '').replace(/[^\d.]/g, '')); return isFinite(n) ? n : 0 }
+
+/** Numeric per-unit weights present in the draft (only units that actually have one). */
+export function draftUnitWeights(draft: DraftImport): number[] {
+  return (draft.units || []).map((u) => numOf(u.weight)).filter((w) => w > 0)
+}
+
+// Split a label into its base and the trailing " – Setup/Testing/Teardown" phase, so a
+// rename keeps the phase ("Shock – Setup" → "Medium Weight Shock – Setup").
+// Not anchored to end, so a trailing marker like "(Type II)" after the phase word
+// doesn't hide it ("Vibration – Testing (Type II)" still yields " – Testing").
+const PHASE_RE = /[–—-]\s*(setup|testing|teardown)\b/i
+function splitPhase(label: string): { suffix: string } {
+  const m = label.match(PHASE_RE)
+  if (!m) return { suffix: '' }
+  const word = m[1].toLowerCase()
+  return { suffix: ' – ' + word.charAt(0).toUpperCase() + word.slice(1) }
+}
+
+type AmbKind = 'shock' | 'vibration'
+function classifyLine(label: string, desc?: string): AmbKind | null {
+  const t = `${label} ${desc || ''}`.toLowerCase()
+  if (/instrumentation|contact monitoring/.test(t)) return null // code 33 — not a test type
+  if (/\bshock\b/.test(t) && !/medium\s*weight|light\s*weight|lightweight|\bmws\b|\blws\b/.test(t)) return 'shock'
+  if (/\bvibration\b|\bvibe\b/.test(t) && !/hf\s*vibration|high\s*frequency/.test(t)) return 'vibration'
+  return null
+}
+function vibType(label: string, desc?: string): 'I' | 'II' | '' {
+  const t = `${label} ${desc || ''}`.toLowerCase()
+  if (/type\s*(ii|2)\b/.test(t)) return 'II'
+  if (/type\s*(i|1)\b/.test(t)) return 'I'
+  return ''
+}
+
+export interface TypeAmbiguity {
+  index: number // position in draft.lineItems
+  kind: AmbKind
+  label: string // the original line label, for display
+  options: { value: string; label: string }[]
+  defaultValue: string // '' = the user must choose (shock with no weight anywhere)
+  note: string
+}
+
+/** Find the shock/vibration lines that need resolving, with a suggested default each. */
+export function analyzeTestTypes(draft: DraftImport): { ambiguities: TypeAmbiguity[]; unitWeights: number[]; singleWeight: number } {
+  const unitWeights = draftUnitWeights(draft)
+  const singleWeight = numOf(draft.testItem?.wt)
+  const lines = draft.lineItems || []
+  const ambiguities: TypeAmbiguity[] = []
+  lines.forEach((l, index) => {
+    const kind = classifyLine(l.label, l.desc)
+    if (!kind) return
+    if (kind === 'shock') {
+      if (unitWeights.length) {
+        const heavy = unitWeights.filter((w) => w > SHOCK_WEIGHT_THRESHOLD_LBS).length
+        const light = unitWeights.length - heavy
+        ambiguities.push({
+          index, kind, label: l.label,
+          options: [
+            { value: 'auto', label: `Auto by weight — ${heavy} Medium, ${light} Lightweight` },
+            { value: '91', label: 'All Medium Weight (91)' },
+            { value: '92', label: 'All Lightweight (92)' },
+            { value: '52', label: 'Generic Shock (52)' },
+          ],
+          defaultValue: 'auto',
+          note: `${unitWeights.length} units with weights → ${heavy} over ${SHOCK_WEIGHT_THRESHOLD_LBS} lb (Medium), ${light} at/under (Lightweight).`,
+        })
+      } else if (singleWeight > 0) {
+        const mws = singleWeight > SHOCK_WEIGHT_THRESHOLD_LBS
+        ambiguities.push({
+          index, kind, label: l.label,
+          options: [
+            { value: 'auto', label: `Auto by weight — ${mws ? 'Medium Weight' : 'Lightweight'}` },
+            { value: '91', label: 'Medium Weight (91)' },
+            { value: '92', label: 'Lightweight (92)' },
+            { value: '52', label: 'Generic Shock (52)' },
+          ],
+          defaultValue: 'auto',
+          note: `Item weight ${singleWeight} lb → ${mws ? 'Medium Weight' : 'Lightweight'} suggested.`,
+        })
+      } else {
+        ambiguities.push({
+          index, kind, label: l.label,
+          options: [
+            { value: '91', label: 'Medium Weight (91)' },
+            { value: '92', label: 'Lightweight (92)' },
+            { value: '52', label: 'Generic Shock (52)' },
+          ],
+          defaultValue: '',
+          note: 'No weight found in the file — choose a shock class.',
+        })
+      }
+    } else {
+      const vt = vibType(l.label, l.desc)
+      ambiguities.push({
+        index, kind, label: l.label,
+        options: [
+          { value: '94', label: 'Vibration (94)' },
+          { value: '12', label: 'Structureborne Noise (12)' },
+          { value: '52', label: 'HF Vibration (52)' },
+        ],
+        defaultValue: vt === 'II' ? '12' : '94',
+        note: vt === 'II' ? 'Detected Type II → Structureborne Noise.' : vt === 'I' ? 'Detected Type I → Vibration.' : 'Plain vibration → defaulting to Vibration (94).',
+      })
+    }
+  })
+  return { ambiguities, unitWeights, singleWeight }
+}
+
+const qtyOf = (l: DraftLineItem) => Math.max(1, Math.round(Number(l.qty) || 1))
+
+// Turn one ambiguous line into its concrete catalog line(s) given the chosen value.
+function resolveLine(l: DraftLineItem, kind: AmbKind, choice: string, unitWeights: number[], singleWeight: number): DraftLineItem[] {
+  const { suffix } = splitPhase(l.label)
+  const N = unitWeights.length
+  if (kind === 'shock') {
+    if (choice === 'auto') {
+      if (N) {
+        const heavy = unitWeights.filter((w) => w > SHOCK_WEIGHT_THRESHOLD_LBS).length
+        const light = N - heavy
+        const out: DraftLineItem[] = []
+        if (heavy) out.push({ ...l, code: '91', label: 'Medium Weight Shock' + suffix, qty: heavy })
+        if (light) out.push({ ...l, code: '92', label: 'Lightweight Shock' + suffix, qty: light })
+        return out.length ? out : [{ ...l, code: '52', label: 'Shock' + suffix }]
+      }
+      const mws = singleWeight > SHOCK_WEIGHT_THRESHOLD_LBS
+      return [{ ...l, code: mws ? '91' : '92', label: (mws ? 'Medium Weight Shock' : 'Lightweight Shock') + suffix }]
+    }
+    if (choice === '91') return [{ ...l, code: '91', label: 'Medium Weight Shock' + suffix, qty: N || qtyOf(l) }]
+    if (choice === '92') return [{ ...l, code: '92', label: 'Lightweight Shock' + suffix, qty: N || qtyOf(l) }]
+    return [{ ...l, code: '52', label: 'Shock' + suffix, qty: N || qtyOf(l) }]
+  }
+  // vibration
+  if (choice === '12') return [{ ...l, code: '12', label: 'Structureborne Noise' + suffix }]
+  if (choice === '52') return [{ ...l, code: '52', label: 'HF Vibration' + suffix }]
+  return [{ ...l, code: '94', label: 'Vibration' + suffix }]
+}
+
+/** Rewrite the draft's line items, substituting each ambiguous shock/vibration line
+ *  with its resolved catalog line(s). `choices` is keyed by the line's index; a missing
+ *  choice falls back to the ambiguity's default. Non-ambiguous lines pass through. */
+export function applyTypeChoices(draft: DraftImport, choices: Record<number, string>): DraftImport {
+  const { ambiguities, unitWeights, singleWeight } = analyzeTestTypes(draft)
+  if (!ambiguities.length) return draft
+  const byIndex = new Map(ambiguities.map((a) => [a.index, a]))
+  const lines = draft.lineItems || []
+  const out: DraftLineItem[] = []
+  lines.forEach((l, i) => {
+    const amb = byIndex.get(i)
+    if (!amb) { out.push(l); return }
+    const choice = choices[i] || amb.defaultValue
+    if (!choice) { out.push(l); return } // unresolved (no-weight shock) — leave as-is; UI blocks this
+    out.push(...resolveLine(l, amb.kind, choice, unitWeights, singleWeight))
+  })
+  return { ...draft, lineItems: out }
+}
+
 /** A minimal example of the format, shown in the import dialog and usable as a
  *  template for the local extraction tool. */
 export const EXAMPLE_DRAFT = `{

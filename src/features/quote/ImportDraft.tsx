@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Modal, Button } from '../../components'
-import { parseDraftImport, EXAMPLE_DRAFT, type DraftImport } from '../../lib/importDraft'
+import { parseDraftImport, analyzeTestTypes, applyTypeChoices, EXAMPLE_DRAFT, type DraftImport } from '../../lib/importDraft'
 
 // Import a draft quote from a structured file (produced by the offline test-plan
 // reader). The file is read ENTIRELY in the browser — nothing uploads — then we
@@ -16,6 +16,17 @@ export function ImportDraft({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('')
   const [draft, setDraft] = useState<DraftImport | null>(null)
   const [showFormat, setShowFormat] = useState(false)
+
+  // Shock/vibration lines need a specific code; resolve them here (weights + a human
+  // are both available) rather than trusting whatever the reader guessed.
+  const analysis = useMemo(() => (draft ? analyzeTestTypes(draft) : { ambiguities: [], unitWeights: [], singleWeight: 0 }), [draft])
+  const [choices, setChoices] = useState<Record<number, string>>({})
+  useEffect(() => {
+    const init: Record<number, string> = {}
+    analysis.ambiguities.forEach((a) => { init[a.index] = a.defaultValue })
+    setChoices(init)
+  }, [analysis])
+  const unresolved = analysis.ambiguities.some((a) => !(choices[a.index] || a.defaultValue))
 
   const tryParse = (raw: string) => {
     setText(raw)
@@ -33,8 +44,8 @@ export function ImportDraft({ onClose }: { onClose: () => void }) {
   }
 
   const create = () => {
-    if (!draft) return
-    navigate('/quote/new', { state: { prefillDraft: draft } })
+    if (!draft || unresolved) return
+    navigate('/quote/new', { state: { prefillDraft: applyTypeChoices(draft, choices) } })
     onClose()
   }
 
@@ -87,9 +98,33 @@ export function ImportDraft({ onClose }: { onClose: () => void }) {
         </div>
       )}
 
+      {draft && analysis.ambiguities.length > 0 && (
+        <div style={{ border: '1px solid var(--warn)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3) var(--sp-4)', marginBottom: 'var(--sp-3)', background: 'var(--bg)' }}>
+          <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--warn)', marginBottom: 'var(--sp-2)' }}>Resolve test types</div>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)', lineHeight: 1.5 }}>“Shock” and “vibration” each map to more than one product code. Confirm each below — shock is suggested from the unit weights when the file has them.</div>
+          {analysis.ambiguities.map((a) => (
+            <div key={a.index} style={{ marginBottom: 'var(--sp-2)' }}>
+              <div style={{ display: 'flex', gap: 'var(--sp-3)', alignItems: 'center', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 600, minWidth: 130 }}>{a.label}</span>
+                <select
+                  value={choices[a.index] ?? a.defaultValue}
+                  onChange={(e) => setChoices((c) => ({ ...c, [a.index]: e.target.value }))}
+                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}
+                >
+                  {a.defaultValue === '' && <option value="">Choose…</option>}
+                  {a.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 2 }}>{a.note}</div>
+            </div>
+          ))}
+          {unresolved && <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--warn)', fontStyle: 'italic', marginTop: 'var(--sp-2)' }}>Pick a shock class for each unresolved line to continue.</div>}
+        </div>
+      )}
+
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
         <Button variant="ghost" small onClick={onClose}>Cancel</Button>
-        <Button small onClick={create} disabled={!draft}>Create draft quote</Button>
+        <Button small onClick={create} disabled={!draft || unresolved}>Create draft quote</Button>
       </div>
     </Modal>
   )
