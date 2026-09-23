@@ -118,7 +118,10 @@ function wonDeals(entries: CodeEntry[], code: string | null, totals: Map<number,
 // Median + quartiles — robust to the long right tail that skews cycle times, so
 // they never produce the nonsensical negative lows a mean±SD does. Values kept
 // unrounded for plotting; rounded only for display.
-interface Stat { n: number; min: number; q1: number; median: number; q3: number; max: number }
+// loW/hiW are the box-plot (Tukey) whisker ends — the most extreme deals still within
+// 1.5×IQR of the quartiles; anything past them is an `outliers` value. This keeps the
+// chart focused on the middle half instead of letting one slow deal stretch the axis.
+interface Stat { n: number; min: number; q1: number; median: number; q3: number; max: number; loW: number; hiW: number; outliers: number[] }
 function quantile(sorted: number[], p: number): number {
   if (sorted.length === 1) return sorted[0]
   const idx = (sorted.length - 1) * p
@@ -127,9 +130,16 @@ function quantile(sorted: number[], p: number): number {
 }
 function summarize(deals: WonDeal[]): Stat {
   const n = deals.length
-  if (!n) return { n: 0, min: 0, q1: 0, median: 0, q3: 0, max: 0 }
+  if (!n) return { n: 0, min: 0, q1: 0, median: 0, q3: 0, max: 0, loW: 0, hiW: 0, outliers: [] }
   const s = deals.map((d) => d.winDays).sort((a, b) => a - b)
-  return { n, min: s[0], q1: quantile(s, 0.25), median: quantile(s, 0.5), q3: quantile(s, 0.75), max: s[s.length - 1] }
+  const q1 = quantile(s, 0.25), median = quantile(s, 0.5), q3 = quantile(s, 0.75)
+  const iqr = q3 - q1
+  const loFence = q1 - 1.5 * iqr, hiFence = q3 + 1.5 * iqr
+  let loW = s[0], hiW = s[s.length - 1]
+  for (const v of s) if (v >= loFence) { loW = v; break }              // smallest deal within the low fence
+  for (let i = s.length - 1; i >= 0; i--) if (s[i] <= hiFence) { hiW = s[i]; break } // largest within the high fence
+  const outliers = s.filter((v) => v < loW || v > hiW)
+  return { n, min: s[0], q1, median, q3, max: s[s.length - 1], loW, hiW, outliers }
 }
 const r = (v: number) => Math.round(v)
 
@@ -154,11 +164,11 @@ function BoxPlots({ rows }: { rows: { label: string; stat: Stat }[] }) {
   if (!plotted.length || !anySpread) {
     return <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-3)' }}>Not enough closed deals to chart a distribution yet.</div>
   }
-  const maxX = Math.max(...rows.map((row) => row.stat.max), 1)
+  const maxX = Math.max(...rows.map((row) => row.stat.hiW), 1) // scale to the whiskers (typical range), not the outliers
   const W = 620, rowH = 34, padT = 6, padB = 22, Lw = 78, padR = 46
   const H = padT + rows.length * rowH + padB
   const plotL = Lw, plotR = W - padR, plotW = plotR - plotL
-  const x = (v: number) => plotL + (v / maxX) * plotW
+  const x = (v: number) => plotL + (Math.min(Math.max(v, 0), maxX) / maxX) * plotW // clamp off-scale outliers to the edge
   const ticks = [0, maxX / 2, maxX]
   return (
     <div style={{ marginTop: 'var(--sp-4)' }}>
@@ -182,15 +192,19 @@ function BoxPlots({ rows }: { rows: { label: string; stat: Stat }[] }) {
                 </>
               ) : (
                 <>
-                  {/* whisker */}
-                  <line x1={x(st.min)} x2={x(st.max)} y1={cy} y2={cy} stroke="var(--dim)" strokeWidth={1.5} />
-                  <line x1={x(st.min)} x2={x(st.min)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
-                  <line x1={x(st.max)} x2={x(st.max)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
+                  {/* whiskers — Tukey adjacent values (within 1.5×IQR of the quartiles) */}
+                  <line x1={x(st.loW)} x2={x(st.hiW)} y1={cy} y2={cy} stroke="var(--dim)" strokeWidth={1.5} />
+                  <line x1={x(st.loW)} x2={x(st.loW)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
+                  <line x1={x(st.hiW)} x2={x(st.hiW)} y1={cy - 5} y2={cy + 5} stroke="var(--dim)" strokeWidth={1.5} />
                   {/* box (IQR) */}
                   <rect x={x(st.q1)} y={cy - 9} width={Math.max(1, x(st.q3) - x(st.q1))} height={18} rx={3} fill="var(--pos)" fillOpacity={0.16} stroke="var(--pos)" strokeWidth={1.5} />
                   {/* median */}
                   <line x1={x(st.median)} x2={x(st.median)} y1={cy - 9} y2={cy + 9} stroke="var(--pos)" strokeWidth={2.5} />
-                  <title>{`${row.label} · ${st.n} deals\nmin ${r(st.min)}d · 25% ${r(st.q1)}d · median ${r(st.median)}d · 75% ${r(st.q3)}d · max ${r(st.max)}d`}</title>
+                  {/* outliers — hollow dots; any past the axis clamp to the right edge */}
+                  {st.outliers.map((v, oi) => (
+                    <circle key={'o' + oi} cx={x(v)} cy={cy} r={2.6} fill="#fff" stroke="var(--dim)" strokeWidth={1} />
+                  ))}
+                  <title>{`${row.label} · ${st.n} deals\nmedian ${r(st.median)}d · middle half ${r(st.q1)}–${r(st.q3)}d\nwhiskers ${r(st.loW)}–${r(st.hiW)}d${st.outliers.length ? `\n${st.outliers.length} outlier(s), up to ${r(st.max)}d` : ''}`}</title>
                 </>
               )}
             </g>
@@ -202,7 +216,7 @@ function BoxPlots({ rows }: { rows: { label: string; stat: Stat }[] }) {
         ))}
       </svg>
       <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 2 }}>
-        Box = middle 50% of deals (25th–75th percentile) · line = median · whiskers = full range. Hover a box for the exact figures.
+        Box = middle 50% of deals (25th–75th percentile) · line = median · whiskers = typical range (1.5×IQR) · hollow dots = outliers. The axis is scaled to the box, so a rare slow deal sits at the right edge instead of stretching everything. Hover for exact figures.
       </div>
     </div>
   )
