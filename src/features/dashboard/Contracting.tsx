@@ -51,6 +51,10 @@ export function Contracting() {
 
   const [busy, setBusy] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  // Persistent outcome of the last Workspace create/append — a banner that stays on
+  // screen (unlike the transient toast) so a rejected/failed project is never silently
+  // missed. Cleared when a different quote is selected.
+  const [wsResult, setWsResult] = useState<{ ok: boolean; msg: string } | null>(null)
   const seq = useRef(0)
 
   // Debounced search over all quotes.
@@ -69,6 +73,7 @@ export function Contracting() {
   const select = async (id: string) => {
     setSelectedId(id)
     setQuote(null)
+    setWsResult(null)
     setQLoading(true)
     const myTurn = ++seq.current
     try {
@@ -151,20 +156,26 @@ export function Contracting() {
     if (!quote || busy) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     const jobNum = won.jobNum.trim()
-    if (!jobNum) { showToast('Enter a Job # before creating a project.', 'error', 4000); return }
+    if (!jobNum) { showToast('Enter a Job # before creating a project.', 'error', 4000); setWsResult({ ok: false, msg: 'Enter a Job # before creating a project.' }); return }
     setBusy(true)
+    setWsResult(null)
     try {
       await saveWonDetails(quote.id, won)
       const lookup = await lookupProjectByJobNumber(jobNum)
-      if (lookup?.found) { showToast(`Job # "${jobNum}" already exists on "${lookup.project_name}". Use Add to existing, or change the Job #.`, 'error', 8000); return }
+      if (lookup?.found) {
+        const msg = `Job # “${jobNum}” already exists on “${lookup.project_name}”. Use Add to existing, or change the Job #.`
+        showToast(msg, 'error', 8000); setWsResult({ ok: false, msg }); return
+      }
       const result = await createProjectFromNuforce(buildProjectSource(quote, won))
       if (!result?.project_id) throw new Error('Project creation returned no project_id')
       await setWorkspaceLink(quote.id, result.project_id).catch(() => {})
       setWsProjectId(result.project_id)
-      showToast(`Project "${jobNum}" created in Workspace (${result.task_count || 0} tasks, ${result.expense_count || 0} expenses)`, 'success', 5000)
+      const msg = `Project “${jobNum}” created in Workspace — ${result.task_count || 0} task(s), ${result.expense_count || 0} expense(s).`
+      showToast(msg, 'success', 5000); setWsResult({ ok: true, msg })
       notifyWon(quote)
     } catch (e) {
-      showToast(describeWorkspaceError(e, { accountName: quote.customer || '', actionLabel: 'create the project' }), 'error', 9000)
+      const msg = describeWorkspaceError(e, { accountName: quote.customer || '', actionLabel: 'create the project' })
+      showToast(msg, 'error', 9000); setWsResult({ ok: false, msg })
     } finally { setBusy(false) }
   }
 
@@ -172,11 +183,15 @@ export function Contracting() {
     if (!quote || busy) return
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     const jobNum = won.jobNum.trim()
-    if (!jobNum) { showToast('Enter the existing project’s Job # first.', 'error', 4000); return }
+    if (!jobNum) { showToast('Enter the existing project’s Job # first.', 'error', 4000); setWsResult({ ok: false, msg: 'Enter the existing project’s Job # first.' }); return }
     setBusy(true)
+    setWsResult(null)
     try {
       const lookup = await lookupProjectByJobNumber(jobNum)
-      if (!lookup?.found || !lookup.project_id) { showToast(`No Workspace project with Job # "${jobNum}". Check the Job # or use Create project.`, 'error', 7000); return }
+      if (!lookup?.found || !lookup.project_id) {
+        const msg = `No Workspace project with Job # “${jobNum}”. Check the Job #, or use Create project instead.`
+        showToast(msg, 'error', 7000); setWsResult({ ok: false, msg }); return
+      }
       const taskCount = quote.lines.filter((l) => l.label || l.price).length
       if (!window.confirm(`Add this quote to existing project "${lookup.project_name}"?\n\nThis appends ${taskCount} task(s) and this quote's budget expenses to that project.`)) { showToast('Add to existing cancelled', 'warn'); return }
       await saveWonDetails(quote.id, won)
@@ -184,10 +199,12 @@ export function Contracting() {
       if (!result?.project_id) throw new Error('Append returned no project_id')
       await setWorkspaceLink(quote.id, result.project_id).catch(() => {})
       setWsProjectId(result.project_id)
-      showToast(`Added to "${lookup.project_name}" (${result.tasks_added || 0} tasks, ${result.expenses_added || 0} expenses)`, 'success', 5000)
+      const msg = `Added to “${lookup.project_name}” — ${result.tasks_added || 0} task(s), ${result.expenses_added || 0} expense(s).`
+      showToast(msg, 'success', 5000); setWsResult({ ok: true, msg })
       notifyWon(quote)
     } catch (e) {
-      showToast(describeWorkspaceError(e, { accountName: quote.customer || '', actionLabel: 'add to the existing project' }), 'error', 9000)
+      const msg = describeWorkspaceError(e, { accountName: quote.customer || '', actionLabel: 'add to the existing project' })
+      showToast(msg, 'error', 9000); setWsResult({ ok: false, msg })
     } finally { setBusy(false) }
   }
 
@@ -250,8 +267,14 @@ export function Contracting() {
                 </div>
               )}
               {accountNotLinked && (
-                <div style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
-                  <div style={label}>Account not linked — link it to close won / create the project</div>
+                <div style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderLeft: '5px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-4)', marginBottom: 'var(--sp-4)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', marginBottom: 'var(--sp-2)' }}>
+                    <span aria-hidden style={{ fontSize: '1.3rem', lineHeight: 1 }}>⚠️</span>
+                    <span style={{ fontSize: 'var(--fs-base)', fontWeight: 800, color: 'var(--accent)' }}>Account not linked — this quote can’t be closed won yet</span>
+                  </div>
+                  <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.55, marginBottom: 'var(--sp-3)' }}>
+                    A won job becomes a Workspace project, which needs a linked client record. <b>Search and pick the account below to link it</b> — then the Closed Won and project buttons unlock.
+                  </div>
                   <Autocomplete<ClientRow>
                     value={linkText}
                     onValueChange={setLinkText}
@@ -266,23 +289,52 @@ export function Contracting() {
                 </div>
               )}
 
+              {/* Step 1 — the won action. Separate from the Workspace-project step below,
+                  because "Mark Closed Won" only submits the win; it does NOT build the project. */}
               <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
                 {canSubmitWon ? (
-                  <Button small disabled={busy || !WRITES_ENABLED || needsConv || accountNotLinked} onClick={() => setConfirmOpen(true)}>{busy ? 'Working…' : 'Mark Closed Won & submit for approval'}</Button>
+                  <Button small disabled={busy || !WRITES_ENABLED || needsConv || accountNotLinked} title={accountNotLinked ? 'Link the account above first — a won job needs a linked client record.' : needsConv ? 'Convert the imported line items first.' : undefined} onClick={() => setConfirmOpen(true)}>{busy ? 'Working…' : 'Mark Closed Won & submit for approval'}</Button>
                 ) : (
                   <Button variant="secondary" small disabled={busy || !WRITES_ENABLED} onClick={doSaveDetails}>{busy ? 'Saving…' : 'Save won details'}</Button>
                 )}
-                {isClosedWon && (
-                  linked ? (
-                    <Button variant="primary" small disabled={busy} onClick={doOpenWorkspace}>Open in Workspace ↗</Button>
+              </div>
+
+              {/* Step 2 — the Workspace project. This is what the tab is for, so it's an
+                  explicit, labeled block rather than a couple of loose buttons. */}
+              {isClosedWon ? (
+                <div style={{ marginTop: 'var(--sp-4)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: 'var(--sp-4)', background: 'var(--bg)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', marginBottom: 'var(--sp-2)' }}>
+                    <span style={{ fontSize: 'var(--fs-base)', fontWeight: 800, color: 'var(--text)' }}>Workspace project</span>
+                    {linked && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', background: 'var(--pos-soft)', borderRadius: 20, padding: '2px 10px' }}>Linked</span>}
+                  </div>
+                  {linked ? (
+                    <>
+                      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>This quote is linked to its Workspace project.</div>
+                      <Button variant="primary" small disabled={busy} onClick={doOpenWorkspace}>Open in Workspace ↗</Button>
+                    </>
                   ) : (
                     <>
-                      <Button variant="secondary" small disabled={busy || !WRITES_ENABLED} onClick={doCreateProject}>{busy ? 'Working…' : 'Create Workspace project'}</Button>
-                      <Button variant="ghost" small disabled={busy || !WRITES_ENABLED} onClick={doAddToExisting}>Add to existing project</Button>
+                      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
+                        Not created yet. <b>Create</b> a new project from this quote (needs the Job # above), or <b>Add to existing</b> if one was already built (e.g. in Classic).
+                      </div>
+                      <div style={{ display: 'flex', gap: 'var(--sp-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <Button variant="primary" small disabled={busy || !WRITES_ENABLED} onClick={doCreateProject}>{busy ? 'Working…' : 'Create Workspace project'}</Button>
+                        <Button variant="secondary" small disabled={busy || !WRITES_ENABLED} onClick={doAddToExisting}>Add to existing project</Button>
+                      </div>
                     </>
-                  )
-                )}
-              </div>
+                  )}
+                  {wsResult && (
+                    <div style={{ marginTop: 'var(--sp-3)', fontSize: 'var(--fs-sm)', lineHeight: 1.5, fontWeight: 600, borderRadius: 'var(--radius-sm)', padding: 'var(--sp-3)', color: wsResult.ok ? 'var(--pos)' : 'var(--accent)', background: wsResult.ok ? 'var(--pos-soft)' : 'var(--accent-soft)', border: `1px solid ${wsResult.ok ? 'var(--pos)' : 'var(--accent)'}` }}>
+                      {wsResult.ok ? '✓ ' : '⚠️ '}{wsResult.msg}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-3)' }}>
+                  Mark this Closed Won first — the <b>Create Workspace project</b> step appears here once it’s won.
+                </div>
+              )}
+
               {wonStatus === 'pending_won' && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', marginTop: 'var(--sp-3)' }}>Awaiting won approval — an approver decides it in “Needs your attention” on the Manager dashboard.</div>}
               {!WRITES_ENABLED && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--warn)', fontStyle: 'italic', marginTop: 'var(--sp-3)' }}>Preview — writes are off, so contracting actions won’t persist yet.</div>}
             </>
