@@ -267,6 +267,9 @@ let initBanner = "";
           if (payload.quote) state.quote = payload.quote;
           state.sections = payload.sections.map(s => {
             const base = newSection(s.type || "EMI");
+            // Multi-unit payloads label each table set with its unit via `intro`; honor it
+            // when present, else keep the type's preset intro (single-unit — unchanged).
+            if (typeof s.intro === "string" && s.intro) base.intro = s.intro;
             // Override the default placeholder row(s) with the payload rows
             if (Array.isArray(s.rows) && s.rows.length > 0) {
               base.rows = s.rows.map(r => {

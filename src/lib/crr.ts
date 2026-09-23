@@ -19,7 +19,59 @@ export interface CrrWorkup {
     specRows?: Record<string, Array<Array<unknown>>> // key → rows of [testKey, label, time, comments]
     fields?: Record<string, any> // the CRR form fields (custCompany, eqUnitName, eqCurrent, specialReq, quoteReq, …)
     checks?: Record<string, any> // the CRR checkboxes (pwrAC/pwrDC, pwr1ph/pwr3ph, cuiReq, govWitness, …)
+    // Multi-unit workups (new): per-unit Section III / IV-specs / VI live here. Global
+    // sections (I / II / V / VII) stay in `fields`/`checks` above. Absent on legacy
+    // single-unit workups, which keep their specs in the top-level enabledSpecs/specRows.
+    units?: Array<{ name?: string; fields?: Record<string, any>; enabledSpecs?: Record<string, boolean>; specRows?: Record<string, Array<Array<unknown>>> }>
   }
+}
+
+// A single unit's slice of a workup: its Section III fields, test-spec selection, and
+// spec tables. A legacy single-unit workup normalizes to one implicit unit.
+export interface CrrUnit {
+  name: string
+  fields: Record<string, any>
+  enabledSpecs: Record<string, boolean>
+  specRows: Record<string, Array<Array<unknown>>>
+}
+
+/** Normalize a workup to its unit list. Multi-unit workups carry data.units[]; every
+ *  existing flat workup becomes one implicit unit — so old CRRs keep working untouched. */
+export function crrUnits(w: CrrWorkup | null | undefined): CrrUnit[] {
+  const d = (w?.data || {}) as NonNullable<CrrWorkup['data']>
+  const arr = Array.isArray(d.units) ? d.units : []
+  if (arr.length) {
+    return arr.map((u, i) => ({
+      name: String(u?.name || u?.fields?.eqUnitName || `Unit ${i + 1}`),
+      fields: (u?.fields || {}) as Record<string, any>,
+      enabledSpecs: (u?.enabledSpecs || {}) as Record<string, boolean>,
+      specRows: (u?.specRows || {}) as Record<string, Array<Array<unknown>>>,
+    }))
+  }
+  return [{
+    name: String(d.fields?.eqUnitName || ''),
+    fields: (d.fields || {}) as Record<string, any>,
+    enabledSpecs: (d.enabledSpecs || {}) as Record<string, boolean>,
+    specRows: (d.specRows || {}) as Record<string, Array<Array<unknown>>>,
+  }]
+}
+
+/** Merge every unit's enabled specs + spec rows into one view (union enabled, rows
+ *  concatenated) — lets the calculator-facing shift helpers show a combined picture for
+ *  a multi-unit workup without the calc tabs needing to know about units. */
+function mergedSpecSource(w: CrrWorkup | null | undefined): { enabled: Record<string, boolean>; rows: Record<string, Array<Array<unknown>>> } {
+  const units = crrUnits(w)
+  if (units.length <= 1) {
+    const u = units[0]
+    return { enabled: u?.enabledSpecs || {}, rows: u?.specRows || {} }
+  }
+  const enabled: Record<string, boolean> = {}
+  const rows: Record<string, Array<Array<unknown>>> = {}
+  for (const u of units) {
+    for (const k in u.enabledSpecs) if (u.enabledSpecs[k]) enabled[k] = true
+    for (const k in u.specRows) rows[k] = [...(rows[k] || []), ...(u.specRows[k] || [])]
+  }
+  return { enabled, rows }
 }
 
 // A spec section for a calc tab. Column indices differ per standard because the
@@ -162,9 +214,7 @@ const parseHours = (timeStr: unknown): number | null => {
  * Pure — pricing (rate × shifts, setup/teardown, rentals) is applied by the
  * calculator, since those inputs live in calc state.
  */
-export function deriveCrrShifts(workup: CrrWorkup | null | undefined, specs: SpecDef[]): CrrShiftSummary {
-  const enabled = workup?.data?.enabledSpecs || {}
-  const allRows = workup?.data?.specRows || {}
+function deriveShiftsFrom(enabled: Record<string, boolean>, allRows: Record<string, Array<Array<unknown>>>, specs: SpecDef[]): CrrShiftSummary {
   const tests: CrrTest[] = []
   for (const spec of specs) {
     if (!enabled[spec.key]) continue
@@ -198,11 +248,28 @@ export function deriveCrrShifts(workup: CrrWorkup | null | undefined, specs: Spe
   }
 }
 
+/** Shift summary across the WHOLE workup (all units merged) — the calculator-facing entry. */
+export function deriveCrrShifts(workup: CrrWorkup | null | undefined, specs: SpecDef[]): CrrShiftSummary {
+  const s = mergedSpecSource(workup)
+  return deriveShiftsFrom(s.enabled, s.rows, specs)
+}
+
+/** Shift summary for a SINGLE unit's spec sections — used for per-unit line items. */
+export function crrShiftsForUnit(unit: CrrUnit, specs: SpecDef[]): CrrShiftSummary {
+  return deriveShiftsFrom(unit.enabledSpecs || {}, unit.specRows || {}, specs)
+}
+
 // ── CRR → quote helpers ───────────────────────────────────────────────────────
 
-/** Which test families a workup has enabled (any spec revision counts). */
+/** Which test families a workup has enabled (any spec revision counts, any unit). */
 export function crrEnabled(w: CrrWorkup | null | undefined): { emi: boolean; pq: boolean; dcm: boolean } {
-  const e = w?.data?.enabledSpecs || {}
+  const e = mergedSpecSource(w).enabled
+  return { emi: !!(e.emi461f || e.emi461g), pq: !!(e.pq300b || e.pq300p1), dcm: !!e.dcmag }
+}
+
+/** Same, for a single unit (multi-unit per-unit line items). */
+export function crrEnabledForUnit(u: CrrUnit): { emi: boolean; pq: boolean; dcm: boolean } {
+  const e = u.enabledSpecs || {}
   return { emi: !!(e.emi461f || e.emi461g), pq: !!(e.pq300b || e.pq300p1), dcm: !!e.dcmag }
 }
 
@@ -280,44 +347,55 @@ const NON_TEST_ROW = /setup|tear\s*-?\s*down|teardown|procedure|report/i
 // (blank / "TBD" / "1 day" rows are dropped — the tech hasn't committed a time).
 // Ported from Classic's buildSpecBuilderPayloadFromCrr.
 
-export interface SpecSection { type: string; rows: string[][] }
+export interface SpecSection { type: string; rows: string[][]; intro?: string }
 export interface SpecPayload { quote: string; sections: SpecSection[] }
 
 const isNumericTime = (v: unknown) => /^\s*\d+(?:\.\d+)?\s*$/.test(String(v ?? ''))
 
 export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, quoteNumber: string): SpecPayload {
+  const units = crrUnits(workup)
+  const multi = units.length > 1
   const sections: SpecSection[] = []
-  const enabled = workup?.data?.enabledSpecs || {}
-  const allRows = workup?.data?.specRows || {}
 
-  // EMI / DC Mag: [test, description, time(2), comments] → [test, desc, comments]
-  const mapFourCol = (key: string, type: string) => {
-    if (!enabled[key]) return
-    const rows = (allRows[key] || [])
-      .filter((r) => Array.isArray(r) && isNumericTime(r[2]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[1] ?? '')))
-      .map((r) => [String(r[0] ?? ''), String(r[1] ?? ''), String(r[3] ?? '')])
-    if (rows.length) sections.push({ type, rows })
-  }
-  // PQ: [requirement, time(1), paragraph(2), testReq(3), tables(4)]
-  //   → [test=paragraph, label=requirement, comments=testReq + tables]
-  const mapPq = (key: string) => {
-    if (!enabled[key]) return
-    const rows = (allRows[key] || [])
-      .filter((r) => Array.isArray(r) && isNumericTime(r[1]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[2] ?? '')))
-      .map((r) => {
-        const parts: string[] = []
-        if (String(r[3] ?? '')) parts.push(String(r[3]))
-        if (String(r[4] ?? '')) parts.push('Tables / Figures: ' + String(r[4]))
-        return [String(r[2] ?? ''), String(r[0] ?? ''), parts.join('\n')]
-      })
-    if (rows.length) sections.push({ type: 'Power Quality', rows })
-  }
+  for (const unit of units) {
+    const enabled = unit.enabledSpecs || {}
+    const allRows = unit.specRows || {}
+    const unitSections: SpecSection[] = []
 
-  mapFourCol('emi461f', 'EMI')
-  mapFourCol('emi461g', 'EMI')
-  mapPq('pq300b')
-  mapPq('pq300p1')
-  mapFourCol('dcmag', 'DC Magnetics')
+    // EMI / DC Mag: [test, description, time(2), comments] → [test, desc, comments]
+    const mapFourCol = (key: string, type: string) => {
+      if (!enabled[key]) return
+      const rows = (allRows[key] || [])
+        .filter((r) => Array.isArray(r) && isNumericTime(r[2]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[1] ?? '')))
+        .map((r) => [String(r[0] ?? ''), String(r[1] ?? ''), String(r[3] ?? '')])
+      if (rows.length) unitSections.push({ type, rows })
+    }
+    // PQ: [requirement, time(1), paragraph(2), testReq(3), tables(4)]
+    //   → [test=paragraph, label=requirement, comments=testReq + tables]
+    const mapPq = (key: string) => {
+      if (!enabled[key]) return
+      const rows = (allRows[key] || [])
+        .filter((r) => Array.isArray(r) && isNumericTime(r[1]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[2] ?? '')))
+        .map((r) => {
+          const parts: string[] = []
+          if (String(r[3] ?? '')) parts.push(String(r[3]))
+          if (String(r[4] ?? '')) parts.push('Tables / Figures: ' + String(r[4]))
+          return [String(r[2] ?? ''), String(r[0] ?? ''), parts.join('\n')]
+        })
+      if (rows.length) unitSections.push({ type: 'Power Quality', rows })
+    }
+
+    mapFourCol('emi461f', 'EMI')
+    mapFourCol('emi461g', 'EMI')
+    mapPq('pq300b')
+    mapPq('pq300p1')
+    mapFourCol('dcmag', 'DC Magnetics')
+
+    // Multi-unit: label each table set with its unit so the Spec Builder shows one set
+    // per unit. The builder honors a payload-provided `intro` (falls back to the preset).
+    if (multi) unitSections.forEach((sec) => { sec.intro = `${unit.name || 'Unit'} — ${sec.type}` })
+    sections.push(...unitSections)
+  }
 
   return { quote: quoteNumber || '', sections }
 }

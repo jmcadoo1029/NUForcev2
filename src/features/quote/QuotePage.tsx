@@ -587,6 +587,8 @@ export function QuotePage() {
   // Teardown = fixed, Procedure/Report = catalog) — applied as-is, NOT re-priced.
   const applyCrrDraft = (workup: CrrWorkup) => {
     const draft = buildDraftFromCrr(workup)
+    // Multi-unit CRR → seed the calculator's per-unit setup table with the unit names.
+    if (Array.isArray(draft.units) && draft.units.length > 1) setCalcUnitsSeed(draft.units)
     // Some fields default to a non-empty sentinel ('AC'/'Unknown'/'None'); treat those
     // as still-empty so the CRR value can fill them, but never clobber a real edit.
     const FIELD_DEFAULT: Record<string, string> = { pwrType: 'AC', witness: 'Unknown', gsi: 'Unknown', docRestriction: 'None' }
