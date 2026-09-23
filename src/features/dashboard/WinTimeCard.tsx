@@ -27,12 +27,20 @@ function revRankOfOpp(opp: string): number {
 // (the wonInfo.wonDate fallback).
 function dayMs(s: string | null): number | null {
   if (!s) return null
+  // Guard the year to a real range. Some imported quotes store a date as a bare Excel
+  // serial number ("44071"), which new Date() reads as the YEAR 44071 — that single bad
+  // value otherwise stretched the win-time axis to ~42,000 years. Out of range → drop it.
+  const inRange = (y: number) => y >= 2000 && y <= 2100
   const m = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/)
-  if (m) return Date.UTC(+m[1], +m[2] - 1, +m[3])
+  if (m) { const y = +m[1]; return inRange(y) ? Date.UTC(y, +m[2] - 1, +m[3]) : null }
   const d = new Date(s)
-  if (!isNaN(d.getTime())) return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
+  if (!isNaN(d.getTime()) && inRange(d.getFullYear())) return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())
   return null
 }
+
+// A quote → win span past this is data error, not a slow deal — drop it so one bad
+// row can't dominate the axis (10 years; real quote-to-win is days to a couple years).
+const MAX_WIN_DAYS = 3650
 
 // ── Estimated created date for pre-NUForce (Salesforce) quotes ─────────────────
 // Their stored created_at is the import date, so we approximate the ACTUAL creation
@@ -101,7 +109,7 @@ function wonDeals(entries: CodeEntry[], code: string | null, totals: Map<number,
     const w = dayMs(e.wonDate)
     if (c == null || w == null) continue
     const winDays = Math.round((w - c) / 86400000)
-    if (winDays < 0) continue // estimate landed after the win — drop rather than distort
+    if (winDays < 0 || winDays > MAX_WIN_DAYS) continue // drop after-the-win estimates and data-error spans
     out.push({ winDays, wonMs: w, estimated })
   }
   return out

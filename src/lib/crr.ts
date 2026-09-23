@@ -22,15 +22,17 @@ export interface CrrWorkup {
     // Multi-unit workups (new): per-unit Section III / IV-specs / VI live here. Global
     // sections (I / II / V / VII) stay in `fields`/`checks` above. Absent on legacy
     // single-unit workups, which keep their specs in the top-level enabledSpecs/specRows.
-    units?: Array<{ name?: string; fields?: Record<string, any>; enabledSpecs?: Record<string, boolean>; specRows?: Record<string, Array<Array<unknown>>> }>
+    units?: Array<{ fields?: Record<string, any>; checks?: Record<string, any>; enabledSpecs?: Record<string, boolean>; specRows?: Record<string, Array<Array<unknown>>> }>
   }
 }
 
-// A single unit's slice of a workup: its Section III fields, test-spec selection, and
-// spec tables. A legacy single-unit workup normalizes to one implicit unit.
+// A single unit's slice of a workup: its Section III fields + checks (power chars live
+// here, per Workspace), test-spec selection, and spec tables. A legacy single-unit
+// workup normalizes to one implicit unit (its checks are the top-level checks).
 export interface CrrUnit {
   name: string
   fields: Record<string, any>
+  checks: Record<string, any>
   enabledSpecs: Record<string, boolean>
   specRows: Record<string, Array<Array<unknown>>>
 }
@@ -42,8 +44,9 @@ export function crrUnits(w: CrrWorkup | null | undefined): CrrUnit[] {
   const arr = Array.isArray(d.units) ? d.units : []
   if (arr.length) {
     return arr.map((u, i) => ({
-      name: String(u?.name || u?.fields?.eqUnitName || `Unit ${i + 1}`),
+      name: String(u?.fields?.eqUnitName || `Unit ${i + 1}`), // no separate units[i].name — Workspace uses eqUnitName
       fields: (u?.fields || {}) as Record<string, any>,
+      checks: (u?.checks || {}) as Record<string, any>,
       enabledSpecs: (u?.enabledSpecs || {}) as Record<string, boolean>,
       specRows: (u?.specRows || {}) as Record<string, Array<Array<unknown>>>,
     }))
@@ -51,6 +54,7 @@ export function crrUnits(w: CrrWorkup | null | undefined): CrrUnit[] {
   return [{
     name: String(d.fields?.eqUnitName || ''),
     fields: (d.fields || {}) as Record<string, any>,
+    checks: (d.checks || {}) as Record<string, any>, // legacy: the single unit's checks are the top-level checks
     enabledSpecs: (d.enabledSpecs || {}) as Record<string, boolean>,
     specRows: (d.specRows || {}) as Record<string, Array<Array<unknown>>>,
   }]

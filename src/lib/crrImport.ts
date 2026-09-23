@@ -131,10 +131,11 @@ export function crrNotesBlock(w: CrrWorkup | null | undefined): string {
  *  page applies them as-is and must NOT run them back through priceDraftLines. */
 export function buildDraftFromCrr(w: CrrWorkup): DraftImport {
   const units = crrUnits(w)
-  const u0 = units[0] || { name: '', fields: {}, enabledSpecs: {}, specRows: {} }
+  const u0 = units[0] || { name: '', fields: {}, checks: {}, enabledSpecs: {}, specRows: {} }
   const g = (w.data?.fields || {}) as Record<string, any>   // global — Sections I / II / V / VII
-  const c = (w.data?.checks || {}) as Record<string, any>   // global checks — witness / CUI / power
-  const uf = (u0.fields || {}) as Record<string, any>       // unit 1's Section III (for the quote's Test Item)
+  const c = (w.data?.checks || {}) as Record<string, any>   // global checks — witness / CUI (Section IV bottom band)
+  const uf = (u0.fields || {}) as Record<string, any>       // unit 1's Section III fields (for the quote's Test Item)
+  const uc = (u0.checks || {}) as Record<string, any>       // unit 1's Section III checks — power characteristics (per-unit)
   const special = parseSpecialReq(g.specialReq)
   const testItem: DraftImport['testItem'] = {
     item: String(uf.eqUnitName || ''),
@@ -143,9 +144,9 @@ export function buildDraftFromCrr(w: CrrWorkup): DraftImport {
     dimH: num(uf.eqSizeH),
     wt: num(uf.eqWeight),
     volt: num(uf.eqVoltage),
-    pwrType: c.pwrDC ? 'DC' : 'AC',
-    phase: c.pwr3ph ? '3' : c.pwr1ph ? '1' : '',
-    hz: c.pwr400 ? '400' : c.pwr60 ? '60' : c.pwr50 ? '50' : '',
+    pwrType: uc.pwrDC ? 'DC' : 'AC',
+    phase: uc.pwr3ph ? '3' : uc.pwr1ph ? '1' : '',
+    hz: uc.pwr400 ? '400' : uc.pwr60 ? '60' : uc.pwr50 ? '50' : '',
     amps: parseCurrentAmps(uf.eqCurrent),
     docRestriction: c.cuiReq ? 'CUI/Other' : '',
     witness: c.govWitness ? 'Yes' : 'Unknown',
