@@ -229,9 +229,13 @@ function splitPhase(label: string): { suffix: string } {
 }
 
 type AmbKind = 'shock' | 'vibration'
-function classifyLine(label: string, desc?: string): AmbKind | null {
-  const t = `${label} ${desc || ''}`.toLowerCase()
+// Classify from the LABEL only — the test type lives there ("Shock", "Vibration").
+// The description is free text ("Pre-shock hydrostatic test", "post-shock…") and would
+// throw false positives, so it's deliberately excluded here.
+function classifyLine(label: string, _desc?: string): AmbKind | null {
+  const t = label.toLowerCase()
   if (/instrumentation|contact monitoring/.test(t)) return null // code 33 — not a test type
+  if (/hydrostatic/.test(t)) return null // code 95 — a "pre-shock/post-shock" hydro is NOT a shock line
   if (/\bshock\b/.test(t) && !/medium\s*weight|light\s*weight|lightweight|\bmws\b|\blws\b/.test(t)) return 'shock'
   if (/\bvibration\b|\bvibe\b/.test(t) && !/hf\s*vibration|high\s*frequency/.test(t)) return 'vibration'
   return null
