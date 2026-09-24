@@ -76,21 +76,27 @@ export function ActivityFeed() {
   const [refreshKey, setRefreshKey] = useState(0)
   const { data, err } = useFeed(tab, refreshKey)
 
+  const cardLabel = tab === 'sent' ? 'Sent quotes' : tab === 'followups' ? 'Follow-ups' : 'Activity feed'
   const emptyText = tab === 'sent'
-    ? 'No quotes sent yet. Every quote email that goes out — first sends and follow-ups — will show up here.'
-    : 'No recent activity. Notes people add on quotes will show up here.'
+    ? 'No quotes sent yet. First-time quote emails will show up here.'
+    : tab === 'followups'
+      ? 'No follow-ups yet. Follow-up emails sent on quotes will show up here.'
+      : 'No recent activity. Notes people add on quotes will show up here.'
   const footText = tab === 'sent'
-    ? `Showing the latest ${data?.length ?? 0} quote emails sent (initial and follow-ups), newest first.`
-    : `Showing the latest ${data?.length ?? 0} notes and events. Routine “emailed / follow-up sent” log lines are hidden.`
+    ? `Showing the latest ${data?.length ?? 0} first-time quote emails, newest first.`
+    : tab === 'followups'
+      ? `Showing the latest ${data?.length ?? 0} follow-up emails, newest first.`
+      : `Showing the latest ${data?.length ?? 0} notes and events. Routine “emailed / follow-up sent” log lines are hidden.`
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-          <CardLabel>{tab === 'sent' ? 'Sent quotes' : 'Activity feed'}</CardLabel>
+          <CardLabel>{cardLabel}</CardLabel>
           <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 9, overflow: 'hidden' }}>
             <button onClick={() => setTab('activity')} style={seg(tab === 'activity', true)}>Activity</button>
-            <button onClick={() => setTab('sent')} style={seg(tab === 'sent', false)}>Sent</button>
+            <button onClick={() => setTab('sent')} style={seg(tab === 'sent', false)}>Sent Quotes</button>
+            <button onClick={() => setTab('followups')} style={seg(tab === 'followups', false)}>Follow-ups</button>
           </div>
         </div>
         <button

@@ -54,7 +54,7 @@ function sendKind(e: ChatterEntry): 'quote' | 'followup' {
 const SCAN_QUOTES = 200
 const KEEP_ITEMS = 80
 
-export type FeedMode = 'activity' | 'sent'
+export type FeedMode = 'activity' | 'sent' | 'followups'
 
 async function load(mode: FeedMode): Promise<FeedItem[]> {
   const rows = await restFetch<Row[]>(
@@ -66,9 +66,11 @@ async function load(mode: FeedMode): Promise<FeedItem[]> {
     const entries = Array.isArray(r.chatterEntries) ? r.chatterEntries : []
     entries.forEach((e, i) => {
       if (!e || !e.msg) return
-      // Activity: human notes + key events (auto/send lines hidden). Sent: only the
-      // send lines (every initial send and follow-up).
-      if (mode === 'sent' ? !isSend(e) : isAuto(e)) return
+      const k = isSend(e) ? sendKind(e) : null
+      // activity = notes + key events (auto/send lines hidden); sent = initial quote
+      // sends only; followups = follow-up emails only.
+      const keep = mode === 'activity' ? !isAuto(e) : mode === 'sent' ? k === 'quote' : k === 'followup'
+      if (!keep) return
       items.push({
         key: `${r.id}:${i}:${e.at || ''}`,
         quoteId: String(r.id),
@@ -77,7 +79,7 @@ async function load(mode: FeedMode): Promise<FeedItem[]> {
         by: String(e.by || ''),
         at: String(e.at || ''),
         msg: String(e.msg || ''),
-        ...(mode === 'sent' ? { kind: sendKind(e) } : {}),
+        ...(k ? { kind: k } : {}),
       })
     })
   })
