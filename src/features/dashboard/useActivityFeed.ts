@@ -16,6 +16,7 @@ export interface FeedItem {
   by: string
   at: string
   msg: string
+  kind?: 'quote' | 'followup' // set on the Sent feed: initial send vs a follow-up
 }
 
 interface Row {
@@ -38,11 +39,24 @@ function isAuto(e: ChatterEntry): boolean {
   return AUTO_PREFIXES.some((p) => m.startsWith(p))
 }
 
+// The send-log lines — the inverse of what the activity view hides. These ARE the
+// "sent quotes" feed: every time a quote was emailed (initial or follow-up).
+const SENT_PREFIXES = ['Quote emailed to', 'Combined follow-up email sent to', 'Follow-up email sent to']
+function isSend(e: ChatterEntry): boolean {
+  const m = String(e.msg || '').trim()
+  return SENT_PREFIXES.some((p) => m.startsWith(p))
+}
+function sendKind(e: ChatterEntry): 'quote' | 'followup' {
+  return String(e.msg || '').trim().startsWith('Quote emailed to') ? 'quote' : 'followup'
+}
+
 // How many recent quotes to scan, and how many feed items to keep.
 const SCAN_QUOTES = 200
 const KEEP_ITEMS = 80
 
-async function load(): Promise<FeedItem[]> {
+export type FeedMode = 'activity' | 'sent'
+
+async function load(mode: FeedMode): Promise<FeedItem[]> {
   const rows = await restFetch<Row[]>(
     'GET',
     `quotes?select=id,opportunity,customer,chatterEntries:data->chatterEntries&order=updated_at.desc&limit=${SCAN_QUOTES}`,
@@ -51,7 +65,10 @@ async function load(): Promise<FeedItem[]> {
   ;(rows || []).forEach((r) => {
     const entries = Array.isArray(r.chatterEntries) ? r.chatterEntries : []
     entries.forEach((e, i) => {
-      if (!e || !e.msg || isAuto(e)) return
+      if (!e || !e.msg) return
+      // Activity: human notes + key events (auto/send lines hidden). Sent: only the
+      // send lines (every initial send and follow-up).
+      if (mode === 'sent' ? !isSend(e) : isAuto(e)) return
       items.push({
         key: `${r.id}:${i}:${e.at || ''}`,
         quoteId: String(r.id),
@@ -60,6 +77,7 @@ async function load(): Promise<FeedItem[]> {
         by: String(e.by || ''),
         at: String(e.at || ''),
         msg: String(e.msg || ''),
+        ...(mode === 'sent' ? { kind: sendKind(e) } : {}),
       })
     })
   })
@@ -67,17 +85,22 @@ async function load(): Promise<FeedItem[]> {
   return items.slice(0, KEEP_ITEMS)
 }
 
-export function useActivityFeed(refreshKey?: number) {
+export function useFeed(mode: FeedMode, refreshKey?: number) {
   const [data, setData] = useState<FeedItem[] | null>(null)
   const [err, setErr] = useState('')
   useEffect(() => {
     let alive = true
     setData(null)
     setErr('')
-    load()
+    load(mode)
       .then((d) => alive && setData(d))
       .catch((e) => alive && setErr(String(e?.message || e)))
     return () => { alive = false }
-  }, [refreshKey])
+  }, [mode, refreshKey])
   return { data, err }
+}
+
+/** Back-compat: the activity view. */
+export function useActivityFeed(refreshKey?: number) {
+  return useFeed('activity', refreshKey)
 }

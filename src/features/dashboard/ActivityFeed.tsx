@@ -1,12 +1,13 @@
-import { useState } from 'react'
+import { useState, type CSSProperties } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardLabel } from '../../components'
 import { prettifyEmail } from '../../lib/text'
-import { useActivityFeed, type FeedItem } from './useActivityFeed'
+import { useFeed, type FeedItem, type FeedMode } from './useActivityFeed'
 
-// Feed — a live activity stream of chatter across all quotes: the notes people type on
-// quotes plus key events (Closed Lost, delete/restore). Routine send/follow-up log lines
-// are filtered out (see useActivityFeed). Reached from the header "Feed" tab.
+// Feed — reached from the header "Feed" tab. Two views via the toggle:
+//   • Activity: live chatter across all quotes (notes people type + key events).
+//   • Sent: a rolling log of every quote email that went out (initial sends and
+//     follow-ups), newest first — the send lines the Activity view hides.
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -44,6 +45,11 @@ function Row({ item }: { item: FeedItem }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 700, color: 'var(--text)' }}>{who}</span>
+          {item.kind && (
+            <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: item.kind === 'quote' ? 'var(--pos)' : 'var(--muted)', borderRadius: 20, padding: '1px 8px' }}>
+              {item.kind === 'quote' ? 'Sent' : 'Follow-up'}
+            </span>
+          )}
           <span style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>on</span>
           <Link to={`/quote/${item.quoteId}`} style={{ fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
             {item.opportunity || `#${item.quoteId}`}
@@ -57,14 +63,36 @@ function Row({ item }: { item: FeedItem }) {
   )
 }
 
+const segBase: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '7px 16px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }
+const seg = (active: boolean, first: boolean): CSSProperties => ({
+  ...segBase,
+  background: active ? 'var(--text)' : '#fff',
+  color: active ? '#fff' : 'var(--muted)',
+  borderLeft: first ? 'none' : '1px solid var(--border-strong)',
+})
+
 export function ActivityFeed() {
+  const [tab, setTab] = useState<FeedMode>('activity')
   const [refreshKey, setRefreshKey] = useState(0)
-  const { data, err } = useActivityFeed(refreshKey)
+  const { data, err } = useFeed(tab, refreshKey)
+
+  const emptyText = tab === 'sent'
+    ? 'No quotes sent yet. Every quote email that goes out — first sends and follow-ups — will show up here.'
+    : 'No recent activity. Notes people add on quotes will show up here.'
+  const footText = tab === 'sent'
+    ? `Showing the latest ${data?.length ?? 0} quote emails sent (initial and follow-ups), newest first.`
+    : `Showing the latest ${data?.length ?? 0} notes and events. Routine “emailed / follow-up sent” log lines are hidden.`
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', marginBottom: 'var(--sp-2)' }}>
-        <CardLabel>Activity feed</CardLabel>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
+          <CardLabel>{tab === 'sent' ? 'Sent quotes' : 'Activity feed'}</CardLabel>
+          <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 9, overflow: 'hidden' }}>
+            <button onClick={() => setTab('activity')} style={seg(tab === 'activity', true)}>Activity</button>
+            <button onClick={() => setTab('sent')} style={seg(tab === 'sent', false)}>Sent</button>
+          </div>
+        </div>
         <button
           onClick={() => setRefreshKey((k) => k + 1)}
           style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', cursor: 'pointer' }}
@@ -75,14 +103,12 @@ export function ActivityFeed() {
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load the feed: {err}</div>}
       {!err && !data && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', padding: 'var(--sp-3) 0' }}>Loading…</div>}
-      {!err && data && data.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', padding: 'var(--sp-3) 0' }}>No recent activity. Notes people add on quotes will show up here.</div>}
+      {!err && data && data.length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', padding: 'var(--sp-3) 0' }}>{emptyText}</div>}
 
       {!err && data && data.length > 0 && (
         <div>
           {data.map((item) => <Row key={item.key} item={item} />)}
-          <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-caption)', paddingTop: 'var(--sp-3)' }}>
-            Showing the latest {data.length} notes and events. Routine “emailed / follow-up sent” log lines are hidden.
-          </div>
+          <div style={{ color: 'var(--dim)', fontSize: 'var(--fs-caption)', paddingTop: 'var(--sp-3)' }}>{footText}</div>
         </div>
       )}
     </Card>
