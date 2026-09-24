@@ -44,6 +44,14 @@ async function q(path: string): Promise<SearchQuote[]> {
   }
 }
 
+/** Fetch full search rows for a set of quote ids (for the test-type search results,
+ *  whose candidate ids come from the code-report data). Preserves no order. */
+export async function fetchQuotesByIds(ids: string[]): Promise<SearchQuote[]> {
+  if (!ids.length) return []
+  const inList = ids.slice(0, 50).map((i) => encodeURIComponent(i)).join(',')
+  return q(`quotes?select=${COLS}&id=in.(${inList})&limit=50`)
+}
+
 export async function globalSearch(term: string): Promise<SearchResults> {
   const t = term.trim()
   if (t.length < 2) return { quotes: [], accounts: [] }
