@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { restFetch } from '../../lib/restFetch'
 import type { ChatterEntry } from '../../lib/quoteActions'
+import { fetchMassEmails } from '../../lib/massEmail'
 
 // Live activity feed — the most recent human chatter + key events across all quotes.
 // Chatter lives per-quote in data.chatterEntries, so we pull the most recently-updated
@@ -105,4 +106,52 @@ export function useFeed(mode: FeedMode, refreshKey?: number) {
 /** Back-compat: the activity view. */
 export function useActivityFeed(refreshKey?: number) {
   return useFeed('activity', refreshKey)
+}
+
+// ── Outreach feed ──────────────────────────────────────────────────────────────
+// Every mass/outreach send (all contacts, by product code, by campaign, by account,
+// re-engage, and approved scheduled sends) writes one row to mass_emails via the
+// mass-email edge function. That table IS the outreach log: one row per blast, with
+// the audience label, who sent it, when, and the recipient/sent counts. Per-blast
+// delivery ("landing") metrics live in mass_email_recipients and are loaded lazily
+// when a row is expanded (see fetchMassEmailMetrics).
+
+export interface OutreachItem {
+  id: string
+  subject: string
+  audience: string       // e.g. "All contacts", "Account: Lockheed", "re-engage (12mo dormant)"
+  by: string
+  at: string
+  recipientCount: number
+  sentCount: number
+  failedCount: number
+}
+
+async function loadOutreach(): Promise<OutreachItem[]> {
+  const rows = await fetchMassEmails()
+  return (rows || []).map((r) => ({
+    id: String(r.id),
+    subject: String(r.subject || ''),
+    audience: String(r.audience || 'Outreach'),
+    by: String(r.sent_by || ''),
+    at: String(r.sent_at || ''),
+    recipientCount: Number(r.recipient_count) || 0,
+    sentCount: Number(r.sent_count) || 0,
+    failedCount: Number(r.failed_count) || 0,
+  }))
+}
+
+export function useOutreachFeed(refreshKey?: number) {
+  const [data, setData] = useState<OutreachItem[] | null>(null)
+  const [err, setErr] = useState('')
+  useEffect(() => {
+    let alive = true
+    setData(null)
+    setErr('')
+    loadOutreach()
+      .then((d) => alive && setData(d))
+      .catch((e) => alive && setErr(String(e?.message || e)))
+    return () => { alive = false }
+  }, [refreshKey])
+  return { data, err }
 }

@@ -28,7 +28,7 @@ const menuItem: CSSProperties = { display: 'block', width: '100%', textAlign: 'l
 
 const monthsAgo = (ms: number) => Math.max(0, Math.round((Date.now() - ms) / (30 * 864e5)))
 
-function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[]; months: number; onClose: () => void }) {
+function ComposeModal({ recipients, months, onClose, onSent }: { recipients: DormantRow[]; months: number; onClose: () => void; onSent: (sent: DormantRow[]) => void }) {
   const { showToast } = useToast()
   // Seed once from the editable "Re-engage" template AND the signed-in user, then
   // pre-fill the sender's own name, email and signature into the body — using the
@@ -65,7 +65,7 @@ function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[
     setBusy(true)
     try {
       const res = await sendMassEmail({ subject, body, audience: `re-engage (${months}mo dormant)`, recipients: recipients.map((r) => ({ email: r.email, name: r.name })) })
-      if (res.ok) { showToast(`Sent to ${res.sent ?? recipients.length} contact(s)`, 'success', 6000); onClose() }
+      if (res.ok) { showToast(`Sent to ${res.sent ?? recipients.length} contact(s)`, 'success', 6000); onSent(recipients); onClose() }
       else if (res.notDeployed) showToast('The mass-email function isn’t deployed on this environment.', 'error', 7000)
       else showToast('Send failed: ' + (res.error || 'unknown'), 'error', 7000)
     } finally { setBusy(false) }
@@ -166,6 +166,23 @@ export function ReEngageContacts() {
     } catch (e) {
       showToast('Couldn’t snooze: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
     } finally { setSnoozing(null) }
+  }
+
+  // After a re-engage send goes out, auto-snooze everyone we just emailed for 6
+  // months: they roll off the list (so they aren't re-emailed next pass) and come
+  // back automatically. Parked in the undo strip like a manual snooze. Best-effort —
+  // the send already succeeded, so a snooze hiccup never surfaces as a send error.
+  const snoozeAfterSend = async (sent: DormantRow[]) => {
+    if (!sent.length) return
+    setSel(new Set())
+    setSnoozed((s) => {
+      const have = new Set(s.map((x) => x.email))
+      return [...sent.filter((r) => !have.has(r.email)), ...s]
+    })
+    if (!WRITES_ENABLED) return
+    const me = getSessionEmail() || ''
+    await Promise.all(sent.map((r) => snoozeReengage(r.email, 6, me).catch(() => {})))
+    showToast(`Snoozed ${sent.length} contact${sent.length === 1 ? '' : 's'} for 6 months after emailing. Undo above.`, 'info', 6000)
   }
 
   const undoSnooze = async (r: DormantRow) => {
@@ -295,7 +312,7 @@ export function ReEngageContacts() {
         </div>
       )}
 
-      {composeOpen && <ComposeModal recipients={selected} months={months} onClose={() => setComposeOpen(false)} />}
+      {composeOpen && <ComposeModal recipients={selected} months={months} onClose={() => setComposeOpen(false)} onSent={snoozeAfterSend} />}
     </Card>
   )
 }
