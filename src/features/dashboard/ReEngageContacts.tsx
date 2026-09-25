@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { Card, CardLabel, Button, Modal, useToast } from '../../components'
 import { money, moneyShort, fmtDate } from '../../lib/format'
 import { WRITES_ENABLED } from '../../lib/config'
-import { sendMassEmail } from '../../lib/massEmail'
+import { sendMassEmail, applySenderIdentity } from '../../lib/massEmail'
 import { fetchTemplate, DEFAULT_TEMPLATES } from '../../lib/emailTemplates'
 import { flagContactInvalid, clearContactInvalid } from '../../lib/quoteContact'
 import { getSessionEmail } from '../../lib/auth'
+import { fetchSelf, type Self } from '../../lib/me'
 import { useDormantContacts, snoozeReengage, unsnoozeReengage, type DormantRow } from './useDormantContacts'
 
 // Re-engage — contacts we quoted in the past who've gone quiet. Pick a dormancy
@@ -29,20 +30,33 @@ const monthsAgo = (ms: number) => Math.max(0, Math.round((Date.now() - ms) / (30
 
 function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[]; months: number; onClose: () => void }) {
   const { showToast } = useToast()
-  // Seed from the editable "Re-engage" template in the Email Templates catalog.
-  // Start with the in-code default, then swap in any saved override on open —
-  // but only while the sender hasn't started editing (body still the default).
+  // Seed once from the editable "Re-engage" template AND the signed-in user, then
+  // pre-fill the sender's own name, email and signature into the body — using the
+  // very same applySenderIdentity() the send applies — so nobody has to type
+  // [Your Name] / [your email] by hand. The body stays fully editable afterward.
+  const [self, setSelf] = useState<Self | null>(null)
   const [subject, setSubject] = useState(DEFAULT_TEMPLATES.mass_reengage.subject)
-  const [body, setBody] = useState(DEFAULT_TEMPLATES.mass_reengage.body)
+  const [body, setBody] = useState('')
+  const [seeded, setSeeded] = useState(false)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
-    fetchTemplate('mass_reengage').then((t) => {
-      if (!alive) return
-      setSubject((s) => (s === DEFAULT_TEMPLATES.mass_reengage.subject ? t.subject : s))
-      setBody((b) => (b === DEFAULT_TEMPLATES.mass_reengage.body ? t.body : b))
-    }).catch(() => {})
+    Promise.all([fetchTemplate('mass_reengage'), fetchSelf()])
+      .then(([t, me]) => {
+        if (!alive) return
+        setSelf(me)
+        setSubject(t.subject)
+        setBody(applySenderIdentity(t.body, me)) // fill sender name/email + signature up front
+        setSeeded(true)
+      })
+      .catch(() => {
+        if (!alive) return
+        // Never block composing on the lookup — fall back to the raw template.
+        setSubject(DEFAULT_TEMPLATES.mass_reengage.subject)
+        setBody(DEFAULT_TEMPLATES.mass_reengage.body)
+        setSeeded(true)
+      })
     return () => { alive = false }
   }, [])
 
@@ -61,15 +75,19 @@ function ComposeModal({ recipients, months, onClose }: { recipients: DormantRow[
   return (
     <Modal title={`Re-engage ${recipients.length} contact${recipients.length === 1 ? '' : 's'}`} onClose={() => !busy && onClose()} width={640}>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
-        Each person gets an individual send (nobody sees another address). <b style={{ color: 'var(--text)' }}>{'{first name}'}</b> is filled per recipient — replace <b style={{ color: 'var(--text)' }}>[Your Name]</b> and <b style={{ color: 'var(--text)' }}>[your email]</b> in the signature before sending.
+        Each person gets an individual send (nobody sees another address). <b style={{ color: 'var(--text)' }}>{'{first name}'}</b> is filled per recipient, and your own name, email and signature are filled in for you below{self ? <> — sending as <b style={{ color: 'var(--text)' }}>{self.name}</b></> : ''}. Review and send.
       </div>
       <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Subject</label>
       <input value={subject} onChange={(e) => setSubject(e.target.value)} style={{ ...inputStyle, margin: '4px 0 12px' }} />
       <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Body</label>
-      <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={12} style={{ ...inputStyle, margin: '4px 0 0', resize: 'vertical', lineHeight: 1.5 }} />
+      {seeded ? (
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14} style={{ ...inputStyle, margin: '4px 0 0', resize: 'vertical', lineHeight: 1.5 }} />
+      ) : (
+        <div style={{ ...inputStyle, margin: '4px 0 0', color: 'var(--muted)' }}>Preparing your message…</div>
+      )}
       <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)', marginTop: 'var(--sp-4)' }}>
         <Button variant="secondary" small disabled={busy} onClick={onClose}>Cancel</Button>
-        <Button variant="primary" small disabled={busy || recipients.length === 0} onClick={send}>{busy ? 'Sending…' : `Send to ${recipients.length}`}</Button>
+        <Button variant="primary" small disabled={busy || !seeded || recipients.length === 0} onClick={send}>{busy ? 'Sending…' : `Send to ${recipients.length}`}</Button>
       </div>
     </Modal>
   )
