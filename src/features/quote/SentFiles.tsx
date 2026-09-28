@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, CardLabel } from '../../components'
+import { Card, CardLabel, Modal } from '../../components'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchSentDocuments, fetchSentDocumentsForQuotes, signedDownloadUrl, type SentDocument } from '../../lib/sentDocs'
@@ -14,6 +14,10 @@ import { baseOpp } from '../../lib/opp'
 
 const who = (v?: string | null) => (v ? prettifyEmail(v) : 'Unknown')
 const fmtBytes = (n?: number | null) => (!n ? '' : n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${(n / 1024).toFixed(1)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`)
+
+// What can render inline in the preview modal (everything else offers Download only).
+const isPdfDoc = (d: SentDocument) => (d.mime || '').toLowerCase().includes('pdf') || /\.pdf$/i.test(d.file_name)
+const isImgDoc = (d: SentDocument) => (d.mime || '').toLowerCase().startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(d.file_name)
 
 const KIND_META: Record<string, { label: string; tone: string }> = {
   quote_pdf: { label: 'Quote PDF', tone: 'var(--info)' },
@@ -37,8 +41,12 @@ function groupBySend(docs: SentDocument[]): SentDocument[][] {
 export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportunity?: string }) {
   const [docs, setDocs] = useState<SentDocument[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
-  const [pv, setPv] = useState<string | null>(null)
   const [err, setErr] = useState('')
+  // In-window preview modal state.
+  const [pvDoc, setPvDoc] = useState<SentDocument | null>(null)
+  const [pvUrl, setPvUrl] = useState<string | null>(null)
+  const [pvLoading, setPvLoading] = useState(false)
+  const [pvErr, setPvErr] = useState('')
   const base = baseOpp(opportunity || '')
 
   useEffect(() => {
@@ -75,25 +83,21 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
     }
   }
 
-  // Preview: open the exact stored file inline in a new tab (PDFs and images render
-  // in-browser; other types fall back to a download). We open the tab synchronously
-  // inside the click so pop-up blockers allow it, then point it at the signed URL
-  // once it resolves.
+  // Preview: open the exact stored file inline, in a modal on this page (PDFs and
+  // images render in-browser; other types offer Download from inside the modal).
   const preview = async (d: SentDocument) => {
     setErr('')
     if (!d.storage_bucket || !d.storage_path) { setErr(`No stored copy for “${d.file_name}”.`); return }
-    const w = window.open('about:blank', '_blank')
-    if (w) { try { w.opener = null } catch { /* ignore */ } }
-    setPv(d.id)
+    setPvDoc(d); setPvUrl(null); setPvErr(''); setPvLoading(true)
     try {
       const url = await signedDownloadUrl(d.storage_bucket, d.storage_path)
-      if (!url) { setErr(`Couldn’t get a preview link for “${d.file_name}”.`); if (w) w.close(); return }
-      if (w) w.location.href = url
-      else window.open(url, '_blank', 'noopener,noreferrer') // pop-up was blocked — try a direct open
+      if (!url) setPvErr(`Couldn’t load a preview for “${d.file_name}”.`)
+      else setPvUrl(url)
     } finally {
-      setPv(null)
+      setPvLoading(false)
     }
   }
+  const closePreview = () => { setPvDoc(null); setPvUrl(null); setPvErr('') }
 
   const groups = docs ? groupBySend(docs) : []
 
@@ -135,7 +139,7 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
                         <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: '#fff', background: meta.tone, padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>{meta.label}</span>
                         <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.file_name}</span>
                         {d.byte_size ? <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', flexShrink: 0 }}>{fmtBytes(d.byte_size)}</span> : null}
-                        <button onClick={() => preview(d)} disabled={pv === d.id} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: pv === d.id ? 'default' : 'pointer', flexShrink: 0 }}>{pv === d.id ? '…' : 'Preview'}</button>
+                        <button onClick={() => preview(d)} disabled={pvDoc?.id === d.id && pvLoading} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: pvDoc?.id === d.id && pvLoading ? 'default' : 'pointer', flexShrink: 0 }}>{pvDoc?.id === d.id && pvLoading ? '…' : 'Preview'}</button>
                         <button onClick={() => download(d)} disabled={busy === d.id} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: busy === d.id ? 'default' : 'pointer', flexShrink: 0 }}>{busy === d.id ? '…' : 'Download'}</button>
                       </div>
                     )
@@ -148,6 +152,25 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
       )}
 
       {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)', marginTop: 'var(--sp-2)' }}>{err}</div>}
+
+      {pvDoc && (
+        <Modal title={pvDoc.file_name} onClose={closePreview} width={1000}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 'var(--sp-3)' }}>
+            <button onClick={() => download(pvDoc)} disabled={busy === pvDoc.id} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '5px 14px', cursor: busy === pvDoc.id ? 'default' : 'pointer' }}>{busy === pvDoc.id ? '…' : 'Download'}</button>
+          </div>
+          {pvLoading && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', padding: 'var(--sp-5) 0', textAlign: 'center' }}>Loading preview…</div>}
+          {!pvLoading && pvErr && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>{pvErr}</div>}
+          {!pvLoading && !pvErr && pvUrl && (
+            isPdfDoc(pvDoc) ? (
+              <iframe title={pvDoc.file_name} src={pvUrl} style={{ width: '100%', height: '78vh', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }} />
+            ) : isImgDoc(pvDoc) ? (
+              <div style={{ textAlign: 'center' }}><img src={pvUrl} alt={pvDoc.file_name} style={{ maxWidth: '100%', maxHeight: '78vh', borderRadius: 'var(--radius-sm)' }} /></div>
+            ) : (
+              <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', lineHeight: 1.6, padding: 'var(--sp-4) 0' }}>This file type can’t be previewed in the browser — use Download to open it.</div>
+            )
+          )}
+        </Modal>
+      )}
     </Card>
   )
 }
