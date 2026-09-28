@@ -452,7 +452,7 @@ export function QuotePage() {
       await requestReopen(row.id, me, reason)
       showToast('Reopen requested — your manager will review', 'success')
       // Let approvers know a reopen was requested (best-effort).
-      notifyReopenRequested({ opportunity: s(qi.opp) || row.opportunity || '', requestedByName: prettifyEmail(me), reason: reason || '' })
+      notifyReopenRequested({ opportunity: s(qi.opp) || row.opportunity || '', requestedByName: prettifyEmail(me), requestedByEmail: me, reason: reason || '' })
     } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
   }
   // Mark Closed Lost — any user, even on a locked/approved quote, no reopen and no
@@ -475,7 +475,7 @@ export function QuotePage() {
     try {
       await markClosedLost(row.id, note, me)
       showToast('Marked Closed Lost', 'success')
-      notifyQuoteLost({ opportunity: s(qiEdit.opp) || row.opportunity || '', customer: s(qiEdit.account) || row.customer || '', lostByName: prettifyEmail(me), note })
+      notifyQuoteLost({ opportunity: s(qiEdit.opp) || row.opportunity || '', customer: s(qiEdit.account) || row.customer || '', lostByName: prettifyEmail(me), lostByEmail: me, note })
     } catch (e) { showToast('Couldn’t mark lost: ' + errMsg(e), 'error', 6000) }
   }
   // Delete (approvers only). Soft delete — the row is stamped deleted_at and drops

@@ -53,6 +53,7 @@ export async function notifyQuoteApproved(d: QuoteApprovedData): Promise<void> {
 export interface ReopenRequestedData {
   opportunity: string
   requestedByName: string
+  requestedByEmail: string // the requester's login email — lets the notifier self-exclude them from the approver recipients
   reason: string
 }
 
@@ -93,6 +94,7 @@ export interface QuoteLostData {
   opportunity: string
   customer: string
   lostByName: string
+  lostByEmail: string // who marked it lost (login email) — lets the notifier self-exclude them
   note: string
 }
 
