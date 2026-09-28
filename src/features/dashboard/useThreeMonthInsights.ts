@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { restFetch } from '../../lib/restFetch'
 import { lineItemsFromData, type QuoteData } from '../../data/quoteModel'
 import { baseOpp, revRank } from '../../lib/opp'
+import { isBudgetaryStage } from '../../data/quoteDefaults'
 
 // Rolling-3-month insights (current month + 2 prior), net of revisions:
 //   • product codes — quoted value vs. closed-won value, by code
@@ -34,6 +35,7 @@ interface Row {
   revision?: string | null
   total?: number | null
   customer?: string | null
+  stage?: string | null
   data?: QuoteData
 }
 
@@ -77,7 +79,7 @@ async function load(): Promise<ThreeMonthInsights> {
   const [createdRaw, wonRaw] = await Promise.all([
     restFetch<Row[]>(
       'GET',
-      `quotes?select=id,opportunity,revision,total,customer,data&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
+      `quotes?select=id,opportunity,revision,total,customer,stage,data&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
     ),
     restFetch<Row[]>(
       'GET',
@@ -99,8 +101,8 @@ async function load(): Promise<ThreeMonthInsights> {
   }
   quotedNet.forEach((q) => {
     const a = getA(acctName(q))
-    a.quotedTotal += num(q.total)
-    a.quotedCount += 1
+    a.quotedCount += 1 // count unchanged — budgetary still counts
+    if (!isBudgetaryStage(q.stage)) a.quotedTotal += num(q.total) // value excludes budgetary
   })
   wonNet.forEach((q) => {
     const a = getA(acctName(q))
@@ -109,7 +111,7 @@ async function load(): Promise<ThreeMonthInsights> {
   })
 
   return {
-    quotedCodes: aggCodes(quotedNet).slice(0, 5),
+    quotedCodes: aggCodes(quotedNet.filter((q) => !isBudgetaryStage(q.stage))).slice(0, 5),
     wonCodes: aggCodes(wonNet).slice(0, 5),
     accounts: Array.from(acct.values()),
   }

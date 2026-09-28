@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { restFetchAll } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
+import { isBudgetaryStage } from '../../data/quoteDefaults'
 
 // Year-to-date metrics, NET OF REVISIONS — the same rule as Year-End Highlights, the
 // monthly trend, and this card's own this-month-vs-average row. "Quotes created" counts
@@ -102,12 +103,14 @@ async function load(): Promise<YtdMetrics> {
 
   let newCount = 0
   let newTotal = 0
-  groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; newTotal += num(latest.total) } })
+  // Count is unchanged (budgetary still counts as a quote); value excludes budgetary.
+  groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; if (!isBudgetaryStage(latest.stage)) newTotal += num(latest.total) } })
 
   let revDelta = 0
   rowsCreated.forEach((r) => {
     if (revRank(r.revision) < 1) return // lettered revisions only
     if ((r.stage || '') === 'Closed Lost') return // active quoting only
+    if (isBudgetaryStage(r.stage)) return // budgetary excluded from quoted value
     const originMs = familyOriginMs.get(baseOpp(r.opportunity)) ?? Infinity
     if (originMs >= yStartMs) return // original is also this year -> already counted in newTotal
     const priorOpp = priorRevOppOf(r.opportunity, r.revision)

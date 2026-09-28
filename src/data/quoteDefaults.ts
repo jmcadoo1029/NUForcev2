@@ -29,5 +29,11 @@ export const SETUP_FORM_DEFAULTS: Record<string, any> = { techRate: '175', fabHo
 // Dropdown option lists (Classic's Quote Info + Test Item forms).
 export const TYPE_OPTS = ['New Business', 'Existing Business']
 export const STAGE_OPTS = ['Proposal/Price Quote', 'Budgetary', 'Closed Won', 'Closed Lost', 'Other']
+
+/** True when a quote's stage marks it Budgetary. Budgetary quotes are excluded from
+ *  quoted-VALUE totals across the dashboard (monthly, annual/YTD, trend, year-end,
+ *  3-month insights) — but they STILL count toward quote counts (value only). Won
+ *  figures key off Closed Won, so they're never affected. */
+export const isBudgetaryStage = (s?: string | null): boolean => String(s || '').trim() === 'Budgetary'
 export const GSI_OPTS = ['Unknown', 'Yes', 'No']
 export const DOC_OPTS = ['None', 'ITAR', 'CUI/Other', 'NOFORN', 'Dist Statement B/C/D/E']

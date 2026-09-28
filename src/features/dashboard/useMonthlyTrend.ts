@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { restFetch } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
+import { isBudgetaryStage } from '../../data/quoteDefaults'
 
 // Per-month trend over the last N months, net of revisions. Uses the SAME rules
 // as the current-month KPI (newCount + newTotal + revision deltas), so the
@@ -22,6 +23,7 @@ interface CreatedRow {
   revision?: string | null
   total?: number | null
   created_at?: string | null
+  stage?: string | null
 }
 interface RevRow {
   id: string
@@ -63,7 +65,7 @@ async function load(): Promise<MonthPoint[]> {
   const created =
     (await restFetch<CreatedRow[]>(
       'GET',
-      `quotes?select=id,opportunity,revision,total,created_at&created_at=gte.${encodeURIComponent(rangeStartIso)}`,
+      `quotes?select=id,opportunity,revision,total,created_at,stage&created_at=gte.${encodeURIComponent(rangeStartIso)}`,
     )) || []
   created.forEach((r) => {
     const t = new Date(r.created_at || '').getTime()
@@ -85,8 +87,8 @@ async function load(): Promise<MonthPoint[]> {
     })
     groups.forEach((latest, k) => {
       if (hasBlank.has(k)) {
-        b.newCount += 1
-        b.newTotal += num(latest.total)
+        b.newCount += 1 // count unchanged — budgetary still counts
+        if (!isBudgetaryStage(latest.stage)) b.newTotal += num(latest.total) // value excludes budgetary
       }
     })
   })
@@ -105,6 +107,7 @@ async function load(): Promise<MonthPoint[]> {
     const rangeEnd = months[months.length - 1].endMs
     const revsHere = revs.filter((r) => {
       if (String(r.stage || '') === 'Closed Lost') return false // active quoting only
+      if (isBudgetaryStage(r.stage)) return false // budgetary excluded from quoted value
       const t = new Date(r.created_at || '').getTime()
       return !isNaN(t) && t >= rangeStart && t < rangeEnd
     })

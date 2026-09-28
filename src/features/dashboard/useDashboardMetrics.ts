@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { restFetch } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
+import { isBudgetaryStage } from '../../data/quoteDefaults'
 
 // Current-month sales metrics, ported faithfully from the classic dashboard.
 // Net-of-revisions rules (the load-bearing part):
@@ -78,7 +79,7 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
   const [createdRaw, wonRaw, wonNullRaw] = await Promise.all([
     restFetch<Row[]>(
       'GET',
-      `quotes?select=id,opportunity,revision,total,created_at&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
+      `quotes?select=id,opportunity,revision,total,created_at,stage&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
     ),
     restFetch<Row[]>(
       'GET',
@@ -104,10 +105,14 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
   })
   let newCount = 0
   let newTotal = 0
+  let newCountValued = 0 // non-budgetary new families — used for a meaningful average
   groups.forEach((latest, b) => {
     if (baseHasBlank.has(b)) {
-      newCount += 1
-      newTotal += num(latest.total)
+      newCount += 1 // count is unchanged — budgetary quotes still count as quotes
+      if (!isBudgetaryStage(latest.stage)) { // value excludes budgetary
+        newTotal += num(latest.total)
+        newCountValued += 1
+      }
     }
   })
 
@@ -124,6 +129,7 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
     )
     const revsHere = (revs || []).filter((r) => {
       if (String(r.stage || '') === 'Closed Lost') return false // active quoting only
+      if (isBudgetaryStage(r.stage)) return false // budgetary excluded from quoted value
       const t = new Date(r.created_at || '').getTime()
       return !isNaN(t) && t >= ms && t < me
     })
@@ -193,7 +199,7 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
   return {
     quotedTotal: netTotal,
     quotedCount: newCount,
-    avgQuote: newCount ? Math.round(newTotal / newCount) : 0,
+    avgQuote: newCountValued ? Math.round(newTotal / newCountValued) : 0,
     wonTotal,
     wonCount: wonNet.length,
     wonNewTotal,

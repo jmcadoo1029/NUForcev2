@@ -3,6 +3,7 @@ import { restFetchAll } from '../../lib/restFetch'
 import { baseOpp, revRank } from '../../lib/opp'
 import { lineItemsFromData, type QuoteData } from '../../data/quoteModel'
 import { codeReportLabel } from './codeReport'
+import { isBudgetaryStage } from '../../data/quoteDefaults'
 
 // Year-end highlights — per-calendar-year rollups over ALL history, computed once
 // (client-side) so the panel can flip between years and compute a trailing 3-year
@@ -158,7 +159,8 @@ async function load(): Promise<YearEndData> {
     rowsCreated.forEach((r) => { const b = baseOpp(r.opportunity) || `__id_${r.id}`; const cur = groups.get(b); if (!cur || revRank(r.revision) > revRank(cur.revision)) groups.set(b, r) })
     let newCount = 0
     let newTotal = 0
-    groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; newTotal += num(latest.total) } })
+    // Count unchanged (budgetary still counts as a quote); value excludes budgetary.
+    groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; if (!isBudgetaryStage(stageOf(latest))) newTotal += num(latest.total) } })
 
     let revDelta = 0
     let mostChangedUp: Change | null = null
@@ -166,6 +168,7 @@ async function load(): Promise<YearEndData> {
     rowsCreated.forEach((r) => {
       if (revRank(r.revision) < 1) return // lettered revisions only
       if (stageOf(r) === 'Closed Lost') return // active quoting only
+      if (isBudgetaryStage(stageOf(r))) return // budgetary excluded from quoted value
       const originMs = familyOriginMs.get(baseOpp(r.opportunity)) ?? Infinity
       if (originMs >= yStartMs) return // original is also this year → already in newTotal
       const priorOpp = priorRevOppOf(r.opportunity, r.revision)
@@ -204,7 +207,7 @@ async function load(): Promise<YearEndData> {
       bestProduct: wonByCode[0] || null,
       mostChangedUp,
       mostChangedDown,
-      quotedByCode: aggCodes(latestPerBase(rowsCreated)),
+      quotedByCode: aggCodes(latestPerBase(rowsCreated).filter((q) => !isBudgetaryStage(stageOf(q)))),
       wonNewByCode: aggCodes(newWonFams),
     }
   }
