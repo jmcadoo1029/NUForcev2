@@ -37,6 +37,7 @@ function groupBySend(docs: SentDocument[]): SentDocument[][] {
 export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportunity?: string }) {
   const [docs, setDocs] = useState<SentDocument[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [pv, setPv] = useState<string | null>(null)
   const [err, setErr] = useState('')
   const base = baseOpp(opportunity || '')
 
@@ -71,6 +72,26 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
       a.click()
     } finally {
       setBusy(null)
+    }
+  }
+
+  // Preview: open the exact stored file inline in a new tab (PDFs and images render
+  // in-browser; other types fall back to a download). We open the tab synchronously
+  // inside the click so pop-up blockers allow it, then point it at the signed URL
+  // once it resolves.
+  const preview = async (d: SentDocument) => {
+    setErr('')
+    if (!d.storage_bucket || !d.storage_path) { setErr(`No stored copy for “${d.file_name}”.`); return }
+    const w = window.open('about:blank', '_blank')
+    if (w) { try { w.opener = null } catch { /* ignore */ } }
+    setPv(d.id)
+    try {
+      const url = await signedDownloadUrl(d.storage_bucket, d.storage_path)
+      if (!url) { setErr(`Couldn’t get a preview link for “${d.file_name}”.`); if (w) w.close(); return }
+      if (w) w.location.href = url
+      else window.open(url, '_blank', 'noopener,noreferrer') // pop-up was blocked — try a direct open
+    } finally {
+      setPv(null)
     }
   }
 
@@ -114,6 +135,7 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
                         <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', color: '#fff', background: meta.tone, padding: '2px 8px', borderRadius: 20, flexShrink: 0 }}>{meta.label}</span>
                         <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.file_name}</span>
                         {d.byte_size ? <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', flexShrink: 0 }}>{fmtBytes(d.byte_size)}</span> : null}
+                        <button onClick={() => preview(d)} disabled={pv === d.id} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: pv === d.id ? 'default' : 'pointer', flexShrink: 0 }}>{pv === d.id ? '…' : 'Preview'}</button>
                         <button onClick={() => download(d)} disabled={busy === d.id} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '4px 12px', cursor: busy === d.id ? 'default' : 'pointer', flexShrink: 0 }}>{busy === d.id ? '…' : 'Download'}</button>
                       </div>
                     )
