@@ -269,7 +269,7 @@ async function reconcileMassEmail(emailId: string, type: string, data: any): Pro
   try {
     const { data: rows, error } = await sb
       .from('mass_email_recipients')
-      .select('id, status')
+      .select('id, status, email')
       .eq('resend_id', emailId)
       .limit(1);
     if (error) { console.error('resend-webhook: mass recipient lookup failed', error); return false; }
@@ -281,16 +281,18 @@ async function reconcileMassEmail(emailId: string, type: string, data: any): Pro
     else if (type === 'email.complained') newStatus = 'complained';
     else if (type === 'email.bounced') newStatus = data?.bounce?.type === 'Transient' ? '' : 'bounced';
 
+    // Classify a hard bounce once: bad address vs security block vs unclear.
+    const bounce = newStatus === 'bounced' ? classifyBounce(data?.bounce) : null;
+
     if (newStatus) {
       const cur = (rows[0].status || '').toString();
       // Never downgrade a meaningful terminal status back to 'delivered'.
       const keep = (cur === 'opened' || cur === 'bounced' || cur === 'complained') && newStatus === 'delivered';
       if (!keep) {
         // Record WHY on a problem status, so the Outreach feed and the receipt digest
-        // can show the sender which addresses to investigate and the reason. (Mass
-        // bounces still never flag Bad Contacts — that's the whole point of this path.)
+        // can show the sender which addresses to investigate and the reason.
         const patch: Record<string, unknown> = { status: newStatus, updated_at: new Date().toISOString() };
-        if (newStatus === 'bounced') patch.error = classifyBounce(data?.bounce).detail;
+        if (newStatus === 'bounced') patch.error = bounce!.detail;
         else if (newStatus === 'complained') patch.error = 'Recipient marked the message as spam';
         const { error: uErr } = await sb
           .from('mass_email_recipients')
@@ -299,8 +301,27 @@ async function reconcileMassEmail(emailId: string, type: string, data: any): Pro
         if (uErr) console.error('resend-webhook: mass recipient update failed', uErr);
       }
     }
+
+    // Bad Contacts for mass sends: flag the contact ONLY on a genuinely bad address
+    // (no such mailbox). A security BLOCK or an unclear bounce leaves the (likely valid)
+    // contact alone, and a spam complaint on a mass send is NOT treated as a bad address.
+    // This is the one narrow case where a mass bounce touches contacts. Case-insensitive
+    // match (mass addresses are lowercased; stored contacts may be mixed case).
+    if (newStatus === 'bounced' && bounce?.kind === 'bad_address') {
+      const addr = (rows[0].email || '').toString().trim();
+      if (addr) {
+        const { data: flagged, error: cErr } = await sb
+          .from('contacts')
+          .update({ email_invalid: true, email_invalid_at: new Date().toISOString(), email_invalid_reason: bounce.detail })
+          .ilike('email', addr)
+          .select('id');
+        if (cErr) console.error('resend-webhook: mass bad-address contact flag failed', cErr);
+        else console.log(`resend-webhook: mass bad-address bounce → flagged ${flagged?.length || 0} contact(s) for ${addr}`);
+      }
+    }
+
     console.log(`resend-webhook: mass-email event ${type} for ${emailId} → ${newStatus || 'no-op'}`);
-    return true; // handled — do NOT touch contacts or quote_sends
+    return true; // handled — do NOT fall through to quote_sends reconcile
   } catch (e) {
     console.error('resend-webhook: reconcileMassEmail threw', e);
     return false;
@@ -337,9 +358,10 @@ serve(async (req: Request) => {
   const recipient = (rawTo || '').toString().trim();
   // The Resend message id — matches quote_sends.resend_id (NUForce addition).
   const emailId = (data.email_id || data.id || '').toString();
-  // NUForce Mass Emails: if this id belongs to a mass-email blast, record its
-  // metric and STOP before any contacts logic — mass-email bounces must never
-  // flag Bad Contacts.
+  // NUForce Mass Emails: if this id belongs to a mass-email blast, record its metric
+  // (and, only on a genuinely bad address, flag the contact) inside reconcileMassEmail,
+  // then STOP — a mass bounce never runs the quote_sends reconcile or the quote flag /
+  // sender-alert path below.
   if (await reconcileMassEmail(emailId, type || '', data)) return ack();
   let reason = '';
   let sendStatus: SendStatus | null = null;

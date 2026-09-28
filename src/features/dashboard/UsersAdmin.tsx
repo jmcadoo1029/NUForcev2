@@ -72,12 +72,12 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
   const t = q.trim().toLowerCase()
   const filtered = (users || []).filter((u) => !t || `${u.name} ${u.email} ${u.roleName}`.toLowerCase().includes(t))
 
-  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals' | 'notify_receipts', value: boolean | null) => {
+  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals' | 'notify_receipts' | 'notify_bad_contacts', value: boolean | null) => {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     setBusy(true)
     try {
       await saveUserSettings(u.email, { [field]: value }, me)
-      const key = field === 'notify_delivery' ? 'notifyDelivery' : field === 'notify_approvals' ? 'notifyApprovals' : 'notifyReceipts'
+      const key = field === 'notify_delivery' ? 'notifyDelivery' : field === 'notify_approvals' ? 'notifyApprovals' : field === 'notify_receipts' ? 'notifyReceipts' : 'notifyBadContacts'
       setUsers((prev) => (prev || []).map((x) => (x.email === u.email ? { ...x, [key]: value } : x)))
     } catch (e) {
       showToast('Save failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
@@ -171,6 +171,15 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_receipts', v)}
                   onReset={() => setToggle(sel, 'notify_receipts', null)}
+                />
+                <Toggle
+                  label="Bad contacts report"
+                  help="A weekly digest (Mondays) of every contact currently flagged invalid — bounced or manually flagged — with the reason and the Workspace job #s that person is attached to, so they can be fixed or removed from the client database. Off by default; turn it on for whoever maintains the database."
+                  on={effective(sel.notifyBadContacts, sel.badContactsDefault)}
+                  isDefault={sel.notifyBadContacts === null}
+                  disabled={busy}
+                  onChange={(v) => setToggle(sel, 'notify_bad_contacts', v)}
+                  onReset={() => setToggle(sel, 'notify_bad_contacts', null)}
                 />
 
                 <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Page access</div>
