@@ -176,6 +176,18 @@ export async function fetchMassEmails(): Promise<MassEmailRow[]> {
   return (await restFetch<MassEmailRow[]>('GET', `mass_emails?select=id,subject,audience,sent_by,sent_at,recipient_count,sent_count,failed_count&order=sent_at.desc&limit=100`)) || []
 }
 
+/** The recipients of one blast that need attention — bounced, marked spam, or
+ *  failed to send — with the reason when the webhook recorded one. Lets the sender
+ *  see exactly which addresses to investigate. All pages (a big blast can exceed the
+ *  1000-row cap). */
+export interface MassRecipientProblem { email: string; name: string | null; status: string; reason: string | null }
+export async function fetchMassEmailProblems(massId: string): Promise<MassRecipientProblem[]> {
+  const rows = await fetchAllPages<{ email: string; name: string | null; status: string | null; error: string | null }>(
+    `mass_email_recipients?select=email,name,status,error&mass_email_id=eq.${encodeURIComponent(massId)}&status=in.(bounced,complained,failed)&order=status,email`,
+  )
+  return rows.map((r) => ({ email: r.email, name: r.name ?? null, status: r.status || 'unknown', reason: r.error ?? null }))
+}
+
 /** Delivery metrics for one blast, tallied from its recipient rows (all pages —
  *  a large blast has more than the 1000-row response cap). */
 export async function fetchMassEmailMetrics(massId: string): Promise<MassEmailMetrics> {

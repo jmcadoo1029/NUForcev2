@@ -286,9 +286,15 @@ async function reconcileMassEmail(emailId: string, type: string, data: any): Pro
       // Never downgrade a meaningful terminal status back to 'delivered'.
       const keep = (cur === 'opened' || cur === 'bounced' || cur === 'complained') && newStatus === 'delivered';
       if (!keep) {
+        // Record WHY on a problem status, so the Outreach feed and the receipt digest
+        // can show the sender which addresses to investigate and the reason. (Mass
+        // bounces still never flag Bad Contacts — that's the whole point of this path.)
+        const patch: Record<string, unknown> = { status: newStatus, updated_at: new Date().toISOString() };
+        if (newStatus === 'bounced') patch.error = classifyBounce(data?.bounce).detail;
+        else if (newStatus === 'complained') patch.error = 'Recipient marked the message as spam';
         const { error: uErr } = await sb
           .from('mass_email_recipients')
-          .update({ status: newStatus, updated_at: new Date().toISOString() })
+          .update(patch)
           .eq('resend_id', emailId);
         if (uErr) console.error('resend-webhook: mass recipient update failed', uErr);
       }

@@ -20,8 +20,10 @@ export interface UserRow {
   caps: Record<string, unknown>
   deliveryDefault: boolean
   approvalsDefault: boolean
+  receiptsDefault: boolean // mass-email receipt digests default ON for managers
   notifyDelivery: boolean | null // null = use deliveryDefault
   notifyApprovals: boolean | null // null = use approvalsDefault
+  notifyReceipts: boolean | null // null = use receiptsDefault
   features: Record<string, boolean> // per-user page/action overrides; key absent = use the role default (see featureDefaultFor)
 }
 
@@ -56,7 +58,7 @@ export async function fetchUsers(): Promise<UserRow[]> {
   const [emps, roles, settings, quotes] = await Promise.all([
     restFetchAll<Record<string, unknown>>('employees?select=*&order=email,id').catch(() => [] as Record<string, unknown>[]),
     restFetch<Record<string, unknown>[]>('GET', 'permission_roles?select=*&limit=200').catch(() => [] as Record<string, unknown>[]),
-    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null; features: Record<string, unknown> | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals,features&limit=5000').catch(() => []),
+    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null; notify_receipts: boolean | null; features: Record<string, unknown> | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals,notify_receipts,features&limit=5000').catch(() => []),
     restFetchAll<{ submitted_by: string | null; approved_by: string | null }>('quotes?select=submitted_by,approved_by&order=id').catch(() => [] as { submitted_by: string | null; approved_by: string | null }[]),
   ])
 
@@ -98,8 +100,10 @@ export async function fetchUsers(): Promise<UserRow[]> {
       caps,
       deliveryDefault: isSender, // on for active senders — who gets delivery alerts today
       approvalsDefault: isManager || isActive,
+      receiptsDefault: isManager, // mass-email receipt digests default ON for managers
       notifyDelivery: st ? st.notify_delivery : null,
       notifyApprovals: st ? st.notify_approvals : null,
+      notifyReceipts: st ? st.notify_receipts : null,
       features,
     })
   }
@@ -130,7 +134,7 @@ export async function saveUserFeature(
 
 export async function saveUserSettings(
   email: string,
-  patch: { notify_delivery?: boolean | null; notify_approvals?: boolean | null },
+  patch: { notify_delivery?: boolean | null; notify_approvals?: boolean | null; notify_receipts?: boolean | null },
   by: string,
 ): Promise<void> {
   const e = (email || '').trim().toLowerCase()

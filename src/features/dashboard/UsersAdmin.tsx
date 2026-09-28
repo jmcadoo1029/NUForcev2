@@ -72,12 +72,13 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
   const t = q.trim().toLowerCase()
   const filtered = (users || []).filter((u) => !t || `${u.name} ${u.email} ${u.roleName}`.toLowerCase().includes(t))
 
-  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals', value: boolean | null) => {
+  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals' | 'notify_receipts', value: boolean | null) => {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     setBusy(true)
     try {
       await saveUserSettings(u.email, { [field]: value }, me)
-      setUsers((prev) => (prev || []).map((x) => (x.email === u.email ? { ...x, ...(field === 'notify_delivery' ? { notifyDelivery: value } : { notifyApprovals: value }) } : x)))
+      const key = field === 'notify_delivery' ? 'notifyDelivery' : field === 'notify_approvals' ? 'notifyApprovals' : 'notifyReceipts'
+      setUsers((prev) => (prev || []).map((x) => (x.email === u.email ? { ...x, [key]: value } : x)))
     } catch (e) {
       showToast('Save failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
     } finally { setBusy(false) }
@@ -161,6 +162,15 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_approvals', v)}
                   onReset={() => setToggle(sel, 'notify_approvals', null)}
+                />
+                <Toggle
+                  label="Mass email receipts"
+                  help="A receipt digest emailed after each mass / account / re-engage send, about an hour later once delivery has settled: how many landed, bounced, or were marked spam, the addresses to investigate, and a link to the Outreach feed. Defaults on for managers."
+                  on={effective(sel.notifyReceipts, sel.receiptsDefault)}
+                  isDefault={sel.notifyReceipts === null}
+                  disabled={busy}
+                  onChange={(v) => setToggle(sel, 'notify_receipts', v)}
+                  onReset={() => setToggle(sel, 'notify_receipts', null)}
                 />
 
                 <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Page access</div>

@@ -1,9 +1,9 @@
 import { useState, type CSSProperties } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Card, CardLabel } from '../../components'
 import { prettifyEmail } from '../../lib/text'
 import { useCanViewManager } from '../../lib/perms'
-import { fetchMassEmailMetrics, type MassEmailMetrics } from '../../lib/massEmail'
+import { fetchMassEmailMetrics, fetchMassEmailProblems, type MassEmailMetrics, type MassRecipientProblem } from '../../lib/massEmail'
 import { useFeed, useOutreachFeed, type FeedItem, type FeedMode, type OutreachItem } from './useActivityFeed'
 
 // Feed — reached from the header "Feed" tab. Views via the toggle:
@@ -88,6 +88,7 @@ function OutreachRow({ item }: { item: OutreachItem }) {
   const who = prettifyEmail(item.by) || 'Someone'
   const [open, setOpen] = useState(false)
   const [metrics, setMetrics] = useState<MassEmailMetrics | null>(null)
+  const [problems, setProblems] = useState<MassRecipientProblem[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [mErr, setMErr] = useState('')
 
@@ -98,7 +99,9 @@ function OutreachRow({ item }: { item: OutreachItem }) {
       setLoading(true)
       setMErr('')
       try {
-        setMetrics(await fetchMassEmailMetrics(item.id))
+        const [mm, probs] = await Promise.all([fetchMassEmailMetrics(item.id), fetchMassEmailProblems(item.id)])
+        setMetrics(mm)
+        setProblems(probs)
       } catch (e) {
         setMErr(e instanceof Error ? e.message : String(e))
       } finally {
@@ -106,6 +109,8 @@ function OutreachRow({ item }: { item: OutreachItem }) {
       }
     }
   }
+
+  const statusLabel = (s: string) => (s === 'bounced' ? 'Bounced' : s === 'complained' ? 'Marked spam' : s === 'failed' ? 'Failed to send' : s)
 
   return (
     <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
@@ -145,6 +150,22 @@ function OutreachRow({ item }: { item: OutreachItem }) {
                 <span style={{ marginLeft: 'auto', color: 'var(--dim)', fontSize: 'var(--fs-caption)' }}>{metrics.total.toLocaleString()} tracked</span>
               </div>
             )
+          )}
+
+          {!loading && !mErr && problems && problems.length > 0 && (
+            <div style={{ marginTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-3)' }}>
+              <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>
+                Needs attention ({problems.length})
+              </div>
+              {problems.map((p, i) => (
+                <div key={`${p.email}:${i}`} style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 0', borderBottom: i < problems.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: p.status === 'bounced' || p.status === 'complained' ? 'var(--accent)' : 'var(--muted)', minWidth: 92 }}>{statusLabel(p.status)}</span>
+                  <a href={`mailto:${p.email}`} style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{p.email}</a>
+                  {p.name && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>{p.name}</span>}
+                  {p.reason && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', flexBasis: '100%', paddingLeft: 92 }}>{p.reason}</span>}
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -211,7 +232,10 @@ function OutreachList({ refreshKey }: { refreshKey: number }) {
 
 export function ActivityFeed() {
   const { canView } = useCanViewManager() // Outreach log: managers/approvers + view-only roles
-  const [tab, setTab] = useState<Tab>('activity')
+  const [params] = useSearchParams()
+  // A receipt email links to /feed?tab=outreach — open that tab straight away.
+  const initialTab: Tab = params.get('tab') === 'outreach' ? 'outreach' : 'activity'
+  const [tab, setTab] = useState<Tab>(initialTab)
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Guard: if a non-manager is ever on the outreach tab, fall back to activity.
