@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { Card, CardLabel } from '../../components'
 import { prettifyEmail } from '../../lib/text'
 import { useCanViewManager } from '../../lib/perms'
-import { fetchMassEmailMetrics, fetchMassEmailProblems, type MassEmailMetrics, type MassRecipientProblem } from '../../lib/massEmail'
+import { fetchMassEmailMetrics, fetchMassEmailProblems, fetchMassRecipientsByStatus, type MassEmailMetrics, type MassRecipientProblem, type MassRecipient } from '../../lib/massEmail'
 import { useFeed, useOutreachFeed, type FeedItem, type FeedMode, type OutreachItem } from './useActivityFeed'
 
 // Feed — reached from the header "Feed" tab. Views via the toggle:
@@ -73,13 +73,22 @@ function Row({ item }: { item: FeedItem }) {
   )
 }
 
-// One metric pill in the expanded outreach detail.
-function Metric({ label, value, color }: { label: string; value: number; color: string }) {
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, fontSize: 'var(--fs-sm)' }}>
+// One metric pill in the expanded outreach detail. When onClick is given it renders
+// as a button that expands the recipient list for that metric (delivered / opened).
+function Metric({ label, value, color, onClick, active }: { label: string; value: number; color: string; onClick?: () => void; active?: boolean }) {
+  const inner = (
+    <>
       <span style={{ fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>{value.toLocaleString()}</span>
       <span style={{ color: 'var(--muted)' }}>{label}</span>
-    </span>
+    </>
+  )
+  if (onClick) {
+    return (
+      <button onClick={onClick} title={`Show ${label} recipients`} style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, fontSize: 'var(--fs-sm)', fontFamily: 'inherit', background: 'none', border: 'none', padding: '0 0 2px', cursor: 'pointer', borderBottom: '2px solid ' + (active ? color : 'transparent') }}>{inner}</button>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 5, fontSize: 'var(--fs-sm)' }}>{inner}</span>
   )
 }
 
@@ -91,6 +100,10 @@ function OutreachRow({ item }: { item: OutreachItem }) {
   const [problems, setProblems] = useState<MassRecipientProblem[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [mErr, setMErr] = useState('')
+  // Delivered / Opened recipient lists — loaded on demand when the metric is clicked.
+  const [listKind, setListKind] = useState<'delivered' | 'opened' | null>(null)
+  const [lists, setLists] = useState<Record<string, MassRecipient[]>>({})
+  const [listLoading, setListLoading] = useState(false)
 
   const toggle = async () => {
     const next = !open
@@ -111,6 +124,22 @@ function OutreachRow({ item }: { item: OutreachItem }) {
   }
 
   const statusLabel = (s: string) => (s === 'bounced' ? 'Bounced' : s === 'complained' ? 'Marked spam' : s === 'failed' ? 'Failed to send' : s)
+
+  const toggleList = async (kind: 'delivered' | 'opened') => {
+    if (listKind === kind) { setListKind(null); return }
+    setListKind(kind)
+    if (!lists[kind]) {
+      setListLoading(true)
+      try {
+        const rows = await fetchMassRecipientsByStatus(item.id, [kind])
+        setLists((m) => ({ ...m, [kind]: rows }))
+      } catch {
+        setLists((m) => ({ ...m, [kind]: [] }))
+      } finally {
+        setListLoading(false)
+      }
+    }
+  }
 
   return (
     <div style={{ padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
@@ -142,14 +171,31 @@ function OutreachRow({ item }: { item: OutreachItem }) {
               <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No delivery data recorded for this send yet.</div>
             ) : (
               <div style={{ display: 'flex', gap: 'var(--sp-4)', flexWrap: 'wrap', alignItems: 'baseline' }}>
-                <Metric label="delivered" value={metrics.delivered} color="var(--pos)" />
-                <Metric label="opened" value={metrics.opened} color="var(--info)" />
+                <Metric label="delivered" value={metrics.delivered} color="var(--pos)" onClick={metrics.delivered > 0 ? () => toggleList('delivered') : undefined} active={listKind === 'delivered'} />
+                <Metric label="opened" value={metrics.opened} color="var(--info)" onClick={metrics.opened > 0 ? () => toggleList('opened') : undefined} active={listKind === 'opened'} />
                 <Metric label="bounced" value={metrics.bounced} color="var(--accent)" />
                 {metrics.complained > 0 && <Metric label="spam reports" value={metrics.complained} color="var(--accent)" />}
                 {metrics.failed > 0 && <Metric label="failed" value={metrics.failed} color="var(--muted)" />}
-                <span style={{ marginLeft: 'auto', color: 'var(--dim)', fontSize: 'var(--fs-caption)' }}>{metrics.total.toLocaleString()} tracked</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--dim)', fontSize: 'var(--fs-caption)' }}>{metrics.total.toLocaleString()} tracked · click delivered or opened for the list</span>
               </div>
             )
+          )}
+
+          {listKind && (
+            <div style={{ marginTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', paddingTop: 'var(--sp-3)' }}>
+              <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>
+                {listKind === 'delivered' ? 'Delivered to' : 'Opened by'} ({lists[listKind]?.length ?? 0})
+              </div>
+              {listLoading && !lists[listKind] && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Loading…</div>}
+              {lists[listKind] && lists[listKind].length === 0 && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No recipients in this state yet.</div>}
+              {lists[listKind] && lists[listKind].map((r, i) => (
+                <div key={`${r.email}:${i}`} style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'baseline', flexWrap: 'wrap', padding: '4px 0', borderBottom: i < lists[listKind].length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <a href={`mailto:${r.email}`} style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{r.email}</a>
+                  {r.name && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>{r.name}</span>}
+                  {r.company && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>· {r.company}</span>}
+                </div>
+              ))}
+            </div>
           )}
 
           {!loading && !mErr && problems && problems.length > 0 && (

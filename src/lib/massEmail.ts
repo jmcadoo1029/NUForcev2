@@ -188,6 +188,29 @@ export async function fetchMassEmailProblems(massId: string): Promise<MassRecipi
   return rows.map((r) => ({ email: r.email, name: r.name ?? null, status: r.status || 'unknown', reason: r.error ?? null }))
 }
 
+/** Recipients of one blast in the given delivery states (e.g. delivered, opened),
+ *  with name and company. Company is a best-effort embed of the contact's client
+ *  name (contacts.client_id → clients.name); it's blank when the address isn't in
+ *  the directory. Used by the Outreach feed to expand who a send landed on. */
+export interface MassRecipient { email: string; name: string | null; company: string | null; status: string }
+export async function fetchMassRecipientsByStatus(massId: string, statuses: string[]): Promise<MassRecipient[]> {
+  if (!statuses.length) return []
+  const rows = await fetchAllPages<{ email: string; name: string | null; status: string | null }>(
+    `mass_email_recipients?select=email,name,status&mass_email_id=eq.${encodeURIComponent(massId)}&status=in.(${statuses.join(',')})&order=email`,
+  )
+  // Best-effort company: map each address to its contact's client name in one embed.
+  const company = new Map<string, string>()
+  const emails = Array.from(new Set(rows.map((r) => (r.email || '').toLowerCase()).filter(Boolean))).slice(0, 1000)
+  if (emails.length) {
+    try {
+      const inList = emails.map((e) => encodeURIComponent(e)).join(',')
+      const cs = await restFetch<Array<{ email: string | null; clients: { name: string | null } | null }>>('GET', `contacts?select=email,clients(name)&email=in.(${inList})`)
+      ;(cs || []).forEach((c) => { const nm = (c.clients?.name || '').trim(); if (c.email && nm) company.set(c.email.toLowerCase(), nm) })
+    } catch { /* company stays blank — best effort */ }
+  }
+  return rows.map((r) => ({ email: r.email, name: r.name ?? null, company: company.get((r.email || '').toLowerCase()) ?? null, status: r.status || '' }))
+}
+
 /** Delivery metrics for one blast, tallied from its recipient rows (all pages —
  *  a large blast has more than the 1000-row response cap). */
 export async function fetchMassEmailMetrics(massId: string): Promise<MassEmailMetrics> {
