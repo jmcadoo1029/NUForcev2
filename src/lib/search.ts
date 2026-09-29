@@ -1,4 +1,5 @@
 import { restFetch } from './restFetch'
+import { baseOpp, revRank } from './opp'
 
 // Comprehensive dashboard search over quotes: quote numbers, accounts, contacts,
 // emails, and job numbers. Quote-number input is normalized so "23-123" and
@@ -78,14 +79,30 @@ export async function globalSearch(term: string): Promise<SearchResults> {
     }
   })
 
+  // Collapse each opportunity family to its latest revision only, so the results
+  // never tempt someone into opening (and close-winning) a superseded revision —
+  // older revisions live in the quote's Revision History instead. Rank by the
+  // trailing revision letter (base < A < B < …); ties keep the first (already
+  // ordered updated_at.desc). A hard close-won guard on the quote page is the
+  // real safety net; this just keeps the list clean.
+  const revRankOf = (opp: string | null) => revRank((opp || '').slice(baseOpp(opp).length))
+  const latestByFamily = new Map<string, SearchQuote>()
+  quotes.forEach((r) => {
+    const fam = baseOpp(r.opportunity)
+    const cur = latestByFamily.get(fam)
+    if (!cur || revRankOf(r.opportunity) > revRankOf(cur.opportunity)) latestByFamily.set(fam, r)
+  })
+  const keepIds = new Set(Array.from(latestByFamily.values()).map((r) => r.id))
+  const collapsed = quotes.filter((r) => keepIds.has(r.id))
+
   // Distinct accounts among the matches whose name actually contains the term,
   // so typing an account name surfaces the account link (not every customer of
   // an opportunity match).
   const lc = t.toLowerCase()
   const accSet = new Set<string>()
-  quotes.forEach((r) => {
+  collapsed.forEach((r) => {
     if (r.customer && r.customer.toLowerCase().includes(lc)) accSet.add(r.customer)
   })
 
-  return { quotes: quotes.slice(0, 30), accounts: Array.from(accSet).sort().slice(0, 6) }
+  return { quotes: collapsed.slice(0, 30), accounts: Array.from(accSet).sort().slice(0, 6) }
 }

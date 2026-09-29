@@ -5,7 +5,8 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { serializeQuote, saveQuote, type QuoteSaveModel } from '../../lib/quoteSave'
 import { isRevisionChange, oppChangeInfo, resetApprovalForNewRevision } from '../../lib/quoteGuards'
 import { persistApproval, persistWonApproval, requestReopen } from '../../lib/approvals'
-import { fetchQuoteByKey, type QuoteRow } from '../../lib/quotes'
+import { fetchQuoteByKey, fetchRevisions, type QuoteRow } from '../../lib/quotes'
+import { revRank } from '../../lib/opp'
 import { lineItemsFromData } from '../../data/quoteModel'
 import { TI_DEFAULTS, QI_DEFAULTS, SETUP_FORM_DEFAULTS, STAGE_OPTS, type RelatedContact, type BudgetRow, type LineItem } from '../../data/quoteDefaults'
 import { codeLabel } from '../../data/constants'
@@ -131,6 +132,11 @@ export function QuotePage() {
   const [wonConfirmOpen, setWonConfirmOpen] = useState(false)
   const wonConfirmedRef = useRef(false)
   const prevStageRef = useRef<string>('')
+  // Latest LIVE revision in this quote's family (excludes Closed Lost / Cancelled),
+  // loaded once per quote. Used to warn before close-winning a superseded revision.
+  const [familyLatest, setFamilyLatest] = useState<{ opp: string; rank: number } | null>(null)
+  const [staleRevWarnOpen, setStaleRevWarnOpen] = useState(false)
+  const staleRevConfirmedRef = useRef(false)
   // The Job # as it was when the quote loaded — an unchanged saved Job # means the
   // project presumably exists (button shows "Open"); a freshly-typed one means create.
   const [loadedJobNum, setLoadedJobNum] = useState('')
@@ -321,6 +327,29 @@ export function QuotePage() {
     }
   }, [])
 
+  // Load the family's latest LIVE revision so we can warn if someone tries to
+  // close-win a superseded one. "Live" excludes Closed Lost / Cancelled revisions
+  // (a dead newer rev shouldn't block winning an earlier one). Best-effort.
+  useEffect(() => {
+    let alive = true
+    const opp = row?.opportunity || ''
+    if (!opp) { setFamilyLatest(null); return }
+    fetchRevisions(opp)
+      .then((revs) => {
+        if (!alive) return
+        let best: { opp: string; rank: number } | null = null
+        for (const r of revs) {
+          const st = r.stage || ''
+          if (st.includes('Lost') || st.includes('Cancelled')) continue
+          const rank = revRank(r.revision)
+          if (!best || rank > best.rank) best = { opp: r.opportunity || '', rank }
+        }
+        setFamilyLatest(best)
+      })
+      .catch(() => { if (alive) setFamilyLatest(null) })
+    return () => { alive = false }
+  }, [row?.id, row?.opportunity])
+
   // When the stage transitions TO Closed Won this session, auto-fill the Won Date
   // with today's date (editable) if it's empty. Transition-guarded via prevStageRef
   // so loading an existing quote never stamps or overwrites its date.
@@ -330,6 +359,7 @@ export function QuotePage() {
     prevStageRef.current = stage
     if (prev && prev !== 'Closed Won' && stage === 'Closed Won') {
       wonConfirmedRef.current = false // each fresh close-won re-requires confirmation
+      staleRevConfirmedRef.current = false // and re-checks the revision-is-latest guard
       if (!wonInfo.wonDate.trim()) setWonInfo((w) => ({ ...w, wonDate: new Date().toLocaleDateString('en-US') }))
     }
   }, [qiEdit.stage])
@@ -797,6 +827,13 @@ export function QuotePage() {
     // session needs a Won Date AND an explicit confirmation before it saves.
     // Already-Closed-Won quotes loaded from the DB skip this — no friction on edits.
     if (s(qiEdit.stage) === 'Closed Won' && row.stage !== 'Closed Won') {
+      // Superseded-revision guard: warn (once) if a newer live revision exists, so an
+      // older revision isn't close-won by mistake. Overridable — some deals really do
+      // award an earlier rev — but it names the latest so you can jump to it instead.
+      if (familyLatest && familyLatest.rank > revRank(row.revision) && !staleRevConfirmedRef.current) {
+        setStaleRevWarnOpen(true)
+        return
+      }
       if (!wonInfo.wonDate.trim()) { showToast('Enter the Won Date first.', 'warn', 4000); return }
       // Account-link guardrail: a won job becomes a Workspace project, which needs a
       // linked account (client_id — set by PICKING the account from the list, not
@@ -1150,6 +1187,30 @@ export function QuotePage() {
               </div>
               <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button variant="primary" small onClick={() => setLinkWarnOpen(false)}>Go back</Button>
+              </div>
+            </Modal>
+          )}
+
+          {staleRevWarnOpen && (
+            <Modal title="This isn’t the latest revision" onClose={() => setStaleRevWarnOpen(false)} width={460}>
+              <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--text)', lineHeight: 1.6, marginBottom: 'var(--sp-4)' }}>
+                You’re about to mark <b>{row.opportunity}</b> as <b>Closed Won</b>, but{' '}
+                <b>{familyLatest?.opp}</b> is a newer revision of this quote. Older revisions are
+                usually kept only for history — winning one by mistake is easy to do.
+                <div style={{ color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>
+                  Open the latest revision to win it instead, or continue if this older revision is the one that was actually awarded.
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)', flexWrap: 'wrap' }}>
+                <Button variant="ghost" small onClick={() => setStaleRevWarnOpen(false)}>Go back</Button>
+                {familyLatest?.opp && (
+                  <Button variant="secondary" small onClick={() => { setStaleRevWarnOpen(false); navigate(`/quote/${encodeURIComponent(familyLatest.opp)}`) }}>
+                    Open {familyLatest.opp}
+                  </Button>
+                )}
+                <Button variant="primary" small onClick={() => { staleRevConfirmedRef.current = true; setStaleRevWarnOpen(false); onSave() }}>
+                  Close won this revision anyway
+                </Button>
               </div>
             </Modal>
           )}
