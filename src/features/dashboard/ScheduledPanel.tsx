@@ -27,7 +27,7 @@ const BUILTIN_TPLS: { key: TemplateKey; label: string }[] = [
   { key: 'mass_reengage', label: 'Re-engage' },
 ]
 
-const input: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const input: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 const label: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', display: 'block', marginBottom: 4, marginTop: 'var(--sp-3)' }
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -147,7 +147,7 @@ export function ScheduledPanel() {
     try { await deleteSchedule(s.id); showToast('Deleted', 'info'); load() } catch (e) { showToast('Delete failed: ' + errMsg(e), 'error', 6000) }
   }
 
-  const seg = (on: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+  const seg = (on: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : 'var(--surface)', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 
   return (
     <>

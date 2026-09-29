@@ -245,7 +245,7 @@ export function PricingCalculator({
               {specMenuOpen && (
                 <>
                   <div onClick={() => setSpecMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 5 }} />
-                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 6, overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 6, overflow: 'hidden' }}>
                     <button onClick={() => { setSpecMenuOpen(false); openClassicSpecBuilder() }} title="Open a blank Test Spec Builder" style={menuItemStyle}>Classic Spec Builder</button>
                     <button onClick={() => { setSpecMenuOpen(false); openSpecFromQuote() }} title="Pre-fill from this quote's calculator selections" style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Spec Builder from NUForce</button>
                   </div>

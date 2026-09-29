@@ -26,7 +26,7 @@ function Section({ title, rows, tone, isApprover, onDecide, selectedIds, onToggl
   return (
     <div style={{ marginBottom: 'var(--sp-4)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--sp-2)' }}>
-        <span style={{ minWidth: 26, height: 26, borderRadius: 7, background: rows.length ? tone : '#f0f2f5', color: rows.length ? '#fff' : 'var(--dim)', fontWeight: 800, fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{rows.length}</span>
+        <span style={{ minWidth: 26, height: 26, borderRadius: 7, background: rows.length ? tone : 'var(--chip)', color: rows.length ? '#fff' : 'var(--dim)', fontWeight: 800, fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 6px' }}>{rows.length}</span>
         <span style={{ fontWeight: 600 }}>{title}</span>
         {selectable && rows.length > 0 && (
           <label style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--fs-caption)', color: 'var(--muted)', cursor: 'pointer' }}>
@@ -51,7 +51,7 @@ function Section({ title, rows, tone, isApprover, onDecide, selectedIds, onToggl
               {isApprover && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => onDecide(r, 'approve')} style={actBtn('var(--pos)', 'var(--pos)', '#fff')}>Approve</button>
-                  <button onClick={() => onDecide(r, 'reject')} style={actBtn('#fff', 'var(--accent)', 'var(--accent)')}>Reject</button>
+                  <button onClick={() => onDecide(r, 'reject')} style={actBtn('var(--surface)', 'var(--accent)', 'var(--accent)')}>Reject</button>
                 </div>
               )}
             </div>
@@ -84,7 +84,7 @@ function ReopenSection({ rows, isApprover, busyId, onResolve }: { rows: Approval
               {isApprover && (
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button disabled={busy} onClick={() => onResolve(r, 'unlock')} style={{ ...actBtn('var(--pos)', 'var(--pos)', '#fff'), opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>{busy ? '…' : 'Unlock'}</button>
-                  <button disabled={busy} onClick={() => onResolve(r, 'dismiss')} style={{ ...actBtn('#fff', 'var(--border-strong)', 'var(--muted)'), opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>Dismiss</button>
+                  <button disabled={busy} onClick={() => onResolve(r, 'dismiss')} style={{ ...actBtn('var(--surface)', 'var(--border-strong)', 'var(--muted)'), opacity: busy ? 0.6 : 1, cursor: busy ? 'default' : 'pointer' }}>Dismiss</button>
                 </div>
               )}
             </div>
@@ -264,7 +264,7 @@ export function ApprovalsCard() {
       {massOpen && (
         <Modal title={`Approve ${selectedCount} quote${selectedCount !== 1 ? 's' : ''}?`} onClose={() => !busy && setMassOpen(false)} width={460}>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Approves all {selectedCount} selected quote{selectedCount !== 1 ? 's' : ''} at once. Decision comment (optional) — applied to each.</div>
-          <textarea value={massComment} onChange={(e) => setMassComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <textarea value={massComment} onChange={(e) => setMassComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
           {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>Preview — writes are off, so this only clears them from your view.</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <button onClick={() => setMassOpen(false)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>
@@ -276,7 +276,7 @@ export function ApprovalsCard() {
       {massWonOpen && (
         <Modal title={`Approve ${selectedWonCount} Closed-Won?`} onClose={() => !busy && setMassWonOpen(false)} width={460}>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Approves all {selectedWonCount} selected Closed-Won quote{selectedWonCount !== 1 ? 's' : ''} at once. Decision comment (optional) — applied to each.</div>
-          <textarea value={massWonComment} onChange={(e) => setMassWonComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <textarea value={massWonComment} onChange={(e) => setMassWonComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
           {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>Preview — writes are off, so this only clears them from your view.</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <button onClick={() => setMassWonOpen(false)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>
@@ -288,7 +288,7 @@ export function ApprovalsCard() {
       {target && (
         <Modal title={`${target.decision === 'approve' ? 'Approve' : 'Reject'} ${target.kind === 'won' ? 'Closed-Won' : 'quote'} ${target.row.opportunity}?`} onClose={() => !busy && setTarget(null)} width={460}>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Decision comments (optional) — visible to the submitter.</div>
-          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <textarea value={comment} onChange={(e) => setComment(e.target.value)} rows={3} placeholder="Add a note…" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
           {!WRITES_ENABLED && <div style={{ color: 'var(--warn)', fontStyle: 'italic', fontSize: 'var(--fs-sm)', marginBottom: 'var(--sp-3)' }}>Preview — writes are off, so this only clears it from your view.</div>}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <button onClick={() => setTarget(null)} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 16px', cursor: busy ? 'default' : 'pointer' }}>Cancel</button>

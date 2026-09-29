@@ -92,7 +92,7 @@ export function GlobalSearch() {
 
   return (
     <div ref={boxRef} style={{ position: 'relative' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '0 12px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '0 12px' }}>
         <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0, color: 'var(--dim)' }}>
           <circle cx="7" cy="7" r="5" stroke="currentColor" strokeWidth="1.7" />
           <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
@@ -107,7 +107,7 @@ export function GlobalSearch() {
       </div>
 
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 380, maxWidth: '90vw', background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 420, overflowY: 'auto', zIndex: 60 }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, width: 380, maxWidth: '90vw', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 420, overflowY: 'auto', zIndex: 60 }}>
           {loading && !hasResults && <div style={{ padding: '12px', fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>Searching…</div>}
           {!loading && !hasResults && <div style={{ padding: '12px', fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>No matches.</div>}
 

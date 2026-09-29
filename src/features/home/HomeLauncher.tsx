@@ -28,7 +28,7 @@ const cardBase: CSSProperties = {
   gap: 10,
   textAlign: 'left',
   fontFamily: 'inherit',
-  background: '#fff',
+  background: 'var(--surface)',
   border: '1px solid var(--border)',
   borderRadius: 'var(--radius)',
   padding: '22px 20px',

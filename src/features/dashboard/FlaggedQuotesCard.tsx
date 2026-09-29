@@ -68,7 +68,7 @@ export function FlaggedQuotesCard() {
                 onClick={() => resolve(f.id, f.opportunity)}
                 disabled={busyId === f.id}
                 title="Resolve this flag"
-                style={{ flexShrink: 0, fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '4px 12px', cursor: busyId === f.id ? 'default' : 'pointer' }}
+                style={{ flexShrink: 0, fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '4px 12px', cursor: busyId === f.id ? 'default' : 'pointer' }}
               >
                 {busyId === f.id ? '…' : 'Resolve'}
               </button>

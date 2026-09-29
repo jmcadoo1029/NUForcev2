@@ -47,7 +47,7 @@ export function InProgressCard() {
 
   const th: React.CSSProperties = { textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '8px 10px', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, background: 'var(--card)' }
   const td: React.CSSProperties = { padding: '9px 10px', borderBottom: '1px solid var(--border)', verticalAlign: 'top' }
-  const inp: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+  const inp: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '6px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 
   const upd = (key: number, patch: Partial<EditRow>) => setRows((cur) => cur.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   const remove = (key: number) => setRows((cur) => cur.filter((r) => r.key !== key))

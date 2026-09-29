@@ -23,7 +23,7 @@ export function SpecBuilderModal({ src, onClose }: { src: string; onClose: () =>
       <iframe
         src={src}
         title="Spec Builder"
-        style={{ width: '100%', height: '78vh', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: '#fff', display: 'block' }}
+        style={{ width: '100%', height: '78vh', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', display: 'block' }}
       />
     </Modal>
   )

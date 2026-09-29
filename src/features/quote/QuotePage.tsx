@@ -1054,7 +1054,7 @@ export function QuotePage() {
                   {pdfMenuOpen && (
                     <>
                       <div onClick={() => setPdfMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
                         <button onClick={() => { setPdfMenuOpen(false); exportPdf(false, 'save') }} style={menuItemStyle}>Save as PDF</button>
                         <button onClick={() => { setPdfMenuOpen(false); exportPdf(false, 'print') }} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Print…</button>
                       </div>
@@ -1067,7 +1067,7 @@ export function QuotePage() {
                     {budgetMenuOpen && (
                       <>
                         <div onClick={() => setBudgetMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 200, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
                           <button onClick={() => { setBudgetMenuOpen(false); exportPdf(true, 'save') }} style={menuItemStyle}>Save as PDF</button>
                           <button onClick={() => { setBudgetMenuOpen(false); exportPdf(true, 'print') }} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Print…</button>
                         </div>
@@ -1081,7 +1081,7 @@ export function QuotePage() {
                   {specMenuOpen && (
                     <>
                       <div onClick={() => setSpecMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
+                      <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, width: 230, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', zIndex: 31, overflow: 'hidden' }}>
                         <button onClick={openClassicSpec} style={menuItemStyle}>Classic Spec Builder</button>
                         <button onClick={openSpecFromCrr} style={{ ...menuItemStyle, borderTop: '1px solid var(--border)' }}>Spec Builder from CRR</button>
                       </div>
@@ -1117,7 +1117,7 @@ export function QuotePage() {
                 onKeyDown={(e) => { if (e.key === 'Enter') doClone() }}
                 placeholder="e.g. 26-457"
                 autoFocus
-                style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }}
+                style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }}
               />
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)', marginTop: 'var(--sp-4)' }}>
                 <Button variant="secondary" small onClick={() => setCloneOpen(false)} disabled={cloneBusy}>Cancel</Button>

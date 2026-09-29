@@ -30,7 +30,7 @@ function Chip({ label, on, tone, onClick, title }: { label: string; on: boolean;
         fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em',
         padding: '5px 12px', borderRadius: 20, cursor: 'pointer',
         border: `1px solid ${on ? tone : 'var(--border-strong)'}`,
-        background: on ? tone : '#fff', color: on ? '#fff' : 'var(--text)',
+        background: on ? tone : 'var(--surface)', color: on ? '#fff' : 'var(--text)',
       }}
     >{label}</button>
   )
@@ -62,7 +62,7 @@ function ChatterModal({ entries, onPost, onClose }: { entries: ChatterEntry[]; o
         onKeyDown={(e) => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) post() }}
         placeholder="Add a note, update, or question… (Ctrl+Enter to post)"
         rows={3}
-        style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, padding: '9px 11px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
+        style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.6, padding: '9px 11px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'var(--sp-2)' }}>
         <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', fontStyle: 'italic' }}>{WRITES_ENABLED ? 'Visible to the whole team.' : 'Preview — posts don’t persist until writes are enabled.'}</span>
@@ -256,7 +256,7 @@ export function QuoteActions({
         {flagOpen && (
           <>
             <div onClick={() => setFlagOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 280 }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 280 }}>
               <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>{isFlagged ? 'Flag' : 'Flag this quote'}</div>
               {isFlagged ? (
                 <>
@@ -266,7 +266,7 @@ export function QuoteActions({
                 </>
               ) : (
                 <>
-                  <textarea value={flagNoteDraft} onChange={(e) => setFlagNoteDraft(e.target.value)} placeholder="Add a note (optional)…" rows={2} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+                  <textarea value={flagNoteDraft} onChange={(e) => setFlagNoteDraft(e.target.value)} placeholder="Add a note (optional)…" rows={2} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
                   <button onClick={doFlag} disabled={flagBusy} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: flagBusy ? 'default' : 'pointer' }}>{flagBusy ? 'Flagging…' : 'Flag this quote'}</button>
                 </>
               )}
@@ -277,15 +277,15 @@ export function QuoteActions({
       <Chip label={isSent ? 'Sent' : 'Send'} on={isSent} tone="var(--pos)" onClick={() => onOpenSend?.()} title="Send this quote — compose the email, choose attachments, and it marks sent on send" />
       {isSent && onOpenFollowUp && <Chip label="Follow up" on={false} tone="var(--info)" onClick={() => onOpenFollowUp(lastSend?.id ?? null)} title="Send a follow-up email now — reschedules the next reminder" />}
       {isFollowedUp && <span title="A follow-up has gone out" style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: '#fff', background: 'var(--pos)', borderRadius: 20, padding: '3px 10px' }}>Followed up</span>}
-      <button onClick={() => setChatterOpen(true)} title="Open the chatter thread" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <button onClick={() => setChatterOpen(true)} title="Open the chatter thread" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         Chatter{entries.length > 0 && <span style={{ background: 'var(--info)', color: '#fff', borderRadius: 10, padding: '0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>{entries.length}</span>}
       </button>
       <div style={{ position: 'relative' }}>
-        {canEditContact && <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setAcctId(clientId); setAcctText(customer || ''); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)' }}>Change Contact</button>}
+        {canEditContact && <button onClick={() => { setCName(contactName); setCEmail(contactEmail); setAcctId(clientId); setAcctText(customer || ''); setContactOpen((v) => !v) }} title="Update the contact/email on this quote — doesn't require a reopen or re-approval" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)' }}>Change Contact</button>}
         {contactOpen && (
           <>
             <div onClick={() => setContactOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
+            <div style={{ position: 'absolute', top: 'calc(100% + 8px)', left: 0, zIndex: 41, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
               <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>Update contact</div>
               <div style={{ marginBottom: 'var(--sp-2)' }}>
                 <Autocomplete<ClientRow>
@@ -313,7 +313,7 @@ export function QuoteActions({
                   emptyText={acctId ? 'No contacts on this account — type a name.' : 'Pick an account, or type a name.'}
                 />
               </div>
-              <input value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Contact email" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+              <input value={cEmail} onChange={(e) => setCEmail(e.target.value)} placeholder="Contact email" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>Updates just the contact — won't reset approval or line items.</div>
               <button onClick={doSaveContact} disabled={contactBusy} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: contactBusy ? 'default' : 'pointer' }}>{contactBusy ? 'Saving…' : 'Save contact'}</button>
             </div>
@@ -325,15 +325,15 @@ export function QuoteActions({
           <button
             onClick={() => { setDelNote(''); setDelOpen((v) => !v) }}
             title="Delete this quote (approvers only) — hides it but keeps it restorable"
-            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--neg, #c0392b)', background: '#fff', color: 'var(--neg, #c0392b)' }}
+            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, letterSpacing: '.02em', padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid var(--neg, #c0392b)', background: 'var(--surface)', color: 'var(--neg, #c0392b)' }}
           >Delete</button>
           {delOpen && (
             <>
               <div onClick={() => setDelOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
+              <div style={{ position: 'absolute', top: 'calc(100% + 8px)', right: 0, zIndex: 41, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', padding: 'var(--sp-3) var(--sp-4)', width: 300 }}>
                 <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--neg, #c0392b)', marginBottom: 'var(--sp-2)' }}>Delete this quote</div>
                 <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)', lineHeight: 1.5 }}>It's hidden from all lists but not erased — an approver can restore it from the ⋯ menu → Deleted quotes.</div>
-                <textarea value={delNote} onChange={(e) => setDelNote(e.target.value)} placeholder="Reason (required)…" rows={2} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
+                <textarea value={delNote} onChange={(e) => setDelNote(e.target.value)} placeholder="Reason (required)…" rows={2} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }} />
                 <button onClick={doDelete} disabled={delBusy || !delNote.trim()} style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: delNote.trim() ? 'var(--neg, #c0392b)' : 'var(--border)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 0', cursor: delBusy || !delNote.trim() ? 'default' : 'pointer' }}>{delBusy ? 'Deleting…' : 'Delete quote'}</button>
               </div>
             </>

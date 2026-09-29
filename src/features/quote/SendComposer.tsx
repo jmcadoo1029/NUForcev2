@@ -75,7 +75,7 @@ const firstNameOf = (name?: string | null) => (name || '').trim().split(/\s+/)[0
 
 const inputStyle: React.CSSProperties = {
   width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)',
-  border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box',
+  border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box',
 }
 const labelStyle: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
 

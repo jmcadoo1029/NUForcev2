@@ -155,7 +155,7 @@ export function ApprovalBar({
   // that's already closed, or one mid-approval decision.
   const canMarkLost = !!onMarkLost && stage !== 'Closed Lost' && stage !== 'Closed Won' && aStatus !== 'pending' && wStatus !== 'pending_won'
 
-  const textarea: React.CSSProperties = { width: '100%', minHeight: 56, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }
+  const textarea: React.CSSProperties = { width: '100%', minHeight: 56, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-2)' }
 
   const nothingToShow = aStatus === 'none' && wStatus === 'none' && !canSubmitWon && !isSalesforce
   if (nothingToShow && !canSubmit && !canRequestReopen && !(isApprover && locked) && !canMarkLost) return null
@@ -244,7 +244,7 @@ export function ApprovalBar({
       {reopenOpen && (
         <Modal title="Request reopen" onClose={() => setReopenOpen(false)} width={460}>
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-2)' }}>This asks an approver to unlock the quote so it can be edited. Add a reason (optional) — they'll see it on their dashboard.</div>
-          <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={3} placeholder="Why does this need to reopen?" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={3} placeholder="Why does this need to reopen?" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <Button variant="ghost" small onClick={() => setReopenOpen(false)}>Cancel</Button>
             <Button small onClick={() => { onRequestReopen?.(reopenReason.trim()); setReopenOpen(false) }}>Send request</Button>
@@ -257,7 +257,7 @@ export function ApprovalBar({
           <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', lineHeight: 1.55, marginBottom: 'var(--sp-3)' }}>
             Record why this quote was lost. Your note is added to the quote's chatter and the approvers are notified — no reopen needed. If the customer comes back, the quote can still be reopened. Imported quotes don't need to be converted first.
           </div>
-          <textarea value={lostNote} onChange={(e) => setLostNote(e.target.value)} rows={3} placeholder="Why was it lost? (required — e.g. went with a competitor, project cancelled, budget)" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
+          <textarea value={lostNote} onChange={(e) => setLostNote(e.target.value)} rows={3} placeholder="Why was it lost? (required — e.g. went with a competitor, project cancelled, budget)" style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', lineHeight: 1.5, padding: 8, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }} />
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <Button variant="ghost" small onClick={() => setLostOpen(false)}>Cancel</Button>
             <Button small disabled={!lostNote.trim()} onClick={() => { onMarkLost?.(lostNote.trim()); setLostOpen(false) }}>Mark Closed Lost</Button>

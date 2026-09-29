@@ -2,9 +2,18 @@
    The single source of truth for the theme. Every screen and component reads
    from these variables, so the whole app can be re-themed from this one file.
    Values match the approved theme preview: lighter surfaces, one NU-red accent,
-   bigger readable type, no emoji. */
+   bigger readable type, no emoji.
+
+   DARK THEME ("Ink"): the same tokens are redefined for dark mode below. Nothing
+   about layout, structure, or behavior changes — only the color *values* swap, so
+   every feature works identically in either theme. Dark applies when the OS asks
+   for it (unless the user has forced Light) or when the user picks Dark explicitly;
+   the per-user choice is stored in localStorage and reflected on <html data-theme>.
+   Default is Light. */
 
 :root {
+  color-scheme: light;
+
   /* ── Type scale (readability-first; base is 15px vs. the old ~11px) ── */
   --fs-caption: 12px;
   --fs-sm: 13px;
@@ -26,7 +35,10 @@
 
   /* ── Color ── */
   --bg: #f5f6f8;
+  --bg-subtle: #f8f9fb;   /* faint off-white panel (product picker, revision body) */
+  --chip: #f0f2f5;        /* neutral gray chip/track on a white card */
   --card: #ffffff;
+  --surface: #ffffff;     /* raised control faces (buttons, inputs, toggles, rows) */
   --border: #e6e8ec;
   --border-strong: #d5d9df;
   --text: #1c2430;
@@ -36,10 +48,12 @@
   --accent: #b3282d;
   --accent-hover: #9c2226;
   --accent-soft: #fbeceb;
+  --accent-border: #f0c9c7;
 
   --pos: #1e8449;
   --pos-soft: #eaf6ef;
   --pos-border: #bfe3cc;
+  --ok: #2f855a;
 
   --info: #2e6da4;
   --info-soft: #ecf2f9;
@@ -47,6 +61,8 @@
   --warn: #a9791b;
   --warn-soft: #fdf6e6;
   --warn-border: #f0dfa8;
+
+  --neg: #c0392b;         /* destructive (delete quote) */
 
   /* ── Shape & elevation ── */
   --radius: 12px;
@@ -56,6 +72,85 @@
 
   /* ── Fonts ── */
   --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+/* ── Dark theme: "Ink" (desaturated, low-glare) ──────────────────────────────
+   Only color *values* change. Applied two ways, sharing the same values:
+     1. OS is dark AND the user hasn't forced Light  → :root:not([data-theme="light"])
+     2. The user explicitly chose Dark               → :root[data-theme="dark"]
+   Keeping both selectors means "Auto" follows the OS while "Light"/"Dark" win. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #15181d;
+    --bg-subtle: #1a1e25;
+    --chip: #262c36;
+    --card: #1d222a;
+    --surface: #262c36;
+    --border: #2d3540;
+    --border-strong: #3b4552;
+    --text: #d7dce3;
+    --muted: #8b95a2;
+    --dim: #5f6975;
+
+    --accent: #d9585c;
+    --accent-hover: #e46a6e;
+    --accent-soft: rgba(217, 88, 92, 0.15);
+    --accent-border: rgba(217, 88, 92, 0.36);
+
+    --pos: #4fa878;
+    --pos-soft: rgba(79, 168, 120, 0.14);
+    --pos-border: rgba(79, 168, 120, 0.36);
+    --ok: #4fa878;
+
+    --info: #5b96c8;
+    --info-soft: rgba(91, 150, 200, 0.14);
+
+    --warn: #c9a052;
+    --warn-soft: rgba(201, 160, 82, 0.14);
+    --warn-border: rgba(201, 160, 82, 0.36);
+
+    --neg: #e06b66;
+
+    --shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #15181d;
+  --bg-subtle: #1a1e25;
+  --chip: #262c36;
+  --card: #1d222a;
+  --surface: #262c36;
+  --border: #2d3540;
+  --border-strong: #3b4552;
+  --text: #d7dce3;
+  --muted: #8b95a2;
+  --dim: #5f6975;
+
+  --accent: #d9585c;
+  --accent-hover: #e46a6e;
+  --accent-soft: rgba(217, 88, 92, 0.15);
+  --accent-border: rgba(217, 88, 92, 0.36);
+
+  --pos: #4fa878;
+  --pos-soft: rgba(79, 168, 120, 0.14);
+  --pos-border: rgba(79, 168, 120, 0.36);
+  --ok: #4fa878;
+
+  --info: #5b96c8;
+  --info-soft: rgba(91, 150, 200, 0.14);
+
+  --warn: #c9a052;
+  --warn-soft: rgba(201, 160, 82, 0.14);
+  --warn-border: rgba(201, 160, 82, 0.36);
+
+  --neg: #e06b66;
+
+  --shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; }

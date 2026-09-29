@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 // Test Item, Specifications/Notes, Related Contacts). Extracted from QuotePage so
 // every section renders fields identically.
 
-export const regInput: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+export const regInput: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
 // Quote Info is a two-column grid; minmax(0,1fr) lets a long value (e.g. an
 // email address, which has no spaces to wrap on) wrap inside its own column

@@ -124,7 +124,7 @@ export function SentFiles({ quoteId, opportunity }: { quoteId: string; opportuni
               <div key={gi} style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', padding: '8px 12px', background: 'var(--bg)', fontSize: 'var(--fs-sm)' }}>
                   {(base || head.revision) && (
-                    <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: head.quote_id === quoteId ? 'var(--accent)' : 'var(--muted)', background: head.quote_id === quoteId ? 'var(--accent-soft)' : '#f0f2f5', border: '1px solid var(--border)', borderRadius: 20, padding: '1px 9px', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: head.quote_id === quoteId ? 'var(--accent)' : 'var(--muted)', background: head.quote_id === quoteId ? 'var(--accent-soft)' : 'var(--chip)', border: '1px solid var(--border)', borderRadius: 20, padding: '1px 9px', whiteSpace: 'nowrap' }}>
                       {base ? base + (head.revision || '') : `rev ${head.revision}`}{head.quote_id === quoteId ? ' · this one' : ''}
                     </span>
                   )}

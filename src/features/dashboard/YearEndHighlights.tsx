@@ -22,8 +22,8 @@ function trailing3(byYear: Record<number, YearStats>, year: number, pick: (s: Ye
   return { avg: vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0, n: vals.length }
 }
 
-const pill = (active: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border-strong)'), background: active ? 'var(--accent-soft)' : '#fff', color: active ? 'var(--accent)' : 'var(--muted)' })
-const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : '#fff', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+const pill = (active: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border-strong)'), background: active ? 'var(--accent-soft)' : 'var(--surface)', color: active ? 'var(--accent)' : 'var(--muted)' })
+const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : 'var(--surface)', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 const sectionLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', margin: 'var(--sp-5) 0 var(--sp-3)' }
 // A text value (name / code) for a StatTile — smaller than the big numeric value so long
 // names wrap instead of overflowing.
@@ -103,7 +103,7 @@ function CodeRanks({ title, codes, emptyNote }: { title: string; codes: CodeAgg[
             <div style={{ width: 150, flexShrink: 0, fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={`${c.code} — ${c.label}`}>
               <b style={{ color: 'var(--accent)' }}>{c.code}</b> <span style={{ color: 'var(--muted)' }}>{c.label}</span>
             </div>
-            <div style={{ flex: 1, height: 24, background: '#f0f2f5', borderRadius: 6, overflow: 'hidden', minWidth: 80 }}>
+            <div style={{ flex: 1, height: 24, background: 'var(--chip)', borderRadius: 6, overflow: 'hidden', minWidth: 80 }}>
               <div style={{ height: '100%', width: `${Math.round((valOf(c) / max) * 100)}%`, minWidth: valOf(c) > 0 ? 52 : 0, background: 'var(--accent)', borderRadius: 6, display: 'flex', alignItems: 'center', paddingLeft: 8, color: '#fff', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>
                 {mode === 'value' ? moneyShort(c.value) : c.count}
               </div>

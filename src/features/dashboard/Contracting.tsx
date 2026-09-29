@@ -33,7 +33,7 @@ const WON_BADGE: Record<string, { label: string; tone: string }> = {
 }
 
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4 }
-const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 
 export function Contracting() {
   const { showToast } = useToast()
@@ -227,7 +227,7 @@ export function Contracting() {
             {searching && results.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Searching…</div>}
             {!searching && results.length === 0 && <div style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No matches.</div>}
             {results.map((r) => (
-              <button key={r.id} onClick={() => select(r.id)} style={{ display: 'flex', width: '100%', textAlign: 'left', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '9px 12px', borderBottom: '1px solid var(--border)', background: selectedId === r.id ? 'var(--accent-soft)' : '#fff', border: 'none', borderLeft: selectedId === r.id ? '3px solid var(--accent)' : '3px solid transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button key={r.id} onClick={() => select(r.id)} style={{ display: 'flex', width: '100%', textAlign: 'left', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '9px 12px', borderBottom: '1px solid var(--border)', background: selectedId === r.id ? 'var(--accent-soft)' : 'var(--surface)', border: 'none', borderLeft: selectedId === r.id ? '3px solid var(--accent)' : '3px solid transparent', cursor: 'pointer', fontFamily: 'inherit' }}>
                 <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{r.opportunity || '—'}</span>
                 <span style={{ flex: 1, color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer || '—'}</span>
                 {r.job_number && <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--pos)' }}>Job {r.job_number}</span>}

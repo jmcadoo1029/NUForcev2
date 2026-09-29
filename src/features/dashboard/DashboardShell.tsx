@@ -26,7 +26,7 @@ const segBase: CSSProperties = {
 }
 const seg = (active: boolean, first: boolean): CSSProperties => ({
   ...segBase,
-  background: active ? 'var(--text)' : '#fff',
+  background: active ? 'var(--text)' : 'var(--surface)',
   color: active ? '#fff' : 'var(--muted)',
   borderLeft: first ? 'none' : '1px solid var(--border-strong)',
 })
@@ -73,7 +73,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             onClick={() => setRefreshKey((k) => k + 1)}
             title="Refresh dashboard data"
             aria-label="Refresh"
-            style={{ width: 42, height: 42, border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}
+            style={{ width: 42, height: 42, border: '1px solid var(--border-strong)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}
           >
             <svg width="17" height="17" viewBox="0 0 17 17" fill="none">
               <path d="M14 3v4h-4M3 14v-4h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -81,8 +81,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             </svg>
           </button>
           <MoreMenu privacy={privacy} onTogglePrivacy={() => setPrivacy((p) => !p)} />
-          <a href={WORKSPACE_URL} target="_blank" rel="noopener noreferrer" title="Open NUWorkspace in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Workspace ↗</a>
-          <a href={CLASSIC_URL} target="_blank" rel="noopener noreferrer" title="Open the classic NUForce in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--muted)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Classic ↗</a>
+          <a href={WORKSPACE_URL} target="_blank" rel="noopener noreferrer" title="Open NUWorkspace in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Workspace ↗</a>
+          <a href={CLASSIC_URL} target="_blank" rel="noopener noreferrer" title="Open the classic NUForce in a new tab" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--muted)', textDecoration: 'none', border: '1px solid var(--border-strong)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', padding: '9px 14px', whiteSpace: 'nowrap' }}>Classic ↗</a>
           {isApprover && <Button variant="secondary" onClick={() => setImportOpen(true)}>Import a Draft</Button>}
           <Button onClick={() => navigate('/quote/new')}>+ New Quote</Button>
         </div>

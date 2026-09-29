@@ -8,7 +8,7 @@ import { mineStandards, type MinerResult } from '../../lib/standardsMiner'
 // will use. This runs in the browser with the user's session, so it stays inside
 // the same data boundary the app already has (nothing new leaves).
 
-const chip: React.CSSProperties = { display: 'inline-flex', alignItems: 'baseline', gap: 6, fontSize: 'var(--fs-caption)', fontWeight: 600, padding: '3px 9px', borderRadius: 20, border: '1px solid var(--border-strong)', background: '#fff', whiteSpace: 'nowrap' }
+const chip: React.CSSProperties = { display: 'inline-flex', alignItems: 'baseline', gap: 6, fontSize: 'var(--fs-caption)', fontWeight: 600, padding: '3px 9px', borderRadius: 20, border: '1px solid var(--border-strong)', background: 'var(--surface)', whiteSpace: 'nowrap' }
 
 export function StandardsMiner({ onClose }: { onClose: () => void }) {
   const { showToast } = useToast()
@@ -72,7 +72,7 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
               <input type="checkbox" checked={includeAncillary} onChange={toggleAncillary} disabled={running} />
               Include reports / procedures / teardown
             </label>
-            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter standards…" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', minWidth: 160 }} />
+            <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="Filter standards…" style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', minWidth: 160 }} />
             <Button small variant="ghost" onClick={() => run(includeAncillary)} disabled={running}>Re-scan</Button>
             <Button small variant="ghost" onClick={copyJson}>Copy JSON</Button>
             <Button small onClick={downloadJson}>Download mapping</Button>
@@ -89,7 +89,7 @@ export function StandardsMiner({ onClose }: { onClose: () => void }) {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                   {s.codes.length === 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>no coded line items on those quotes</span>}
                   {s.codes.slice(0, 6).map((c, i) => (
-                    <span key={c.code} style={{ ...chip, borderColor: i === 0 ? 'var(--accent)' : 'var(--border-strong)', background: i === 0 ? 'var(--accent-soft)' : '#fff' }}>
+                    <span key={c.code} style={{ ...chip, borderColor: i === 0 ? 'var(--accent)' : 'var(--border-strong)', background: i === 0 ? 'var(--accent-soft)' : 'var(--surface)' }}>
                       <b style={{ color: 'var(--accent)' }}>{c.code}</b>
                       <span>{c.label}</span>
                       <span style={{ color: 'var(--dim)' }}>· {c.count}× · {Math.round(c.confidence * 100)}% · lift {c.lift}</span>

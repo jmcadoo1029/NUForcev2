@@ -86,7 +86,7 @@ export function RecentlyApproved({ onClose }: { onClose: () => void }) {
           <button
             key={d}
             onClick={() => setDays(d)}
-            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (days === d ? 'var(--accent)' : 'var(--border-strong)'), background: days === d ? 'var(--accent-soft)' : '#fff', color: days === d ? 'var(--accent)' : 'var(--muted)' }}
+            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (days === d ? 'var(--accent)' : 'var(--border-strong)'), background: days === d ? 'var(--accent-soft)' : 'var(--surface)', color: days === d ? 'var(--accent)' : 'var(--muted)' }}
           >
             {d} days
           </button>

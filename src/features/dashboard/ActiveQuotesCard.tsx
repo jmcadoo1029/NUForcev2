@@ -23,7 +23,7 @@ export function ActiveQuotesCard({ netTotal }: { netTotal?: number }) {
         const visible = qFilter === 'all' ? created : created.filter((q) => q.bucket === qFilter)
         const total = visible.reduce((a, q) => a + (Number(q.total) || 0), 0)
         const pill = (key: 'new' | 'revision' | 'all', label: string) => (
-          <button key={key} onClick={() => setQFilter(key)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '4px 11px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (qFilter === key ? 'var(--accent)' : 'var(--border-strong)'), background: qFilter === key ? 'var(--accent-soft)' : '#fff', color: qFilter === key ? 'var(--accent)' : 'var(--muted)' }}>
+          <button key={key} onClick={() => setQFilter(key)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '4px 11px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (qFilter === key ? 'var(--accent)' : 'var(--border-strong)'), background: qFilter === key ? 'var(--accent-soft)' : 'var(--surface)', color: qFilter === key ? 'var(--accent)' : 'var(--muted)' }}>
             {label} {counts[key]}
           </button>
         )

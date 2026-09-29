@@ -45,7 +45,7 @@ function AccountsTable({ accounts }: { accounts: AccountAgg[] }) {
     fontWeight: 600,
     padding: '6px 12px',
     border: 'none',
-    background: active ? 'var(--accent)' : '#fff',
+    background: active ? 'var(--accent)' : 'var(--surface)',
     color: active ? '#fff' : 'var(--muted)',
     cursor: 'pointer',
   })

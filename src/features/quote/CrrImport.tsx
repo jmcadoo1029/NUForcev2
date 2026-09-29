@@ -11,7 +11,7 @@ import { buildDraftFromCrr } from '../../lib/crrImport'
 // PREVIEW — Apply fills only empty fields, appends the line items / budget, and
 // appends a labeled notes block. Nothing here writes to the DB or overwrites work.
 
-const box: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+const box: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 const capLabel: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4 }
 
 export function CrrImport({ currentOpp, onClose, onApply }: { currentOpp: string; onClose: () => void; onApply: (w: CrrWorkup) => void }) {
@@ -86,7 +86,7 @@ export function CrrImport({ currentOpp, onClose, onApply }: { currentOpp: string
               <button
                 key={r.quote_number}
                 onClick={() => pick(r.quote_number)}
-                style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 'var(--sp-3)', alignItems: 'baseline', padding: '8px 12px', background: isSel ? 'var(--bg)' : '#fff', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}
+                style={{ display: 'flex', width: '100%', textAlign: 'left', gap: 'var(--sp-3)', alignItems: 'baseline', padding: '8px 12px', background: isSel ? 'var(--bg)' : 'var(--surface)', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}
               >
                 <span style={{ fontWeight: 700, color: 'var(--accent)', minWidth: 72 }}>{r.quote_number}</span>
                 <span style={{ fontSize: 'var(--fs-sm)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer_company || '—'}</span>

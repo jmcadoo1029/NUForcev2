@@ -30,7 +30,7 @@ const seg = (active: boolean, first: boolean): CSSProperties => ({
   padding: '7px 16px',
   border: 'none',
   borderLeft: first ? 'none' : '1px solid var(--border-strong)',
-  background: active ? 'var(--accent)' : '#fff',
+  background: active ? 'var(--accent)' : 'var(--surface)',
   color: active ? '#fff' : 'var(--muted)',
   cursor: 'pointer',
 })

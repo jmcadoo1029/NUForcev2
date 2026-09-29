@@ -145,14 +145,14 @@ export function Templates({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: isManager ? '#fff' : 'var(--bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+  const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: isManager ? 'var(--surface)' : 'var(--bg)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
   return (
     <Modal title="Email Templates" onClose={onClose} width={760}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-4)', marginBottom: 'var(--sp-4)', flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)' }}>
           <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>Template</label>
-          <select value={active} onChange={(e) => setActive(e.target.value as TemplateKey)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: 'pointer', minWidth: 200 }}>
+          <select value={active} onChange={(e) => setActive(e.target.value as TemplateKey)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '8px 12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', minWidth: 200 }}>
             {KEYS.map((k) => <option key={k.key} value={k.key}>{k.label}</option>)}
           </select>
         </div>
@@ -187,7 +187,7 @@ export function Templates({ onClose }: { onClose: () => void }) {
             <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }}>Placeholders {isManager && <span style={{ textTransform: 'none', letterSpacing: 0, fontWeight: 400, fontStyle: 'italic' }}>· click to insert</span>}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {legendFor(active).map((t) => (
-                <button key={t.token} onClick={() => insertToken(t.token)} disabled={!isManager} title={t.desc} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: isManager ? 'pointer' : 'default' }}>{t.desc}</button>
+                <button key={t.token} onClick={() => insertToken(t.token)} disabled={!isManager} title={t.desc} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 600, padding: '4px 10px', borderRadius: 20, border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', cursor: isManager ? 'pointer' : 'default' }}>{t.desc}</button>
               ))}
             </div>
           </div>

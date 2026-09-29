@@ -8,7 +8,7 @@ import { parseDraftImport, analyzeTestTypes, applyTypeChoices, EXAMPLE_DRAFT, ty
 // open a prefilled, unpriced quote for review. This is the NUForce end of the
 // "read documents → candidate line items" pipeline.
 
-const box: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+const box: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
 export function ImportDraft({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
@@ -109,7 +109,7 @@ export function ImportDraft({ onClose }: { onClose: () => void }) {
                 <select
                   value={choices[a.index] ?? a.defaultValue}
                   onChange={(e) => setChoices((c) => ({ ...c, [a.index]: e.target.value }))}
-                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}
+                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}
                 >
                   {a.defaultValue === '' && <option value="">Choose…</option>}
                   {a.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}

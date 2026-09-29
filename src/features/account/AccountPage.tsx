@@ -221,9 +221,9 @@ export function AccountPage() {
           <button
             onClick={toggleCustomerView}
             title={customerView ? 'Internal metrics are hidden — click to show them' : 'Hide internal metrics (lifetime totals, win rate) so you can turn the screen to a customer'}
-            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '8px 14px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${customerView ? 'var(--pos)' : 'var(--border-strong)'}`, background: customerView ? 'var(--pos)' : '#fff', color: customerView ? '#fff' : 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 7 }}
+            style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '8px 14px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${customerView ? 'var(--pos)' : 'var(--border-strong)'}`, background: customerView ? 'var(--pos)' : 'var(--surface)', color: customerView ? '#fff' : 'var(--text)', display: 'inline-flex', alignItems: 'center', gap: 7 }}
           >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: customerView ? '#fff' : 'var(--border-strong)' }} />
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: customerView ? 'var(--surface)' : 'var(--border-strong)' }} />
             Customer View{customerView ? ' · on' : ''}
           </button>
           <Button
@@ -299,7 +299,7 @@ export function AccountPage() {
                   {years.map((y) => {
                     const on = activeYear?.year === y.year
                     return (
-                      <button key={y.year} onClick={() => setSelectedYear((cur) => (cur === y.year ? '' : y.year))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 13px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border-strong)'), background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' }}>
+                      <button key={y.year} onClick={() => setSelectedYear((cur) => (cur === y.year ? '' : y.year))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 13px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (on ? 'var(--accent)' : 'var(--border-strong)'), background: on ? 'var(--accent)' : 'var(--surface)', color: on ? '#fff' : 'var(--text)' }}>
                         {y.year} <span style={{ fontWeight: 500, opacity: 0.75 }}>({y.rows.length})</span>
                       </button>
                     )

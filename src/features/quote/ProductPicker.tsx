@@ -103,12 +103,12 @@ export function ProductPicker({
     onClose()
   }
 
-  const cInput: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+  const cInput: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
   const sortBtn = (key: 'code' | 'name', label: string) => (
     <button
       onClick={() => setSortMode(key)}
-      style={{ background: sortMode === key ? 'var(--accent-soft)' : '#fff', color: sortMode === key ? 'var(--accent)' : 'var(--muted)', border: 'none', padding: '5px 13px', fontSize: 'var(--fs-sm)', fontWeight: 700, cursor: 'pointer', letterSpacing: '.03em' }}
+      style={{ background: sortMode === key ? 'var(--accent-soft)' : 'var(--surface)', color: sortMode === key ? 'var(--accent)' : 'var(--muted)', border: 'none', padding: '5px 13px', fontSize: 'var(--fs-sm)', fontWeight: 700, cursor: 'pointer', letterSpacing: '.03em' }}
     >
       {label}
     </button>
@@ -162,7 +162,7 @@ export function ProductPicker({
                   style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '9px 11px', borderRadius: 8, background: isSel ? 'var(--accent-soft)' : 'var(--bg-subtle, #f8f9fb)', border: '1px solid ' + (isSel ? 'var(--accent)' : 'var(--border)'), cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (isSel ? 'var(--accent)' : 'var(--border-strong)'), background: isSel ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 4, border: '2px solid ' + (isSel ? 'var(--accent)' : 'var(--border-strong)'), background: isSel ? 'var(--accent)' : 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       {isSel && <span style={{ color: '#fff', fontSize: 12, lineHeight: 1 }}>✓</span>}
                     </div>
                     <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)', minWidth: 26, fontVariantNumeric: 'tabular-nums' }}>{prod.code}</span>
@@ -243,7 +243,7 @@ export function ProductPicker({
             {total > 0 && <b style={{ color: 'var(--text)' }}>{money(total)}</b>}
           </span>
           <div style={{ display: 'flex', gap: 10 }}>
-            <button onClick={onClose} style={{ fontFamily: 'inherit', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 18px', fontSize: 'var(--fs-base)', cursor: 'pointer', color: 'var(--muted)' }}>Cancel</button>
+            <button onClick={onClose} style={{ fontFamily: 'inherit', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '8px 18px', fontSize: 'var(--fs-base)', cursor: 'pointer', color: 'var(--muted)' }}>Cancel</button>
             <button onClick={handleAdd} disabled={selCount === 0} style={{ fontFamily: 'inherit', background: selCount === 0 ? 'var(--border)' : 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 22px', fontSize: 'var(--fs-base)', fontWeight: 700, cursor: selCount === 0 ? 'default' : 'pointer', color: selCount === 0 ? 'var(--dim)' : '#fff' }}>
               Add {selCount > 0 ? selCount + ' ' : ''}{selCount === 1 ? 'Item' : 'Items'} to Quote
             </button>

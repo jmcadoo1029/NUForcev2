@@ -133,7 +133,7 @@ export function ReadyToSendCard() {
   }
 
   const sendBtn: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: '1px solid var(--accent)', background: 'var(--accent)', color: '#fff', flexShrink: 0 }
-  const pdfBtn: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--muted)', flexShrink: 0 }
+  const pdfBtn: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--muted)', flexShrink: 0 }
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
@@ -172,7 +172,7 @@ export function ReadyToSendCard() {
                     fontSize: 'var(--fs-caption)',
                     fontWeight: 700,
                     color: r.daysInQueue >= 7 ? 'var(--warn)' : 'var(--dim)',
-                    background: r.daysInQueue >= 7 ? 'var(--warn-soft)' : '#f0f2f5',
+                    background: r.daysInQueue >= 7 ? 'var(--warn-soft)' : 'var(--chip)',
                     borderRadius: 12,
                     padding: '2px 8px',
                     whiteSpace: 'nowrap',

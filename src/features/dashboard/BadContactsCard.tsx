@@ -136,7 +136,7 @@ async function loadNoNameContacts(includeClosedLost = false, maxAgeYears: number
   return groups.sort((a, b) => b.quotes.length - a.quotes.length)
 }
 
-const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 3 }
 
 export function BadContactsCard() {
@@ -342,13 +342,13 @@ export function BadContactsCard() {
         <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 4 }}>Marks the address bad and pulls their quotes below to reassign. Won’t be re-emailed.</div>
         <div style={{ marginTop: 'var(--sp-3)', paddingTop: 'var(--sp-3)', borderTop: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
           <button onClick={scanOrphans} disabled={scanBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: scanBusy ? 'default' : 'pointer' }}>{scanBusy ? 'Scanning…' : 'Scan for deleted contacts'}</button>
-          <button onClick={scanNoName} disabled={noNameBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: '#fff', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: noNameBusy ? 'default' : 'pointer' }}>{noNameBusy ? 'Scanning…' : 'Scan for no-name contacts'}</button>
+          <button onClick={scanNoName} disabled={noNameBusy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--accent)', background: 'var(--surface)', border: '1px solid var(--accent)', borderRadius: 'var(--radius-sm)', padding: '8px 14px', cursor: noNameBusy ? 'default' : 'pointer' }}>{noNameBusy ? 'Scanning…' : 'Scan for no-name contacts'}</button>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--muted)', cursor: 'pointer' }}>
             <input type="checkbox" checked={noNameLost} onChange={(e) => setNoNameLost(e.target.checked)} /> include Closed Lost
           </label>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>
             quoted within
-            <select value={noNameYears === null ? 'any' : String(noNameYears)} onChange={(e) => setNoNameYears(e.target.value === 'any' ? null : Number(e.target.value))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }}>
+            <select value={noNameYears === null ? 'any' : String(noNameYears)} onChange={(e) => setNoNameYears(e.target.value === 'any' ? null : Number(e.target.value))} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '5px 8px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }}>
               <option value="2">2 years</option>
               <option value="3">3 years</option>
               <option value="5">5 years</option>

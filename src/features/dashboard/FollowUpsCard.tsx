@@ -144,7 +144,7 @@ export function FollowUpsCard() {
     }
   }
 
-  const btn = (accent: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border-strong)'}`, background: accent ? 'var(--accent)' : '#fff', color: accent ? '#fff' : 'var(--text)', flexShrink: 0 })
+  const btn = (accent: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '4px 10px', borderRadius: 20, cursor: 'pointer', whiteSpace: 'nowrap', border: `1px solid ${accent ? 'var(--accent)' : 'var(--border-strong)'}`, background: accent ? 'var(--accent)' : 'var(--surface)', color: accent ? '#fff' : 'var(--text)', flexShrink: 0 })
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>
@@ -185,10 +185,10 @@ export function FollowUpsCard() {
                 {delayFor === f.id && (
                   <>
                     <div onClick={() => setDelayFor(null)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 41, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', minWidth: 130 }}>
+                    <div style={{ position: 'absolute', top: 'calc(100% + 4px)', right: 0, zIndex: 41, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', overflow: 'hidden', minWidth: 130 }}>
                       <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '7px 12px 4px' }}>Remind again in</div>
                       {[30, 60, 90].map((d) => (
-                        <button key={d} onClick={() => doSnooze(f, d)} style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: 'none', borderTop: '1px solid var(--border)', padding: '9px 12px', cursor: 'pointer' }}>{d} days</button>
+                        <button key={d} onClick={() => doSnooze(f, d)} style={{ display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'var(--surface)', border: 'none', borderTop: '1px solid var(--border)', padding: '9px 12px', cursor: 'pointer' }}>{d} days</button>
                       ))}
                     </div>
                   </>

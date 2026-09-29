@@ -52,7 +52,7 @@ export function ConvertToPicker({ lines, onConvert, onClose }: { lines: ConvertL
   const origTotal = lines.reduce((a, l) => a + l.price, 0)
   const newTotal = lines.reduce((a, l) => a + (resultOf(l)?.price ?? 0), 0)
 
-  const sel: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+  const sel: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
   const doConvert = () => {
     if (!allAssigned) return

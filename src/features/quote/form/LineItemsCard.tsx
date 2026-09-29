@@ -73,7 +73,7 @@ export function LineItemsCard({
                 <button
                   key={lbl}
                   onClick={() => setUserView(v)}
-                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', cursor: 'pointer', border: 'none', background: qtyView === v ? 'var(--accent)' : '#fff', color: qtyView === v ? '#fff' : 'var(--muted)' }}
+                  style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', cursor: 'pointer', border: 'none', background: qtyView === v ? 'var(--accent)' : 'var(--surface)', color: qtyView === v ? '#fff' : 'var(--muted)' }}
                 >{lbl}</button>
               ))}
             </div>

@@ -7,12 +7,12 @@ import { pqRowShifts, type PqRow } from '../../../data/calcPricing'
 // focused on state + composition.
 
 export const sectionLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 'var(--sp-2)' }
-export const input: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+export const input: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 export const grid2: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 'var(--sp-3)', marginBottom: 'var(--sp-4)' }
-export const tabBtn: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--muted)', borderRadius: 20, cursor: 'pointer' }
+export const tabBtn: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--muted)', borderRadius: 20, cursor: 'pointer' }
 export const tabBtnOn: CSSProperties = { border: '1px solid var(--accent)', background: 'var(--accent-soft)', color: 'var(--accent)' }
 // Spec Builder trigger button (matches the secondary Quote/Budget PDF buttons).
-export const specTriggerBtn: CSSProperties = { fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--fs-sm)', padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }
+export const specTriggerBtn: CSSProperties = { fontFamily: 'inherit', fontWeight: 600, fontSize: 'var(--fs-sm)', padding: '7px 14px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }
 
 export function Labeled({ label, children }: { label: string; children: ReactNode }) {
   return (

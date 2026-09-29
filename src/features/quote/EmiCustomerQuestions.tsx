@@ -40,7 +40,7 @@ export function EmiCustomerQuestions({ onClose }: { onClose: () => void }) {
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        style={{ width: '100%', minHeight: '52vh', fontFamily: 'inherit', fontSize: 'var(--fs-base)', lineHeight: 1.5, padding: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
+        style={{ width: '100%', minHeight: '52vh', fontFamily: 'inherit', fontSize: 'var(--fs-base)', lineHeight: 1.5, padding: 12, borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', resize: 'vertical', boxSizing: 'border-box' }}
       />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 'var(--sp-3)', marginTop: 'var(--sp-4)', flexWrap: 'wrap' }}>
         <Button variant="secondary" small onClick={() => setText(DEFAULT_TEXT)}>Reset to default</Button>

@@ -100,7 +100,7 @@ export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; t
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>Enter in</span>
                     {(['mm', 'cm'] as const).map((u) => (
-                      <button key={u} type="button" onClick={() => setConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (convUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: convUnit === u ? 'var(--accent)' : '#fff', color: convUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
+                      <button key={u} type="button" onClick={() => setConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (convUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: convUnit === u ? 'var(--accent)' : 'var(--surface)', color: convUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -129,7 +129,7 @@ export function TestItemCard({ editing, ti, setTi, acct }: { editing: boolean; t
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>Enter in</span>
                     {(['kg', 'g'] as const).map((u) => (
-                      <button key={u} type="button" onClick={() => setWtConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (wtConvUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: wtConvUnit === u ? 'var(--accent)' : '#fff', color: wtConvUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
+                      <button key={u} type="button" onClick={() => setWtConvUnit(u)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, padding: '3px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (wtConvUnit === u ? 'var(--accent)' : 'var(--border-strong)'), background: wtConvUnit === u ? 'var(--accent)' : 'var(--surface)', color: wtConvUnit === u ? '#fff' : 'var(--text)' }}>{u}</button>
                     ))}
                   </div>
                   <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>

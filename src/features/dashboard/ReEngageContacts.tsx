@@ -18,13 +18,13 @@ import { useDormantContacts, snoozeReengage, unsnoozeReengage, type DormantRow }
 const MONTHS = [6, 12, 18, 24]
 const CAP = 300 // cap the rendered rows; the summary still counts them all
 
-const pill = (active: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border-strong)'), background: active ? 'var(--accent-soft)' : '#fff', color: active ? 'var(--accent)' : 'var(--muted)' })
-const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : '#fff', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+const pill = (active: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (active ? 'var(--accent)' : 'var(--border-strong)'), background: active ? 'var(--accent-soft)' : 'var(--surface)', color: active ? 'var(--accent)' : 'var(--muted)' })
+const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : 'var(--surface)', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 const th: CSSProperties = { textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', padding: '8px 10px', whiteSpace: 'nowrap' }
 const td: CSSProperties = { padding: '8px 10px', borderTop: '1px solid var(--border)', fontSize: 'var(--fs-sm)', verticalAlign: 'top' }
 const numTd: CSSProperties = { ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }
 const flagBtn: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, lineHeight: 1, color: 'var(--muted)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '3px 10px', cursor: 'pointer', whiteSpace: 'nowrap' }
-const menuItem: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: 'none', borderBottom: '1px solid var(--border)', padding: '8px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }
+const menuItem: CSSProperties = { display: 'block', width: '100%', textAlign: 'left', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'var(--surface)', border: 'none', borderBottom: '1px solid var(--border)', padding: '8px 12px', cursor: 'pointer', whiteSpace: 'nowrap' }
 
 const monthsAgo = (ms: number) => Math.max(0, Math.round((Date.now() - ms) / (30 * 864e5)))
 
@@ -71,7 +71,7 @@ function ComposeModal({ recipients, months, onClose, onSent }: { recipients: Dor
     } finally { setBusy(false) }
   }
 
-  const inputStyle: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '9px 11px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+  const inputStyle: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '9px 11px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
   return (
     <Modal title={`Re-engage ${recipients.length} contact${recipients.length === 1 ? '' : 's'}`} onClose={() => !busy && onClose()} width={640}>
       <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
@@ -221,7 +221,7 @@ export function ReEngageContacts() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', background: 'var(--accent-soft)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', marginBottom: 'var(--sp-3)' }}>
           <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)' }}>Flagged this session</span>
           {flagged.map((r) => (
-            <span key={r.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 4px 2px 10px' }}>
+            <span key={r.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 4px 2px 10px' }}>
               <span style={{ color: 'var(--text)' }}>{r.name || r.email}</span>
               <button onClick={() => undoFlag(r)} disabled={unflagging === r.email} title={`Undo — restore ${r.email}`} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: unflagging === r.email ? 'default' : 'pointer', padding: '2px 6px' }}>{unflagging === r.email ? '…' : 'Undo'}</button>
             </span>
@@ -233,7 +233,7 @@ export function ReEngageContacts() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '8px 10px', marginBottom: 'var(--sp-3)' }}>
           <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em', color: 'var(--dim)' }}>Snoozed this session</span>
           {snoozed.map((r) => (
-            <span key={r.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 4px 2px 10px' }}>
+            <span key={r.email} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 'var(--fs-sm)', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 4px 2px 10px' }}>
               <span style={{ color: 'var(--text)' }}>{r.name || r.email}</span>
               <button onClick={() => undoSnooze(r)} disabled={unsnoozing === r.email} title={`Undo — bring ${r.email} back`} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: unsnoozing === r.email ? 'default' : 'pointer', padding: '2px 6px' }}>{unsnoozing === r.email ? '…' : 'Undo'}</button>
             </span>
@@ -292,7 +292,7 @@ export function ReEngageContacts() {
                     {snoozeMenu === r.email && (
                       <>
                         <div onClick={() => setSnoozeMenu(null)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
-                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 41, background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', boxShadow: '0 6px 24px rgba(20,30,45,.14)', overflow: 'hidden', minWidth: 140 }}>
+                        <div style={{ position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 41, background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', boxShadow: '0 6px 24px rgba(20,30,45,.14)', overflow: 'hidden', minWidth: 140 }}>
                           <button onClick={() => snooze(r, 6)} style={menuItem}>Snooze 6 months</button>
                           <button onClick={() => snooze(r, 12)} style={{ ...menuItem, borderBottom: 'none' }}>Snooze 12 months</button>
                         </div>

@@ -7,6 +7,11 @@ import { StandardsMiner } from './StandardsMiner'
 import { DeletedQuotes } from './DeletedQuotes'
 import { UsersAdmin } from './UsersAdmin'
 import { useCanViewManager, useIsApprover } from '../../lib/perms'
+import { getThemePref, setThemePref, type ThemePref } from '../../theme/theme'
+
+// Light → Dark → Auto → Light. "Auto" follows the OS; the other two force a palette.
+const THEME_ORDER: ThemePref[] = ['light', 'dark', 'auto']
+const THEME_LABEL: Record<ThemePref, string> = { light: 'Light', dark: 'Dark', auto: 'Auto' }
 
 // Overflow menu for the occasional dashboard tools: Monthly snapshot, Recently
 // approved, Product catalog, Email templates, and the Privacy-mode toggle. Keeps
@@ -17,6 +22,13 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
   const { canView } = useCanViewManager() // Standards ↔ codes is manager-only
   const { isApprover } = useIsApprover() // Deleted quotes (restore) is approver-only
   const ref = useRef<HTMLDivElement>(null)
+  const [theme, setTheme] = useState<ThemePref>(() => getThemePref())
+
+  const cycleTheme = () => {
+    const next = THEME_ORDER[(THEME_ORDER.indexOf(theme) + 1) % THEME_ORDER.length]
+    setThemePref(next) // persist + apply to <html data-theme> immediately
+    setTheme(next)
+  }
 
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
@@ -45,7 +57,7 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
       <button
         onClick={() => setOpen((o) => !o)}
         aria-label="More"
-        style={{ width: 42, height: 42, border: '1px solid var(--border-strong)', background: '#fff', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}
+        style={{ width: 42, height: 42, border: '1px solid var(--border-strong)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}
       >
         <svg width="18" height="18" viewBox="0 0 18 18">
           <circle cx="9" cy="4" r="1.5" fill="currentColor" />
@@ -54,7 +66,7 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
         </svg>
       </button>
       {open && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', minWidth: 210, padding: 6, zIndex: 60 }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', minWidth: 210, padding: 6, zIndex: 60 }}>
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('snapshot'); setOpen(false) }}>
             Monthly snapshot
           </button>
@@ -85,6 +97,9 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
           <div style={{ height: 1, background: 'var(--border)', margin: '6px 4px' }} />
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { onTogglePrivacy(); setOpen(false) }}>
             Privacy mode <span style={{ color: privacy ? 'var(--pos)' : 'var(--dim)', fontWeight: 700 }}>· {privacy ? 'On' : 'Off'}</span>
+          </button>
+          <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={cycleTheme}>
+            Theme <span style={{ color: 'var(--accent)', fontWeight: 700 }}>· {THEME_LABEL[theme]}</span>
           </button>
         </div>
       )}

@@ -18,7 +18,7 @@ const base: CSSProperties = {
 
 const variants: Record<Variant, CSSProperties> = {
   primary: { background: 'var(--accent)', color: '#fff' },
-  secondary: { background: '#fff', color: 'var(--text)', borderColor: 'var(--border-strong)' },
+  secondary: { background: 'var(--surface)', color: 'var(--text)', borderColor: 'var(--border-strong)' },
   ghost: { background: 'none', color: 'var(--accent)' },
 }
 

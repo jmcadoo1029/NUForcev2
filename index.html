@@ -5,6 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <title>NUForce</title>
+    <script>
+      // No-flash theme: apply the saved Light/Dark/Auto choice before first paint.
+      // "light"/"dark" force a palette; "auto" (or unset default) follows the OS only
+      // when the user explicitly chose Auto. Default is Light.
+      (function () {
+        try {
+          var p = localStorage.getItem('nuforce-theme') || 'light';
+          var el = document.documentElement;
+          if (p === 'dark') el.setAttribute('data-theme', 'dark');
+          else if (p === 'auto') el.removeAttribute('data-theme');
+          else el.setAttribute('data-theme', 'light');
+        } catch (e) {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

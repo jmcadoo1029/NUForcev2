@@ -202,7 +202,7 @@ function BoxPlots({ rows }: { rows: { label: string; stat: Stat }[] }) {
                   <line x1={x(st.median)} x2={x(st.median)} y1={cy - 9} y2={cy + 9} stroke="var(--pos)" strokeWidth={2.5} />
                   {/* outliers — hollow dots; any past the axis clamp to the right edge */}
                   {st.outliers.map((v, oi) => (
-                    <circle key={'o' + oi} cx={x(v)} cy={cy} r={2.6} fill="#fff" stroke="var(--dim)" strokeWidth={1} />
+                    <circle key={'o' + oi} cx={x(v)} cy={cy} r={2.6} fill="var(--surface)" stroke="var(--dim)" strokeWidth={1} />
                   ))}
                   <title>{`${row.label} · ${st.n} deals\nmedian ${r(st.median)}d · middle half ${r(st.q1)}–${r(st.q3)}d\nwhiskers ${r(st.loW)}–${r(st.hiW)}d${st.outliers.length ? `\n${st.outliers.length} outlier(s), up to ${r(st.max)}d` : ''}`}</title>
                 </>
@@ -258,7 +258,7 @@ export function WinTimeCard() {
     }
   }, [entries, scope])
 
-  const selectStyle: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '7px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', cursor: 'pointer', minWidth: 220 }
+  const selectStyle: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '7px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer', minWidth: 220 }
 
   return (
     <Card style={{ marginBottom: 'var(--sp-4)' }}>

@@ -161,8 +161,8 @@ export function ProductCodeDeepDive() {
     }
   }, [entries, code])
 
-  const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : '#fff', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
-  const selectStyle: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)' }
+  const seg = (active: boolean, first: boolean): CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: active ? 'var(--accent)' : 'var(--surface)', color: active ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+  const selectStyle: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '9px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }
 
   const all = entries || []
   const filtered = year === 'all' ? all : all.filter((e) => e.year === year)
@@ -191,7 +191,7 @@ export function ProductCodeDeepDive() {
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-4)' }}>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {years.map((y) => (
-                    <button key={y} onClick={() => setYear(y)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (year === y ? 'var(--accent)' : 'var(--border-strong)'), background: year === y ? 'var(--accent-soft)' : '#fff', color: year === y ? 'var(--accent)' : 'var(--muted)' }}>
+                    <button key={y} onClick={() => setYear(y)} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '5px 12px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (year === y ? 'var(--accent)' : 'var(--border-strong)'), background: year === y ? 'var(--accent-soft)' : 'var(--surface)', color: year === y ? 'var(--accent)' : 'var(--muted)' }}>
                       {y === 'all' ? 'All years' : y}
                     </button>
                   ))}
@@ -264,7 +264,7 @@ export function ProductCodeDeepDive() {
                     const bar = (label: string, val: number, color: string) => (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
                         <div style={{ width: 54, fontWeight: 700 }}>{label}</div>
-                        <div style={{ flex: 1, height: 28, background: '#f0f2f5', borderRadius: 6, overflow: 'hidden' }}>
+                        <div style={{ flex: 1, height: 28, background: 'var(--chip)', borderRadius: 6, overflow: 'hidden' }}>
                           <div style={{ height: '100%', width: `${round((val / max) * 100)}%`, minWidth: val > 0 ? 60 : 0, background: color, borderRadius: 6, display: 'flex', alignItems: 'center', paddingLeft: 10, color: '#fff', fontSize: 'var(--fs-sm)', fontWeight: 700 }}>{moneyShort(val)}</div>
                         </div>
                       </div>

@@ -302,6 +302,28 @@ async function reconcileMassEmail(emailId: string, type: string, data: any): Pro
       }
     }
 
+    // Un-snooze on bounce (NUForce Re-engage): a Re-engage send snoozes the contact
+    // for 6 months so they drop off the list. But if that mass message bounced, the
+    // person never actually heard from us — so the snooze is wrong and they should
+    // re-enter the Re-engage list for a manual follow-up. Remove any reengage_snooze
+    // row on ANY hard bounce (bad address, security block, or unclear). Transient
+    // bounces don't reach here (newStatus stays ''). Best-effort; case-insensitive
+    // (mass addresses are lowercased, snooze rows may be mixed case). Independent of
+    // the contact-flag block below: a blocked/unclear bounce still un-snoozes even
+    // though it never marks the contact bad.
+    if (newStatus === 'bounced') {
+      const addr = (rows[0].email || '').toString().trim();
+      if (addr) {
+        const { data: unsn, error: sErr } = await sb
+          .from('reengage_snooze')
+          .delete()
+          .ilike('email', addr)
+          .select('email');
+        if (sErr) console.error('resend-webhook: reengage un-snooze on bounce failed', sErr);
+        else if (unsn?.length) console.log(`resend-webhook: bounce → un-snoozed ${unsn.length} Re-engage row(s) for ${addr}`);
+      }
+    }
+
     // Bad Contacts for mass sends: flag the contact ONLY on a genuinely bad address
     // (no such mailbox). A security BLOCK or an unclear bounce leaves the (likely valid)
     // contact alone, and a spam complaint on a mass send is NOT treated as a bad address.

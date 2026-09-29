@@ -222,7 +222,7 @@ function OutreachRow({ item }: { item: OutreachItem }) {
 const segBase: CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '7px 16px', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }
 const seg = (active: boolean, first: boolean): CSSProperties => ({
   ...segBase,
-  background: active ? 'var(--text)' : '#fff',
+  background: active ? 'var(--text)' : 'var(--surface)',
   color: active ? '#fff' : 'var(--muted)',
   borderLeft: first ? 'none' : '1px solid var(--border-strong)',
 })
@@ -303,7 +303,7 @@ export function ActivityFeed() {
         </div>
         <button
           onClick={() => setRefreshKey((k) => k + 1)}
-          style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', cursor: 'pointer' }}
+          style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--muted)', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '6px 12px', cursor: 'pointer' }}
         >
           Refresh
         </button>

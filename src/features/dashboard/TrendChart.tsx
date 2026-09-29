@@ -18,7 +18,7 @@ export function TrendChart() {
     padding: '6px 14px',
     border: 'none',
     borderLeft: first ? 'none' : '1px solid var(--border-strong)',
-    background: active ? 'var(--accent)' : '#fff',
+    background: active ? 'var(--accent)' : 'var(--surface)',
     color: active ? '#fff' : 'var(--muted)',
     cursor: 'pointer',
   })

@@ -28,7 +28,7 @@ export function DashboardHome() {
   return (
     <>
       {mErr && (
-        <div style={{ background: 'var(--accent-soft)', border: '1px solid #f0c9c7', borderRadius: 'var(--radius-sm)', padding: '11px 16px', fontSize: 'var(--fs-sm)', color: 'var(--accent)', marginBottom: 'var(--sp-4)' }}>
+        <div style={{ background: 'var(--accent-soft)', border: '1px solid var(--accent-border)', borderRadius: 'var(--radius-sm)', padding: '11px 16px', fontSize: 'var(--fs-sm)', color: 'var(--accent)', marginBottom: 'var(--sp-4)' }}>
           Couldn’t load metrics: {mErr}
         </div>
       )}
@@ -57,7 +57,7 @@ export function DashboardHome() {
             const hit = over >= 0
             return (
               <div style={{ marginTop: 12 }}>
-                <div style={{ height: 8, background: '#f0f2f5', borderRadius: 6, overflow: 'hidden' }}>
+                <div style={{ height: 8, background: 'var(--chip)', borderRadius: 6, overflow: 'hidden' }}>
                   <div style={{ height: '100%', width: `${Math.min(100, Math.max(0, targetPct))}%`, background: hit ? 'var(--pos)' : 'var(--accent)', borderRadius: 6, transition: 'width .3s' }} />
                 </div>
                 <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 6 }}>

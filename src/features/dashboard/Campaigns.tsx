@@ -132,8 +132,8 @@ export function CampaignsPanel({ onNavigate }: { onNavigate?: () => void }) {
     } catch (e) { showToast('Remove failed: ' + errMsg(e), 'error', 6000) } finally { setBusy(false) }
   }
 
-  const input: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
-  const rv = (on: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${on ? 'var(--accent)' : 'var(--border-strong)'}`, background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--text)' })
+  const input: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '7px 9px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
+  const rv = (on: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, padding: '6px 12px', borderRadius: 20, cursor: 'pointer', border: `1px solid ${on ? 'var(--accent)' : 'var(--border-strong)'}`, background: on ? 'var(--accent)' : 'var(--surface)', color: on ? '#fff' : 'var(--text)' })
   const accounts = Array.from(new Set((contacts || []).map((c) => c.client_name || '').filter(Boolean)))
   const quotesFor = (acct: string) => (quotes || []).filter((q) => { const c = (q.customer || '').toLowerCase(); const n = acct.toLowerCase(); return !!n && (c.includes(n) || n.includes(c)) })
 
@@ -186,7 +186,7 @@ export function CampaignsPanel({ onNavigate }: { onNavigate?: () => void }) {
             <div style={{ position: 'relative', marginBottom: 'var(--sp-3)' }}>
               <input value={term} onChange={(e) => setTerm(e.target.value)} placeholder="Search contacts to add…" style={input} disabled={!selId} />
               {results && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 20, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 260, overflowY: 'auto' }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 20, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 260, overflowY: 'auto' }}>
                   {results.length === 0 ? (
                     <div style={{ padding: '10px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No matches.</div>
                   ) : results.map((c) => {

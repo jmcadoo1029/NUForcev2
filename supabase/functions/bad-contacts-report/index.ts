@@ -78,6 +78,16 @@ Deno.serve(async (req: Request) => {
   }
   if (!RESEND_API_KEY) return new Response(JSON.stringify({ ok: false, error: 'RESEND_API_KEY not set' }), { status: 500 })
 
+  // Fire only at 9am Eastern, year-round. pg_cron runs in UTC, so the cron pokes this at
+  // BOTH 13:00 and 14:00 UTC on Mondays; whichever one is 9am in America/New_York (which
+  // handles DST for us) does the work, the other no-ops. Add ?force=1 to bypass for a
+  // manual test.
+  const force = new URL(req.url).searchParams.get('force') === '1'
+  if (!force) {
+    const nyHour = Number(new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', hour12: false }).format(new Date()))
+    if (nyHour !== 9) return new Response(JSON.stringify({ ok: true, skipped: `not 9am ET (currently ${nyHour}:00 ET)` }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+  }
+
   try {
     // Recipients: opt-in only.
     const settings = await rest<{ email: string; notify_bad_contacts: boolean | null }[]>(

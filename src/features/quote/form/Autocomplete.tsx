@@ -69,7 +69,7 @@ export function Autocomplete<T>({
         style={regInput}
       />
       {open && value.trim().length >= minChars && (
-        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 30, background: '#fff', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: 0, zIndex: 30, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', maxHeight: 260, overflowY: 'auto' }}>
           {loading && !results && <div style={{ padding: '9px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Searching…</div>}
           {results && results.length === 0 && <div style={{ padding: '9px 12px', color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{emptyText}</div>}
           {results && results.map((it) => (
@@ -78,7 +78,7 @@ export function Autocomplete<T>({
               onMouseDown={(e) => { e.preventDefault(); onPick(it); setOpen(false) }}
               style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
               onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = '#fff')}
+              onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--surface)')}
             >
               <div style={{ fontWeight: 600, fontSize: 'var(--fs-sm)' }}>{itemPrimary(it)}</div>
               {itemSecondary && itemSecondary(it) && <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>{itemSecondary(it)}</div>}

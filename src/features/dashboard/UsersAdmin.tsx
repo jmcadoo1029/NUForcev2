@@ -30,7 +30,7 @@ const ACTION_FEATURES: { key: string; label: string; help: string }[] = [
   { key: 'edit_contact', label: 'Change a quote’s contact', help: 'Use the “Change Contact” action on a quote to swap its contact/email.' },
 ]
 
-const input: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const input: CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 const secLabel: CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 6 }
 
 function Toggle({ label, help, on, isDefault, disabled, onChange, onReset }: { label: string; help: string; on: boolean; isDefault: boolean; disabled?: boolean; onChange: (v: boolean) => void; onReset: () => void }) {
@@ -43,7 +43,7 @@ function Toggle({ label, help, on, isDefault, disabled, onChange, onReset }: { l
         aria-checked={on}
         style={{ flexShrink: 0, width: 42, height: 24, borderRadius: 999, border: 'none', background: on ? 'var(--pos)' : 'var(--border-strong)', position: 'relative', cursor: disabled ? 'default' : 'pointer', transition: 'background .15s', marginTop: 2 }}
       >
-        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'left .15s' }} />
+        <span style={{ position: 'absolute', top: 2, left: on ? 20 : 2, width: 20, height: 20, borderRadius: '50%', background: 'var(--surface)', boxShadow: '0 1px 3px rgba(0,0,0,.3)', transition: 'left .15s' }} />
       </button>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 600, color: 'var(--text)' }}>{label} {isDefault ? <span style={{ fontWeight: 400, fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>· default</span> : <button onClick={onReset} disabled={disabled} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>· reset to default</button>}</div>

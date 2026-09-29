@@ -62,7 +62,7 @@ export function ClosedWonDetails({
   const inputStyle = (): React.CSSProperties => ({
     width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-base)', padding: '8px 10px', borderRadius: 'var(--radius-sm)',
     border: '1px solid var(--border-strong)', boxSizing: 'border-box',
-    background: locked ? 'var(--bg)' : '#fff', color: locked ? 'var(--muted)' : 'var(--text)', cursor: locked ? 'not-allowed' : 'text',
+    background: locked ? 'var(--bg)' : 'var(--surface)', color: locked ? 'var(--muted)' : 'var(--text)', cursor: locked ? 'not-allowed' : 'text',
   })
 
   const set = (k: keyof WonInfo, v: string) => { if (!locked) onChange({ ...wonInfo, [k]: v }) }

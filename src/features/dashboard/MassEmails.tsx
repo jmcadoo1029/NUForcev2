@@ -42,9 +42,9 @@ const seedTpl = (m: AudienceMode) => ({ subject: DEFAULT_TEMPLATES[MASS_KEY[m]].
 
 // Distinct product codes for the audience dropdown (same catalog quotes use).
 // Codes with several labels (43, 44, 51…) collapse to one option, labels joined.
-const seg = (on: boolean, first: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : '#fff', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
+const seg = (on: boolean, first: boolean): React.CSSProperties => ({ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, padding: '6px 14px', border: 'none', borderLeft: first ? 'none' : '1px solid var(--border-strong)', background: on ? 'var(--accent)' : 'var(--surface)', color: on ? '#fff' : 'var(--muted)', cursor: 'pointer' })
 
-const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: '#fff', color: 'var(--text)', boxSizing: 'border-box' }
+const inputStyle: React.CSSProperties = { width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box' }
 const label: React.CSSProperties = { fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 4, display: 'block' }
 const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -305,7 +305,7 @@ export function MassEmails() {
             <option value="">— Load a saved template —</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
-          {canEditTpl && <button onClick={() => { setTplName(''); setSaveOpen(true) }} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: '#fff', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: 'pointer' }}>Save current as template</button>}
+          {canEditTpl && <button onClick={() => { setTplName(''); setSaveOpen(true) }} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', background: 'var(--surface)', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', padding: '7px 12px', cursor: 'pointer' }}>Save current as template</button>}
           {templates.length > 0 && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>{templates.length} saved</span>}
         </div>
 
@@ -454,7 +454,7 @@ export function MassEmails() {
                 {AZ.map((L) => {
                   const has = reviewGroups.has(L)
                   return (
-                    <button key={L} onClick={() => has && jumpToLetter(L)} disabled={!has} title={has ? `Jump to ${L}` : undefined} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, minWidth: 22, height: 22, padding: '0 4px', borderRadius: 4, border: '1px solid ' + (has ? 'var(--border-strong)' : 'var(--border)'), background: '#fff', color: has ? 'var(--accent)' : 'var(--dim)', cursor: has ? 'pointer' : 'default' }}>{L}</button>
+                    <button key={L} onClick={() => has && jumpToLetter(L)} disabled={!has} title={has ? `Jump to ${L}` : undefined} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, minWidth: 22, height: 22, padding: '0 4px', borderRadius: 4, border: '1px solid ' + (has ? 'var(--border-strong)' : 'var(--border)'), background: 'var(--surface)', color: has ? 'var(--accent)' : 'var(--dim)', cursor: has ? 'pointer' : 'default' }}>{L}</button>
                   )
                 })}
               </div>

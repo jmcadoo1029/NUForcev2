@@ -34,7 +34,7 @@ export function MonthlySnapshot({ onClose }: { onClose: () => void }) {
   for (let y = now.getFullYear(); y >= 2016; y--) years.push(y)
   const isFuture = (y: number, mo: number) => y > now.getFullYear() || (y === now.getFullYear() && mo >= now.getMonth())
 
-  const selectStyle = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', fontWeight: 600, padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', cursor: 'pointer' }
+  const selectStyle = { fontFamily: 'inherit', fontSize: 'var(--fs-base)', fontWeight: 600, padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', cursor: 'pointer' }
 
   return (
     <Modal title="Monthly snapshot" onClose={onClose} width={720}>

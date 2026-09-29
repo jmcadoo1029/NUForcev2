@@ -30,7 +30,7 @@ export function CrrStrip({ workup, specs, rate, pia }: { workup: CrrWorkup | nul
   const wrap: React.CSSProperties = { border: '1px solid var(--info)', background: 'var(--info-soft)', borderRadius: 'var(--radius-sm)', marginBottom: 'var(--sp-4)', overflow: 'hidden' }
   const cell: React.CSSProperties = { padding: '5px 8px', fontSize: 'var(--fs-sm)' }
   const th: React.CSSProperties = { ...cell, fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase', color: 'var(--dim)', textAlign: 'left' }
-  const numIn: React.CSSProperties = { width: 58, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '3px 6px', border: '1px solid var(--border-strong)', borderRadius: 6, background: '#fff', color: 'var(--text)', textAlign: 'right' }
+  const numIn: React.CSSProperties = { width: 58, fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '3px 6px', border: '1px solid var(--border-strong)', borderRadius: 6, background: 'var(--surface)', color: 'var(--text)', textAlign: 'right' }
 
   return (
     <div style={wrap}>
@@ -46,7 +46,7 @@ export function CrrStrip({ workup, specs, rate, pia }: { workup: CrrWorkup | nul
 
       {open && (
         <div style={{ padding: '0 12px 12px' }}>
-          <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
             <div style={{ display: 'grid', gridTemplateColumns: '46px 1fr 70px 78px', alignItems: 'center', borderBottom: '1px solid var(--border)' }}>
               <span style={th}>Rev</span>
               <span style={th}>Test</span>

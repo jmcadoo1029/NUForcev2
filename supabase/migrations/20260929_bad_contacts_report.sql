@@ -21,8 +21,8 @@ alter table public.nuforce_user_settings
 --
 --   select cron.schedule(
 --     'bad-contacts-report',
---     '0 13 * * 1',              -- Mondays 13:00 UTC (~8–9am ET)
---     $$
+--     '0 13,14 * * 1',           -- Mondays 13:00 AND 14:00 UTC; the function runs only at
+--     $$                          -- 9am America/New_York (DST-safe), the other hour no-ops
 --     select net.http_post(
 --       url     := 'https://swuuxzmgmldvvomsgmjf.supabase.co/functions/v1/bad-contacts-report',
 --       headers := jsonb_build_object('Content-Type','application/json','x-tick-secret','<SCHEDULE_TICK_SECRET>')

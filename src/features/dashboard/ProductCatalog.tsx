@@ -117,7 +117,7 @@ export function ProductCatalog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: '#fff', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
+  const input: React.CSSProperties = { fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '6px 9px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)', width: '100%', boxSizing: 'border-box' }
 
   const StatusPill = ({ active }: { active: boolean }) => (
     <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', padding: '2px 9px', borderRadius: 20, color: active ? 'var(--pos)' : 'var(--warn)', background: active ? 'var(--pos-soft, #e6f4ea)' : 'var(--warn-soft)' }}>{active ? 'Active' : 'Dormant'}</span>
@@ -176,7 +176,7 @@ export function ProductCatalog({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => update(p.key, { active: !p.active })}
                 title={p.active ? 'Click to deactivate (make dormant)' : 'Click to activate'}
-                style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (p.active ? 'var(--pos)' : 'var(--warn)'), color: p.active ? 'var(--pos)' : 'var(--warn)', background: '#fff', whiteSpace: 'nowrap' }}
+                style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase', padding: '5px 10px', borderRadius: 20, cursor: 'pointer', border: '1px solid ' + (p.active ? 'var(--pos)' : 'var(--warn)'), color: p.active ? 'var(--pos)' : 'var(--warn)', background: 'var(--surface)', whiteSpace: 'nowrap' }}
               >{p.active ? 'Active' : 'Dormant'}</button>
               {!p.baseKey ? (
                 <button onClick={() => remove(p.key)} aria-label="Remove" title="Remove this added product" style={{ background: 'none', border: 'none', color: 'var(--dim)', fontSize: 18, cursor: 'pointer' }}>×</button>
