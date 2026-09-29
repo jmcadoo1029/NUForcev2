@@ -1,7 +1,10 @@
 import { useNavigate, useLocation } from 'react-router-dom'
 
-// App-level brand bar — the NUForce logo on a white strip above every screen.
-// The logo art has a near-white background, so a white bar makes it sit cleanly.
+// App-level brand bar — the NUForce logo on a surface strip above every screen.
+// Two logo files are rendered and CSS shows the one matching the active theme
+// (light art on the light bar, dark art on the Ink bar); the swap is driven by the
+// same data-theme / prefers-color-scheme rules as the tokens, so it flips instantly
+// when the theme toggle changes — no reload or re-render needed.
 // A Home button (hidden on the home screen itself, where it'd be redundant) returns
 // to the launcher. Customer Lookup lives on the home launcher and as a dashboard
 // tab — not in this bar — so it never rides along onto a quote or account page.
@@ -12,7 +15,8 @@ export function AppHeader() {
     <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '12px var(--sp-5)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 'var(--sp-4)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-4)' }}>
-          <img src="/nuforce-logo.png" alt="NUForce by NU Laboratories" style={{ height: 34, width: 'auto', display: 'block' }} />
+          <img className="app-logo app-logo-light" src="/nuforce-logo.png" alt="NUForce by NU Laboratories" style={{ height: 34, width: 'auto' }} />
+          <img className="app-logo app-logo-dark" src="/nuforce-logo-dark.png" alt="NUForce by NU Laboratories" style={{ height: 34, width: 'auto' }} />
           {!onHome && (
             <button
               onClick={() => navigate('/')}

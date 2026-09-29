@@ -174,3 +174,14 @@ a { color: inherit; }
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* Brand logo swap: show the light logo by default, the dark logo in dark mode.
+   Driven by the same rules as the color tokens so it always matches the bar. */
+.app-logo { display: block; }
+.app-logo-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .app-logo-light { display: none; }
+  :root:not([data-theme="light"]) .app-logo-dark { display: block; }
+}
+:root[data-theme="dark"] .app-logo-light { display: none; }
+:root[data-theme="dark"] .app-logo-dark { display: block; }
