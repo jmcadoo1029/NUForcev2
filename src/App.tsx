@@ -10,6 +10,7 @@ import { DashboardHome } from './features/dashboard/DashboardHome'
 import { useCanViewManager } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
+import { JobSearch } from './features/dashboard/JobSearch'
 import { Contracting } from './features/dashboard/Contracting'
 import { CustomerContact } from './features/dashboard/CustomerContact'
 import { ActivityFeed } from './features/dashboard/ActivityFeed'
@@ -86,6 +87,14 @@ export default function App() {
           element={
             <DashboardShell>
               <InProgress />
+            </DashboardShell>
+          }
+        />
+        <Route
+          path="/job-search"
+          element={
+            <DashboardShell>
+              <JobSearch />
             </DashboardShell>
           }
         />

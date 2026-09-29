@@ -40,8 +40,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [lookupOpen, setLookupOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
-  const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/customer-contact') ? 'customercontact' : pathname.startsWith('/feed') ? 'feed' : 'manager'
-  const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'customercontact' ? 'Reach out to clients and keep contacts clean' : view === 'feed' ? 'Live activity across all quotes' : monthLabel
+  const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/job-search') ? 'jobsearch' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/customer-contact') ? 'customercontact' : pathname.startsWith('/feed') ? 'feed' : 'manager'
+  const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'jobsearch' ? 'Find past jobs and the quotes on them' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'customercontact' ? 'Reach out to clients and keep contacts clean' : view === 'feed' ? 'Live activity across all quotes' : monthLabel
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>
@@ -61,6 +61,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             {canView && <Link to="/dashboard" style={seg(view === 'manager', true)}>Manager</Link>}
             <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
             <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
+            <Link to="/job-search" style={seg(view === 'jobsearch', false)}>Job Search</Link>
             <button onClick={() => setLookupOpen(true)} style={{ ...seg(false, false), fontFamily: 'inherit' }}>Customer Lookup</button>
             {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}
             <Link to="/customer-contact" style={seg(view === 'customercontact', false)}>Customer Contact</Link>
