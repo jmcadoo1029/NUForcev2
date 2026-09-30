@@ -27,7 +27,7 @@ export interface ContractingQuote {
   // Pieces used to build the Workspace project payload (from the saved blob).
   qi: Record<string, unknown>
   ti: Record<string, unknown>
-  lines: { code?: string | null; label: string; desc?: string; price: number }[]
+  lines: { code?: string | null; label: string; desc?: string; price: number; qty?: number }[]
   budgetRows: unknown[]
   specsText: string
   notesText: string
@@ -77,7 +77,7 @@ export async function loadContractingQuote(id: string): Promise<ContractingQuote
     },
     qi,
     ti,
-    lines: lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price })),
+    lines: lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })),
     budgetRows: Array.isArray(b.rows) ? b.rows : [],
     specsText: s(ti.tiSpecs),
     notesText: s(ti.tiNotes),

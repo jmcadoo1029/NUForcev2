@@ -20,7 +20,7 @@ interface SendTarget {
   contactEmail: string
   ccEmails: string[]
   testItem: string
-  pdfInput: { qi: Record<string, any>; ti: Record<string, any>; lines: { code?: string | null; label: string; desc?: string; price: number }[]; budget: { on: boolean; rows: any[]; markup: string } }
+  pdfInput: { qi: Record<string, any>; ti: Record<string, any>; lines: { code?: string | null; label: string; desc?: string; price: number; qty?: number }[]; budget: { on: boolean; rows: any[]; markup: string } }
 }
 
 export function ReadyToSendCard() {
@@ -70,7 +70,9 @@ export function ReadyToSendCard() {
     const qi = (d.qi || {}) as Record<string, any>
     const ti = (d.ti || {}) as Record<string, any>
     const b = (d.budget || {}) as Record<string, any>
-    const lines = lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price }))
+    // Carry qty so a quantity quote's PDF expands unit × qty in the SENT attachment
+    // (not just the on-screen view). Dropping it here sent customers unit-only totals.
+    const lines = lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty }))
     const cc = Array.isArray(qi.relatedContacts) ? qi.relatedContacts.map((rc: any) => String(rc?.email || '').trim()).filter(Boolean) : []
     return {
       revision: res?.[0]?.revision ?? null,
