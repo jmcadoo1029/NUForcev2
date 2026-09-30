@@ -102,6 +102,22 @@ function sortJobQuotes(a: JobQuote, b: JobQuote): number {
   return revRank(a.revision) - revRank(b.revision) // base, then A, B, …
 }
 
+// Rank a quote's revision from its opportunity suffix (base < A < B < …). Uses the
+// number itself rather than the revision column, so a blank revision field still ranks.
+const revRankOfOpp = (opp: string | null) => revRank((opp || '').slice(baseOpp(opp).length))
+
+/** Collapse an opportunity family to its LATEST revision only, so old revisions of a
+ *  quote don't double-count on a job (matches how the top-bar search behaves). */
+function latestRevPerFamily<T extends { opportunity: string | null }>(rows: T[]): T[] {
+  const best = new Map<string, T>()
+  for (const r of rows) {
+    const fam = baseOpp(r.opportunity)
+    const cur = best.get(fam)
+    if (!cur || revRankOfOpp(r.opportunity) > revRankOfOpp(cur.opportunity)) best.set(fam, r)
+  }
+  return Array.from(best.values())
+}
+
 /** Every quote on a given job number (exact, case-insensitive), with cleaned spec text. */
 export async function fetchJobQuotes(jobNumber: string): Promise<JobQuote[]> {
   const j = jobNumber.trim()
@@ -138,33 +154,43 @@ export async function fetchJobQuotes(jobNumber: string): Promise<JobQuote[]> {
       jobNumber: resolveJob(r) || j,
     })
   }
-  return out.sort(sortJobQuotes)
+  // Only the latest revision of each opportunity family counts toward the job.
+  return latestRevPerFamily(out).sort(sortJobQuotes)
 }
 
 // Group raw rows into per-job summaries (customer, counts, latest date, rough value).
+// Counts collapse each opportunity family to its latest revision, so an old rev of a
+// quote never inflates a job's quote count or value.
 function summarize(rows: RawRow[]): JobSummary[] {
-  const map = new Map<string, { customers: Set<string>; count: number; latest: string | null; value: number; firstCustomer: string | null }>()
+  const byJob = new Map<string, RawRow[]>()
   for (const r of rows) {
     const job = resolveJob(r)
     if (!job) continue
-    let g = map.get(job)
-    if (!g) { g = { customers: new Set(), count: 0, latest: null, value: 0, firstCustomer: null }; map.set(job, g) }
-    g.count += 1
-    g.value += Number(r.total) || 0
-    const c = (r.customer || '').trim()
-    if (c) { g.customers.add(c); if (!g.firstCustomer) g.firstCustomer = c }
-    const t = r.updated_at || r.created_at || null
-    if (t && (!g.latest || t > g.latest)) g.latest = t
+    ;(byJob.get(job) || byJob.set(job, []).get(job)!).push(r)
   }
-  return Array.from(map.entries())
-    .map(([jobNumber, g]) => ({
-      jobNumber,
-      customer: g.firstCustomer,
-      customerCount: g.customers.size,
-      quoteCount: g.count,
-      latest: g.latest,
-      value: g.value,
-    }))
+  return Array.from(byJob.entries())
+    .map(([jobNumber, jobRows]) => {
+      const latest = latestRevPerFamily(jobRows) // one row per family (newest rev)
+      const customers = new Set<string>()
+      let firstCustomer: string | null = null
+      let value = 0
+      let latestDate: string | null = null
+      for (const r of latest) {
+        value += Number(r.total) || 0
+        const c = (r.customer || '').trim()
+        if (c) { customers.add(c); if (!firstCustomer) firstCustomer = c }
+        const t = r.updated_at || r.created_at || null
+        if (t && (!latestDate || t > latestDate)) latestDate = t
+      }
+      return {
+        jobNumber,
+        customer: firstCustomer,
+        customerCount: customers.size,
+        quoteCount: latest.length,
+        latest: latestDate,
+        value,
+      }
+    })
     .sort((a, b) => (b.latest || '').localeCompare(a.latest || ''))
 }
 
