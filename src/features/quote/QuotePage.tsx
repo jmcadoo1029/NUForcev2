@@ -1331,7 +1331,7 @@ export function QuotePage() {
             </div>
           )}
 
-          <QuoteInfoCard editing={editing} qi={qi} setQi={setQi} />
+          <QuoteInfoCard editing={editing} qi={qi} setQi={setQi} jobNum={wonInfo.jobNum} onJobNum={(v) => setWonInfo((w) => ({ ...w, jobNum: v }))} />
 
           <RelatedContacts
             contacts={(Array.isArray(qi.relatedContacts) ? qi.relatedContacts : []) as RelatedContact[]}

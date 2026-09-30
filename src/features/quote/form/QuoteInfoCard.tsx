@@ -10,7 +10,7 @@ import { searchClients, fetchClientContacts, personName, type ClientRow, type Pe
 // values in view mode and Classic's inputs in edit mode. Account links to the
 // clients list; the primary contact pulls from the linked account's contacts.
 // Both allow a free-typed custom value.
-export function QuoteInfoCard({ editing, qi, setQi }: { editing: boolean; qi: Record<string, any>; setQi: (patch: Record<string, any>) => void }) {
+export function QuoteInfoCard({ editing, qi, setQi, jobNum, onJobNum }: { editing: boolean; qi: Record<string, any>; setQi: (patch: Record<string, any>) => void; jobNum?: string; onJobNum?: (v: string) => void }) {
   const s = str
   const clientId = s(qi.client_id)
 
@@ -36,6 +36,10 @@ export function QuoteInfoCard({ editing, qi, setQi }: { editing: boolean; qi: Re
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--sp-4)' }}>
           <InfoField label="Business type" editing={editing} value={s(qi.type)} onChange={(v) => setQi({ type: v })} options={TYPE_OPTS} />
           <InfoField label="RFQ" editing={editing} value={s(qi.rfq)} onChange={(v) => setQi({ rfq: v })} />
+          {/* Job # — the NU Labs job this quote belongs to. Entered at quote time and
+              shared with the Closed-Won details / Workspace project (one job number per
+              quote). Feeds the Job Search tab so open and lost quotes list under their job. */}
+          <InfoField label="Job #" editing={editing} value={s(jobNum)} onChange={(v) => onJobNum?.(v)} />
           <InfoField label="Date" editing={editing} value={s(qi.date)} onChange={(v) => setQi({ date: v })} />
           <InfoField label="Revision" editing={editing} value={s(qi.rev)} onChange={(v) => setQi({ rev: v })} />
           <InfoField label="Revision date" editing={editing} value={s(qi.revDate)} onChange={(v) => setQi({ revDate: v })} />
