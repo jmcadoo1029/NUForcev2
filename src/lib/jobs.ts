@@ -152,7 +152,11 @@ export async function fetchRecentJobs(limit = 30): Promise<JobSummary[]> {
   ])
   const seen = new Set<string>()
   const merged = [...byCol, ...byBlob].filter((r) => r?.id && !seen.has(r.id) && seen.add(r.id))
-  return summarize(merged).slice(0, limit)
+  // Show the highest job numbers first (newest work). Natural/numeric compare so
+  // "1200" sorts above "999", and any alphanumeric prefixes still order sensibly.
+  return summarize(merged)
+    .sort((a, b) => b.jobNumber.localeCompare(a.jobNumber, undefined, { numeric: true, sensitivity: 'base' }))
+    .slice(0, limit)
 }
 
 /** Jobs matching a term — by job number, customer, or opportunity/quote number. Grouped. */
