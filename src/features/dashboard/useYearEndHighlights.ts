@@ -43,8 +43,8 @@ export interface YearStats {
   highestNewWon: Award | null // highest NEW-business closed quote
   bestCustomer: { name: string; wonValue: number; wonCount: number } | null
   bestProduct: CodeAgg | null // top product code by won value
-  accountGain: Change | null // account whose quoted value grew the most vs last year
-  accountDrop: Change | null // …dropped the most vs last year
+  accountGains: Change[] // top 5 accounts whose quoted value grew the most vs last year
+  accountDrops: Change[] // top 5 that dropped the most vs last year
   quotedByCode: CodeAgg[] // sorted desc by value
   wonNewByCode: CodeAgg[]
 }
@@ -191,10 +191,9 @@ async function load(): Promise<YearEndData> {
       revDelta += num(r.total) - num(prior.total)
     })
 
-    // ── Biggest account movers: quoted value this year vs last year ──
+    // ── Account movers: quoted value this year vs last year, top 5 each way ──
     const prevCust = custQuotedByYear.get(y - 1)
-    let accountGain: Change | null = null
-    let accountDrop: Change | null = null
+    const movers: Change[] = []
     if (prevCust) {
       const names = new Set<string>([...custYear.keys(), ...prevCust.keys()])
       names.forEach((name) => {
@@ -202,10 +201,11 @@ async function load(): Promise<YearEndData> {
         const current = custYear.get(name) || 0
         const prior = prevCust.get(name) || 0
         const delta = current - prior
-        if (delta > 0 && (!accountGain || delta > accountGain.delta)) accountGain = { customer: name, delta, prior, current }
-        if (delta < 0 && (!accountDrop || delta < accountDrop.delta)) accountDrop = { customer: name, delta, prior, current }
+        if (delta !== 0) movers.push({ customer: name, delta, prior, current })
       })
     }
+    const accountGains = movers.filter((m) => m.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 5)
+    const accountDrops = movers.filter((m) => m.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 5)
 
     // ── Won ──
     const wonFams = latestPerBase(byWonYear.get(y) || [])
@@ -231,8 +231,8 @@ async function load(): Promise<YearEndData> {
       highestNewWon,
       bestCustomer,
       bestProduct: wonByCode[0] || null,
-      accountGain,
-      accountDrop,
+      accountGains,
+      accountDrops,
       quotedByCode: aggCodes(latestPerBase(rowsCreated).filter((q) => !isBudgetaryStage(stageOf(q)))),
       wonNewByCode: aggCodes(newWonFams),
     }

@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react'
 import { Card, StatTile } from '../../components'
 import { money, moneyShort } from '../../lib/format'
-import { useYearEndHighlights, type YearStats, type YearEndData, type CodeAgg } from './useYearEndHighlights'
+import { useYearEndHighlights, type YearStats, type YearEndData, type CodeAgg, type Change } from './useYearEndHighlights'
 
 // Manager-only "Year-end highlights" — a per-calendar-year recap with a trailing
 // 3-year-average comparison, a metric trend, and product-code rollups. Collapsed by
@@ -81,6 +81,35 @@ function MetricTrend({ data, metric }: { data: YearEndData; metric: Metric }) {
 }
 
 // ── Product-code ranking: top codes as horizontal bars, by value or by count ─────
+// A ranked list of accounts by year-over-year change in quoted value. Bars are sized
+// against the biggest swing in this list; tone is green for gains, red for drops.
+function AccountMovers({ title, rows, tone, emptyNote }: { title: string; rows: Change[]; tone: 'pos' | 'accent'; emptyNote: string }) {
+  const color = tone === 'pos' ? 'var(--pos)' : 'var(--accent)'
+  const max = Math.max(1, ...rows.map((r) => Math.abs(r.delta)))
+  return (
+    <div>
+      <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-3)' }}>{title}</div>
+      {rows.length === 0 ? (
+        <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{emptyNote}</div>
+      ) : (
+        rows.map((r) => (
+          <div key={r.customer} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 150, flexShrink: 0, fontSize: 'var(--fs-sm)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={r.customer}>{r.customer}</div>
+            <div style={{ flex: 1, height: 24, background: 'var(--chip)', borderRadius: 6, overflow: 'hidden', minWidth: 80 }}>
+              <div style={{ height: '100%', width: `${Math.round((Math.abs(r.delta) / max) * 100)}%`, minWidth: 60, background: color, borderRadius: 6, display: 'flex', alignItems: 'center', paddingLeft: 8, color: '#fff', fontSize: 'var(--fs-caption)', fontWeight: 700 }}>
+                {signedMoney(r.delta)}
+              </div>
+            </div>
+            <div style={{ width: 120, flexShrink: 0, textAlign: 'right', fontSize: 'var(--fs-caption)', color: 'var(--dim)', fontVariantNumeric: 'tabular-nums' }}>
+              {moneyShort(r.prior)} → {moneyShort(r.current)}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
+
 function CodeRanks({ title, codes, emptyNote }: { title: string; codes: CodeAgg[]; emptyNote: string }) {
   const [mode, setMode] = useState<'value' | 'count'>('value')
   const ranked = [...codes].sort((a, b) => (mode === 'value' ? b.value - a.value : b.count - a.count)).slice(0, 6)
@@ -208,18 +237,12 @@ export function YearEndHighlights() {
                   value={cur.bestProduct ? nameVal(`${cur.bestProduct.code} · ${cur.bestProduct.label}`) : '—'}
                   sub={cur.bestProduct ? `${money(cur.bestProduct.value)} won` : 'no coded wins this year'}
                 />
-                <StatTile
-                  label="Biggest account gain ▲"
-                  tone="pos"
-                  value={cur.accountGain ? signedMoney(cur.accountGain.delta) : '—'}
-                  sub={cur.accountGain ? `${cur.accountGain.customer} · ${money(cur.accountGain.prior)} → ${money(cur.accountGain.current)}` : 'no prior-year comparison'}
-                />
-                <StatTile
-                  label="Biggest account drop ▼"
-                  tone="accent"
-                  value={cur.accountDrop ? signedMoney(cur.accountDrop.delta) : '—'}
-                  sub={cur.accountDrop ? `${cur.accountDrop.customer} · ${money(cur.accountDrop.prior)} → ${money(cur.accountDrop.current)}` : 'no prior-year comparison'}
-                />
+              </div>
+
+              {/* Account movers — biggest YoY increases / decreases in quoted value */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--sp-5)', marginTop: 'var(--sp-5)' }}>
+                <AccountMovers title={`Top account gains ▲ — ${year}`} rows={cur.accountGains} tone="pos" emptyNote="No accounts grew vs last year (or no prior year to compare)." />
+                <AccountMovers title={`Top account drops ▼ — ${year}`} rows={cur.accountDrops} tone="accent" emptyNote="No accounts dropped vs last year (or no prior year to compare)." />
               </div>
 
               {/* Trend + running average */}
@@ -240,7 +263,7 @@ export function YearEndHighlights() {
               </div>
 
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-5)' }}>
-                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Biggest account gain / drop” compares each account’s quoted value this year with last year and shows the largest increase / decrease (last year → this year). The 3-year average is the mean of the up-to-three prior years with data.
+                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Top account gains / drops” compare each account’s quoted value this year with last year and list the five biggest increases / decreases (last year → this year). The 3-year average is the mean of the up-to-three prior years with data.
               </div>
             </>
           )}
