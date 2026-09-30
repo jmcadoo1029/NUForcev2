@@ -59,11 +59,14 @@ interface RawRow {
   ts: string | null
 }
 
-// Recognize a NU Labs job number written into the RFQ free-text, e.g.
-// "NU Labs Job #12345", "Job # 12345", "Job No. 12345", "Job: 12345". Mostly digits
-// (3+), so a stray "Job 1" won't match. Used so historical quotes (whose only record
-// of the job is this text) still show in Job Search before/without a data backfill.
-const RFQ_JOB_RE = /\bjob\s*(?:#|no\.?|number)?\s*:?\s*(\d{3,})\b/i
+// Recognize a NU Labs job number written into the RFQ free-text. Deliberately strict
+// so it doesn't grab unrelated RFQ numbers — it fires ONLY on:
+//   • "NU Labs Job #12345" or "NU Labs Job 12345"  (the # is optional after "NU Labs Job")
+//   • "Job#12345" or "Job #12345"                   (the # is REQUIRED without the NU Labs prefix)
+// A bare "Job 12345" (no NU Labs, no #) is NOT treated as a job number. Digits are
+// 3+. Used so historical quotes (whose only record of the job is this text) still
+// show in Job Search before/without a data backfill.
+const RFQ_JOB_RE = /(?:nu\s*labs\s*job\s*#?\s*|\bjob\s*#\s*)(\d{3,})/i
 export function parseJobFromRfq(rfq?: string | null): string {
   const m = String(rfq || '').match(RFQ_JOB_RE)
   return m ? m[1] : ''
