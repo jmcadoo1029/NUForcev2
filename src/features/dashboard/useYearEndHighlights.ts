@@ -27,9 +27,10 @@ export interface Award {
   total: number
 }
 export interface Change {
-  opp: string
   customer: string
-  delta: number
+  delta: number // this year's quoted value minus last year's, for this account
+  prior: number // last year's quoted value for this account
+  current: number // this year's quoted value for this account
 }
 export interface YearStats {
   year: number
@@ -42,8 +43,8 @@ export interface YearStats {
   highestNewWon: Award | null // highest NEW-business closed quote
   bestCustomer: { name: string; wonValue: number; wonCount: number } | null
   bestProduct: CodeAgg | null // top product code by won value
-  mostChangedUp: Change | null // revision this year with the biggest value increase
-  mostChangedDown: Change | null // …biggest decrease
+  accountGain: Change | null // account whose quoted value grew the most vs last year
+  accountDrop: Change | null // …dropped the most vs last year
   quotedByCode: CodeAgg[] // sorted desc by value
   wonNewByCode: CodeAgg[]
 }
@@ -148,6 +149,11 @@ async function load(): Promise<YearEndData> {
   const years = Array.from(new Set([...byCreatedYear.keys(), ...byWonYear.keys()])).sort((a, b) => a - b)
   const byYear: Record<number, YearStats> = {}
 
+  // Per-account quoted value by year, so we can compare an account's quoted work
+  // year-over-year. Filled as we go; since years run ascending, year Y-1 is ready
+  // when we compute year Y's biggest gainers / droppers.
+  const custQuotedByYear = new Map<number, Map<string, number>>()
+
   for (const y of years) {
     const yStartMs = new Date(y, 0, 1).getTime()
     const rowsCreated = byCreatedYear.get(y) || []
@@ -160,11 +166,19 @@ async function load(): Promise<YearEndData> {
     let newCount = 0
     let newTotal = 0
     // Count unchanged (budgetary still counts as a quote); value excludes budgetary.
-    groups.forEach((latest, b) => { if (hasBlank.has(b)) { newCount += 1; if (!isBudgetaryStage(stageOf(latest))) newTotal += num(latest.total) } })
+    // Also tally each account's new quoted value this year (for the YoY movers below).
+    const custYear = new Map<string, number>()
+    groups.forEach((latest, b) => {
+      if (!hasBlank.has(b)) return
+      newCount += 1
+      if (isBudgetaryStage(stageOf(latest))) return
+      newTotal += num(latest.total)
+      const c = customerOf(latest)
+      custYear.set(c, (custYear.get(c) || 0) + num(latest.total))
+    })
+    custQuotedByYear.set(y, custYear)
 
     let revDelta = 0
-    let mostChangedUp: Change | null = null
-    let mostChangedDown: Change | null = null
     rowsCreated.forEach((r) => {
       if (revRank(r.revision) < 1) return // lettered revisions only
       if (stageOf(r) === 'Closed Lost') return // active quoting only
@@ -174,12 +188,24 @@ async function load(): Promise<YearEndData> {
       const priorOpp = priorRevOppOf(r.opportunity, r.revision)
       const prior = priorOpp ? byOpp.get(priorOpp) : undefined
       if (!prior) return
-      const delta = num(r.total) - num(prior.total)
-      revDelta += delta
-      const c: Change = { opp: r.opportunity || '', customer: customerOf(r), delta }
-      if (delta > 0 && (!mostChangedUp || delta > mostChangedUp.delta)) mostChangedUp = c
-      if (delta < 0 && (!mostChangedDown || delta < mostChangedDown.delta)) mostChangedDown = c
+      revDelta += num(r.total) - num(prior.total)
     })
+
+    // ── Biggest account movers: quoted value this year vs last year ──
+    const prevCust = custQuotedByYear.get(y - 1)
+    let accountGain: Change | null = null
+    let accountDrop: Change | null = null
+    if (prevCust) {
+      const names = new Set<string>([...custYear.keys(), ...prevCust.keys()])
+      names.forEach((name) => {
+        if (name === '(Unknown)') return
+        const current = custYear.get(name) || 0
+        const prior = prevCust.get(name) || 0
+        const delta = current - prior
+        if (delta > 0 && (!accountGain || delta > accountGain.delta)) accountGain = { customer: name, delta, prior, current }
+        if (delta < 0 && (!accountDrop || delta < accountDrop.delta)) accountDrop = { customer: name, delta, prior, current }
+      })
+    }
 
     // ── Won ──
     const wonFams = latestPerBase(byWonYear.get(y) || [])
@@ -205,8 +231,8 @@ async function load(): Promise<YearEndData> {
       highestNewWon,
       bestCustomer,
       bestProduct: wonByCode[0] || null,
-      mostChangedUp,
-      mostChangedDown,
+      accountGain,
+      accountDrop,
       quotedByCode: aggCodes(latestPerBase(rowsCreated).filter((q) => !isBudgetaryStage(stageOf(q)))),
       wonNewByCode: aggCodes(newWonFams),
     }

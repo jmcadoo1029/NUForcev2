@@ -209,16 +209,16 @@ export function YearEndHighlights() {
                   sub={cur.bestProduct ? `${money(cur.bestProduct.value)} won` : 'no coded wins this year'}
                 />
                 <StatTile
-                  label="Most changed ▲"
+                  label="Biggest account gain ▲"
                   tone="pos"
-                  value={cur.mostChangedUp ? signedMoney(cur.mostChangedUp.delta) : '—'}
-                  sub={cur.mostChangedUp ? `${cur.mostChangedUp.opp} · ${cur.mostChangedUp.customer}` : 'no upward revisions'}
+                  value={cur.accountGain ? signedMoney(cur.accountGain.delta) : '—'}
+                  sub={cur.accountGain ? `${cur.accountGain.customer} · ${money(cur.accountGain.prior)} → ${money(cur.accountGain.current)}` : 'no prior-year comparison'}
                 />
                 <StatTile
-                  label="Most changed ▼"
+                  label="Biggest account drop ▼"
                   tone="accent"
-                  value={cur.mostChangedDown ? signedMoney(cur.mostChangedDown.delta) : '—'}
-                  sub={cur.mostChangedDown ? `${cur.mostChangedDown.opp} · ${cur.mostChangedDown.customer}` : 'no downward revisions'}
+                  value={cur.accountDrop ? signedMoney(cur.accountDrop.delta) : '—'}
+                  sub={cur.accountDrop ? `${cur.accountDrop.customer} · ${money(cur.accountDrop.prior)} → ${money(cur.accountDrop.current)}` : 'no prior-year comparison'}
                 />
               </div>
 
@@ -240,7 +240,7 @@ export function YearEndHighlights() {
               </div>
 
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-5)' }}>
-                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Most changed” is the single revision this year with the largest value increase / decrease. The 3-year average is the mean of the up-to-three prior years with data.
+                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Biggest account gain / drop” compares each account’s quoted value this year with last year and shows the largest increase / decrease (last year → this year). The 3-year average is the mean of the up-to-three prior years with data.
               </div>
             </>
           )}
