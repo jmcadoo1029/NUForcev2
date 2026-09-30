@@ -59,14 +59,17 @@ interface RawRow {
   ts: string | null
 }
 
-// Recognize a NU Labs job number written into the RFQ free-text. Deliberately strict
-// so it doesn't grab unrelated RFQ numbers — it fires ONLY on:
-//   • "NU Labs Job #12345" or "NU Labs Job 12345"  (the # is optional after "NU Labs Job")
-//   • "Job#12345" or "Job #12345"                   (the # is REQUIRED without the NU Labs prefix)
-// A bare "Job 12345" (no NU Labs, no #) is NOT treated as a job number. Digits are
-// 3+. Used so historical quotes (whose only record of the job is this text) still
-// show in Job Search before/without a data backfill.
-const RFQ_JOB_RE = /(?:nu\s*labs\s*job\s*#?\s*|\bjob\s*#\s*)(\d{3,})/i
+// Recognize OUR (NU Labs) job number written into the RFQ free-text. Deliberately
+// strict so it never grabs a CUSTOMER's job number (e.g. "Fairlead Job # 21469",
+// "Dayton T Brown … - Job #418470") or unrelated RFQ / PO / date numbers. It fires
+// ONLY on:
+//   • "NU Labs Job #12345" / "NU Labs Job 12345"   (the # is optional after NU Labs Job)
+//   • "Job#12345"                                    (bare form — "Job#" with NO space)
+// A customer's "<Company> Job # 12345" (space after Job, no NU Labs prefix) is NOT
+// matched. Note this RFQ parse is only a FALLBACK: resolveJob() uses the real
+// job_number column / close-won value first, so a won quote always shows under our
+// number even if its RFQ mentions the customer's. Digits are 3+.
+const RFQ_JOB_RE = /(?:nu\s*labs\s*job\s*#?\s*|\bjob#\s*)(\d{3,})/i
 export function parseJobFromRfq(rfq?: string | null): string {
   const m = String(rfq || '').match(RFQ_JOB_RE)
   return m ? m[1] : ''
