@@ -221,6 +221,42 @@ export function workspaceProjectUrl(projectId: string): string {
   return `${WORKSPACE_BASE}/#project/${encodeURIComponent(projectId)}/info`
 }
 
+// ── Existing-Business additional-charges chatter ─────────────────────────────
+// When an Existing-Business quote is sent, we post a chatter entry onto the matching
+// Workspace JOB (linked by job number) noting the quote was generated for additional
+// charges, and Workspace notifies the configured recipient group. The RPC
+// `add_job_chatter_from_nuforce` is owned by Workspace (Russ) — see the handoff spec.
+// The notify list (Jordan, Ragen, Linda, Scott, Corrine) is configured on the
+// Workspace side under this group key, so it can change without a NUForce deploy.
+export const ADDITIONAL_CHARGES_NOTIFY_GROUP = 'nuforce_additional_charges'
+
+// The three sender-chosen reasons → the phrase dropped into the chatter message.
+export const EXISTING_BIZ_REASONS = {
+  additional_scope: 'additional scope',
+  immediate_testing: 'immediate testing',
+  future_retest: 'a future retest',
+} as const
+export type ExistingBizReason = keyof typeof EXISTING_BIZ_REASONS
+
+/** Build the Workspace chatter message for an additional-charges quote. */
+export function additionalChargesMessage(quoteNumber: string, reason: ExistingBizReason): string {
+  return `Quote #${quoteNumber} was generated for additional charges. This quote is for ${EXISTING_BIZ_REASONS[reason]}.`
+}
+
+export interface JobChatterResult { ok?: boolean; chatter_id?: string; notified?: string[] }
+
+/** Post a chatter entry onto a Workspace job (by job number) + trigger its notify
+ *  group. Throws on failure so the caller can surface it (this is not best-effort —
+ *  the sender needs to know if the Workspace note didn't land). */
+export function postJobChatter(jobNumber: string, message: string, notifyGroup = ADDITIONAL_CHARGES_NOTIFY_GROUP): Promise<JobChatterResult> {
+  return rpcCall<JobChatterResult>('add_job_chatter_from_nuforce', {
+    job_number: str(jobNumber),
+    message,
+    notify_group: notifyGroup,
+    source: 'nuforce',
+  })
+}
+
 /** Notify owners a job was opened (best-effort; never throws to the caller). */
 export async function notifyClosedWon(data: Record<string, unknown>): Promise<void> {
   try {

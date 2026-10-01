@@ -85,6 +85,20 @@ export async function appendChatter(quoteId: string, entry: ChatterEntry): Promi
 }
 
 /**
+ * Set the quote's Business type (data.qi.type) with a targeted merge — used by the
+ * "Actually New Business" reclassify option when an Existing-Business quote was sent
+ * by mistake. Doesn't touch line items, approvals, or anything else in the blob.
+ * Callers gate on WRITES_ENABLED. Returns the value written.
+ */
+export async function setBusinessType(quoteId: string, type: 'New Business' | 'Existing Business'): Promise<string> {
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data&limit=1`)
+  const data = rows?.[0]?.data || {}
+  const qi = { ...(data.qi || {}), type }
+  await restFetch('PATCH', `quotes?id=eq.${encodeURIComponent(quoteId)}`, { body: { data: { ...data, qi }, updated_at: new Date().toISOString() } })
+  return type
+}
+
+/**
  * Mark a quote Closed Lost — recording an outcome, NOT a pricing edit, so it does
  * NOT need an approver or a reopen. Targeted write: sets the stage (column +
  * data.qi.stage), appends the required "why it was lost" note to chatter, and

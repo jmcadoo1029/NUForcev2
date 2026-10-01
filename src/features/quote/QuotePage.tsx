@@ -24,6 +24,7 @@ import { ApprovalBar, type ApprovalState } from './ApprovalBar'
 import { RevisionHistory } from './RevisionHistory'
 import { QuoteActions, type ChatterEntry } from './QuoteActions'
 import { SendComposer } from './SendComposer'
+import { JobChatterModal } from './JobChatterModal'
 import { SentFiles } from './SentFiles'
 import { ConvertToPicker, type ConvertedLine } from './ConvertToPicker'
 import { Autocomplete } from './form/Autocomplete'
@@ -74,6 +75,10 @@ export function QuotePage() {
   const [linkAcctOpen, setLinkAcctOpen] = useState(false)
   const [linkAcctText, setLinkAcctText] = useState('')
   const [sendOpen, setSendOpen] = useState(false)
+  // Additional-charges → Workspace chatter popup. 'post_send' fires automatically
+  // after an Existing-Business quote is sent (choice required); 'manual' is launched
+  // from the form button (cancelable) for when New/Existing changed after the send.
+  const [jobChatterMode, setJobChatterMode] = useState<null | 'post_send' | 'manual'>(null)
   // Manual follow-up from the quote page (mirrors the dashboard "Send follow-up").
   const [followUpOpen, setFollowUpOpen] = useState(false)
   const [followUpFuId, setFollowUpFuId] = useState<string | null>(null)
@@ -1084,6 +1089,9 @@ export function QuotePage() {
                 <Button variant="ghost" small onClick={() => setRevOpen(true)}>Revisions</Button>
                 {row.id && WRITES_ENABLED && <Button variant="secondary" small onClick={() => { setCloneOpp(''); setCloneOpen(true) }} title="Create a copy of this quote under a new number">Clone</Button>}
                 {row.id && <Button variant="secondary" small onClick={() => setSendOpen(true)}>Send</Button>}
+                {row.id && (wonInfo.jobNum.trim() || s(qi.type) === 'Existing Business') && (
+                  <Button variant="secondary" small onClick={() => setJobChatterMode('manual')} title="Post an additional-charges note to this job's Workspace chatter">Workspace chatter</Button>
+                )}
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                 <div style={{ position: 'relative' }}>
@@ -1271,7 +1279,27 @@ export function QuotePage() {
               testItem={s(ti.item)}
               pdfInput={{ qi: qiEdit, ti: tiEdit, lines: lineItems.map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty })), budget: { on: budgetEdit.on, rows: budgetEdit.rows, markup: budgetEdit.markup } }}
               onClose={() => setSendOpen(false)}
-              onSent={() => setSendNonce((n) => n + 1)}
+              onSent={(result) => {
+                setSendNonce((n) => n + 1)
+                // Existing-Business quote just went out → prompt to post the
+                // additional-charges note to its Workspace job (choice required).
+                if (result?.ok && result.status !== 'preview' && s(qiEdit.type) === 'Existing Business') {
+                  setJobChatterMode('post_send')
+                }
+              }}
+            />
+          )}
+
+          {jobChatterMode && (
+            <JobChatterModal
+              quoteId={row.id}
+              opportunity={s(qi.opp) || row.opportunity || ''}
+              initialJobNum={wonInfo.jobNum}
+              me={me}
+              cancelable={jobChatterMode === 'manual'}
+              onPosted={() => setSendNonce((n) => n + 1)}
+              onReclassified={() => setQi({ type: 'New Business' })}
+              onClose={() => setJobChatterMode(null)}
             />
           )}
 
