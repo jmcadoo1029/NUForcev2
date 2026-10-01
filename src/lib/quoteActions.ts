@@ -75,6 +75,14 @@ export interface ChatterEntry { by: string; at: string; msg: string; auto?: bool
  * data blob, appends, and PATCHes it back — merging so nothing else in the blob
  * is disturbed. Returns the new full entry list. Callers gate on WRITES_ENABLED.
  */
+/** Read the quote's current chatter entries from the DB (so the thread reflects notes
+ *  written by other flows — e.g. the Workspace job-chatter popup — not just this tab). */
+export async function fetchChatter(quoteId: string): Promise<ChatterEntry[]> {
+  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data&limit=1`)
+  const data = rows?.[0]?.data || {}
+  return Array.isArray(data.chatterEntries) ? data.chatterEntries : []
+}
+
 export async function appendChatter(quoteId: string, entry: ChatterEntry): Promise<ChatterEntry[]> {
   const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data&limit=1`)
   const data = rows?.[0]?.data || {}

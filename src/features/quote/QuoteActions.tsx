@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Card, Modal, useToast } from '../../components'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
-import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
+import { fetchQuoteActions, flagQuote, unflagQuote, appendChatter, fetchChatter, type QuoteActionsState, type QuoteFlag } from '../../lib/quoteActions'
 import { updateQuoteContact } from '../../lib/quoteContact'
 import { useFeature } from '../../lib/perms'
 import { fetchClientContacts, searchPeople, searchClients, personName, type PersonRow, type ClientRow } from '../../lib/directory'
@@ -138,6 +138,9 @@ export function QuoteActions({
   useEffect(() => {
     let alive = true
     fetchQuoteActions(quoteId).then((s) => { if (alive) { setState(s); setFlagRow(s.flag) } })
+    // Re-read chatter from the DB so notes written elsewhere (e.g. the Workspace
+    // job-chatter popup, or another tab) show here, not just ones posted in this thread.
+    fetchChatter(quoteId).then((list) => { if (alive && list.length) setEntries(list) }).catch(() => { /* keep the seeded prop */ })
     return () => { alive = false }
   }, [quoteId])
 
