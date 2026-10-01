@@ -109,6 +109,12 @@ export function SendComposer(props: SendComposerProps) {
   const [body, setBody] = useState('')
   const [rawTemplate, setRawTemplate] = useState<{ subject: string; body: string }>({ subject: '', body: '' })
   const [items, setItems] = useState<Selectable[]>([])
+  // Attachment preview: shows the EXACT bytes that will be sent (the Quote PDF is
+  // generated the same way as at send time), so you can confirm a quote is correct —
+  // e.g. that a quantity quote expands unit × qty — before it goes to the customer.
+  const [pvUrl, setPvUrl] = useState<string | null>(null)
+  const [pvName, setPvName] = useState('')
+  const [pvBusy, setPvBusy] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const uploadRef = useRef<HTMLInputElement>(null)
@@ -159,6 +165,24 @@ export function SendComposer(props: SendComposerProps) {
   }, [quoteId, mode])
 
   const toggle = (id: string) => setItems((cur) => cur.map((it) => (it.id === id || it.required ? (it.required ? it : { ...it, selected: !it.selected }) : it)))
+
+  // Build the attachment's real bytes and open them inline. Same path as sending, so
+  // what you see is exactly what the customer will get.
+  const previewItem = async (it: Selectable) => {
+    setPvBusy(it.id)
+    try {
+      const out = await resolveBytes(it)
+      if (!out?.blob) { showToast(`Couldn’t build a preview for “${it.fileName}”.`, 'error', 5000); return }
+      if (pvUrl) { try { URL.revokeObjectURL(pvUrl) } catch { /* ignore */ } }
+      setPvUrl(URL.createObjectURL(out.blob))
+      setPvName(it.fileName)
+    } catch {
+      showToast(`Couldn’t build a preview for “${it.fileName}”.`, 'error', 5000)
+    } finally {
+      setPvBusy(null)
+    }
+  }
+  const closePreview = () => { if (pvUrl) { try { URL.revokeObjectURL(pvUrl) } catch { /* ignore */ } } setPvUrl(null); setPvName('') }
   const removeUpload = (id: string) => setItems((cur) => cur.filter((it) => it.id !== id))
   const addUploads = (files: FileList | null) => {
     if (!files || !files.length) return
@@ -371,6 +395,16 @@ export function SendComposer(props: SendComposerProps) {
                   <input type="checkbox" checked={it.selected || !!it.required} disabled={!!it.required} onChange={() => toggle(it.id)} style={{ cursor: it.required ? 'default' : 'pointer' }} />
                   <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
                   {it.required && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', flexShrink: 0 }}>always</span>}
+                  {(it.mime === 'application/pdf' || it.source === 'quote_pdf') && (
+                    <button
+                      onClick={(e) => { e.preventDefault(); previewItem(it) }}
+                      disabled={pvBusy === it.id}
+                      title="Preview exactly what will be sent"
+                      style={{ fontFamily: 'inherit', fontSize: 'var(--fs-caption)', fontWeight: 700, color: 'var(--accent)', background: 'none', border: '1px solid var(--border-strong)', borderRadius: 20, padding: '2px 10px', cursor: pvBusy === it.id ? 'default' : 'pointer', flexShrink: 0 }}
+                    >
+                      {pvBusy === it.id ? '…' : 'Preview'}
+                    </button>
+                  )}
                   {it.source === 'upload' && <button onClick={(e) => { e.preventDefault(); removeUpload(it.id) }} title="Remove" style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--dim)', fontSize: 16, lineHeight: 1, flexShrink: 0 }}>×</button>}
                 </label>
               ))}
@@ -389,6 +423,14 @@ export function SendComposer(props: SendComposerProps) {
             </div>
           </div>
         </div>
+      )}
+      {pvUrl && (
+        <Modal title={`Preview — ${pvName}`} onClose={closePreview} width={1000}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginBottom: 'var(--sp-3)' }}>
+            This is exactly what will be attached to the email. Check the Qty / Amount columns and the total before sending.
+          </div>
+          <iframe title={pvName} src={pvUrl} style={{ width: '100%', height: '78vh', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)' }} />
+        </Modal>
       )}
     </Modal>
   )
