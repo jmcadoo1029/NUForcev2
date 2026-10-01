@@ -22,6 +22,14 @@ export interface WonQuote {
   type: 'New Business' | 'Existing Business'
 }
 
+// A quote active (quoted) in the month — one row per opportunity family (latest rev).
+export interface QuotedQuote {
+  id: string
+  opportunity: string | null
+  customer: string | null
+  total: number
+}
+
 export interface DashboardMetrics {
   quotedTotal: number // netTotal
   quotedCount: number // newCount
@@ -32,6 +40,7 @@ export interface DashboardMetrics {
   wonExistingTotal: number
   capturePct: number
   wonQuotes: WonQuote[]
+  quotedQuotes: QuotedQuote[] // the opportunities quoted this month (one per family)
 }
 
 interface Row {
@@ -79,7 +88,7 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
   const [createdRaw, wonRaw, wonNullRaw] = await Promise.all([
     restFetch<Row[]>(
       'GET',
-      `quotes?select=id,opportunity,revision,total,created_at,stage&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
+      `quotes?select=id,opportunity,revision,customer,total,created_at,stage&created_at=gte.${encodeURIComponent(startIso)}&created_at=lt.${encodeURIComponent(endIso)}`,
     ),
     restFetch<Row[]>(
       'GET',
@@ -106,15 +115,18 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
   let newCount = 0
   let newTotal = 0
   let newCountValued = 0 // non-budgetary new families — used for a meaningful average
+  const quotedQuotes: QuotedQuote[] = []
   groups.forEach((latest, b) => {
     if (baseHasBlank.has(b)) {
       newCount += 1 // count is unchanged — budgetary quotes still count as quotes
+      quotedQuotes.push({ id: latest.id, opportunity: latest.opportunity ?? null, customer: latest.customer ?? null, total: num(latest.total) })
       if (!isBudgetaryStage(latest.stage)) { // value excludes budgetary
         newTotal += num(latest.total)
         newCountValued += 1
       }
     }
   })
+  quotedQuotes.sort((a, b) => b.total - a.total) // biggest first
 
   // ── Revision delta: revisions SAVED this month (net change vs the prior revision), on
   // active (non-lost) quotes, regardless of when the original was created. Counted on save
@@ -207,6 +219,7 @@ export async function loadMonthMetrics(monthStart: Date): Promise<DashboardMetri
     // Capture rate = dollars won this month ÷ net dollars quoted this month.
     capturePct: netTotal > 0 ? Math.round((wonTotal / netTotal) * 100) : 0,
     wonQuotes,
+    quotedQuotes,
   }
 }
 

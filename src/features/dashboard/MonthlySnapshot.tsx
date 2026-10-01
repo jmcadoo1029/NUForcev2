@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Modal, StatTile } from '../../components'
 import { money, moneyShort } from '../../lib/format'
 import { loadMonthMetrics, type DashboardMetrics } from './useDashboardMetrics'
@@ -10,6 +11,8 @@ const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 
 // same net-of-revisions logic as the live tiles.
 export function MonthlySnapshot({ onClose }: { onClose: () => void }) {
   const now = new Date()
+  const navigate = useNavigate()
+  const openQuote = (opp: string | null, id: string) => { onClose(); navigate(`/quote/${encodeURIComponent(opp || id)}`) }
   // Default to last month.
   const [sel, setSel] = useState(() => {
     const d = new Date(now.getFullYear(), now.getMonth() - 1, 1)
@@ -62,6 +65,35 @@ export function MonthlySnapshot({ onClose }: { onClose: () => void }) {
             <StatTile label="Closed Won" value={money(data.wonTotal)} sub={`${data.wonCount} quotes`} tone="accent" />
           </div>
           <WonBreakdown wonQuotes={data.wonQuotes} wonNewTotal={data.wonNewTotal} wonExistingTotal={data.wonExistingTotal} />
+
+          {/* Quotes active this month — click one to open it. One row per opportunity
+              (latest revision), newest/biggest first. Not split by new vs. revision. */}
+          <div style={{ marginTop: 'var(--sp-5)' }}>
+            <div style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--dim)', marginBottom: 'var(--sp-2)' }}>
+              Quotes this month{data.quotedQuotes.length ? ` · ${data.quotedQuotes.length}` : ''}
+            </div>
+            {data.quotedQuotes.length === 0 ? (
+              <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>No quotes originated this month.</div>
+            ) : (
+              <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }}>
+                {data.quotedQuotes.map((q) => (
+                  <button
+                    key={q.id}
+                    onClick={() => openQuote(q.opportunity, q.id)}
+                    title="Open this quote"
+                    style={{ display: 'flex', width: '100%', textAlign: 'left', alignItems: 'baseline', gap: 'var(--sp-3)', padding: '9px 12px', background: 'var(--surface)', border: 'none', borderBottom: '1px solid var(--border)', cursor: 'pointer', fontFamily: 'inherit' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')}
+                    onMouseLeave={(e) => (e.currentTarget.style.background = 'var(--surface)')}
+                  >
+                    <span style={{ fontSize: 'var(--fs-base)', fontWeight: 800, color: 'var(--accent)', whiteSpace: 'nowrap' }}>{q.opportunity || '—'}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 'var(--fs-sm)', color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{q.customer || '—'}</span>
+                    <span style={{ fontSize: 'var(--fs-sm)', fontWeight: 700, color: 'var(--text)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>{money(q.total)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div style={{ height: 'var(--sp-2)' }} />
         </>
       )}
