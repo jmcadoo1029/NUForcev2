@@ -103,6 +103,7 @@ serve(async (req: Request) => {
   }
 
   // ── Search awards (USASpending) ─────────────────────────────────────────────
+  const kind = str(body.kind) === 'solicitation' ? 'solicitation' : 'award';
   const agencyScope = str(body.agencyScope) || 'dod';         // 'dod' | 'all'
   const monthsBack = Math.min(60, Math.max(1, num(body.monthsBack) || 12));
   const keyword = str(body.keyword);
@@ -112,87 +113,144 @@ serve(async (req: Request) => {
   const end = new Date();
   const start = new Date(end.getFullYear(), end.getMonth() - monthsBack, end.getDate());
   const ymd = (d: Date) => d.toISOString().slice(0, 10);
-
-  const filters: Record<string, unknown> = {
-    award_type_codes: ['A', 'B', 'C', 'D'], // BPA call, purchase order, delivery order, definitive contract
-    naics_codes: ['541380'],
-    time_period: [{ start_date: ymd(start), end_date: ymd(end) }],
-  };
-  if (agencyScope === 'dod') filters.agencies = [{ type: 'awarding', tier: 'toptier', name: 'Department of Defense' }];
-  const kws = keyword ? [keyword] : (family ? familyTerms(family) : []);
-  if (kws.length) filters.keywords = kws;
-
-  const usReq = {
-    filters,
-    fields: ['Award ID', 'Recipient Name', 'Awarding Agency', 'Awarding Sub Agency', 'Award Amount', 'Start Date', 'End Date', 'Description', 'recipient_id', 'generated_internal_id', 'Contract Award Type', 'NAICS', 'PSC'],
-    page: 1, limit, sort: 'Award Amount', order: 'desc',
-  };
-
-  let usResults: any[] = [];
-  try {
-    const r = await fetch(USASPENDING, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(usReq) });
-    if (!r.ok) return json(502, { ok: false, error: `USASpending error ${r.status}: ${(await r.text()).slice(0, 300)}` });
-    const data = await r.json();
-    usResults = Array.isArray(data?.results) ? data.results : [];
-  } catch (e) {
-    return json(502, { ok: false, error: `USASpending request failed: ${e instanceof Error ? e.message : String(e)}` });
-  }
-
-  // Load clients for account matching (best-effort).
-  const clientsByNorm = new Map<string, { id: string; name: string }>();
-  const clientsList: Array<{ id: string; name: string; norm: string }> = [];
-  try {
-    const cr = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id,name`, { headers: H });
-    if (cr.ok) {
-      const cs = await cr.json();
-      for (const c of (cs || [])) {
-        const n = normName(str(c.name));
-        if (!n) continue;
-        if (!clientsByNorm.has(n)) clientsByNorm.set(n, { id: c.id, name: c.name });
-        clientsList.push({ id: c.id, name: c.name, norm: n });
-      }
-    }
-  } catch { /* matching is best-effort */ }
-
-  const matchClient = (company: string): { id: string | null; kind: string } => {
-    const n = normName(company);
-    if (!n) return { id: null, kind: 'prospect' };
-    const exact = clientsByNorm.get(n);
-    if (exact) return { id: exact.id, kind: 'account' };
-    if (n.length >= 5) {
-      const hit = clientsList.find((c) => c.norm.length >= 5 && (c.norm.includes(n) || n.includes(c.norm)));
-      if (hit) return { id: hit.id, kind: 'account' };
-    }
-    return { id: null, kind: 'prospect' };
-  };
-
-  // Normalize + match + build upsert payload.
   const nowIso = new Date().toISOString();
-  const rows = usResults.map((r) => {
-    const company = str(r['Recipient Name']);
-    const gid = str(r['generated_internal_id']);
-    const sourceId = gid || str(r['Award ID']);
-    const descText = `${str(r['Description'])} ${str(r['Awarding Sub Agency'])}`;
-    const m = matchClient(company);
-    return {
-      source: 'usaspending_award',
-      source_id: sourceId,
-      kind: 'award',
-      title: str(r['Description']) || str(r['Award ID']) || '(no description)',
-      agency: str(r['Awarding Agency']),
-      sub_agency: str(r['Awarding Sub Agency']),
-      naics: str(r['NAICS']),
-      psc: str(r['PSC']),
-      amount: num(r['Award Amount']),
-      company_name: company,
-      url: gid ? AWARD_URL(gid) : null,
-      matched_client_id: m.id,
-      match_kind: m.kind,
-      family: familyOf(descText),
-      last_seen_at: nowIso,
-      raw: r,
+
+  let rows: any[] = [];
+
+  if (kind === 'solicitation') {
+    // ── Active solicitations (SAM.gov Opportunities API) ──────────────────────
+    const SAM_KEY = env('SAM_API_KEY');
+    if (!SAM_KEY) return json(400, { ok: false, error: 'SAM_API_KEY is not set on this function. Add it (Phase 2) to enable solicitations.' });
+    // SAM requires a posted window ≤ 1 year, as MM/dd/yyyy.
+    const samStart = new Date(Math.max(start.getTime(), end.getTime() - 364 * 864e5));
+    const mdy = (d: Date) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+    const params = new URLSearchParams({ api_key: SAM_KEY, ncode: '541380', postedFrom: mdy(samStart), postedTo: mdy(end), limit: String(limit) });
+    if (keyword) params.set('title', keyword);
+    let sam: any = {};
+    try {
+      const r = await fetch(`https://api.sam.gov/opportunities/v2/search?${params.toString()}`);
+      if (!r.ok) return json(502, { ok: false, error: `SAM.gov error ${r.status}: ${(await r.text()).slice(0, 300)}` });
+      sam = await r.json();
+    } catch (e) {
+      return json(502, { ok: false, error: `SAM.gov request failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+    const data: any[] = Array.isArray(sam?.opportunitiesData) ? sam.opportunitiesData
+      : Array.isArray(sam?._embedded?.opportunitiesData) ? sam._embedded.opportunitiesData : [];
+    const BID_TYPES = ['Solicitation', 'Combined Synopsis/Solicitation', 'Presolicitation', 'Sources Sought'];
+    const nowMs = Date.now();
+    rows = data.filter((o) => {
+      if (!BID_TYPES.includes(str(o.type))) return false;            // bid-relevant notice types only
+      const dl = str(o.responseDeadLine);
+      if (dl) { const t = new Date(dl).getTime(); if (!isNaN(t) && t < nowMs) return false; } // open only
+      if (agencyScope === 'dod' && !/DEFENSE|NAVY|ARMY|AIR FORCE|MARINE|DEFENSE LOGISTICS/i.test(str(o.fullParentPathName))) return false;
+      return true;
+    }).map((o) => {
+      const noticeId = str(o.noticeId);
+      const pop = o.placeOfPerformance || {};
+      const title = str(o.title) || '(no title)';
+      return {
+        source: 'sam_opportunity',
+        source_id: noticeId,
+        kind: 'solicitation',
+        title,
+        agency: str(o.fullParentPathName).replace(/\./g, ' · '),
+        sub_agency: str(o.office) || null,
+        naics: str(o.naicsCode),
+        psc: str(o.classificationCode),
+        amount: null,
+        posted_date: str(o.postedDate).slice(0, 10) || null,
+        response_deadline: str(o.responseDeadLine).slice(0, 10) || null,
+        company_name: null,
+        company_city: str(pop?.city?.name) || null,
+        company_state: str(pop?.state?.name) || str(pop?.state?.code) || null,
+        url: str(o.uiLink) || (noticeId ? `https://sam.gov/opp/${noticeId}/view` : null),
+        matched_client_id: null,
+        match_kind: null,
+        family: familyOf(`${title} ${str(o.typeOfSetAsideDescription)}`),
+        last_seen_at: nowIso,
+        raw: o,
+      };
+    }).filter((x) => x.source_id);
+  } else {
+    // ── Recent awards (USASpending) ───────────────────────────────────────────
+    const filters: Record<string, unknown> = {
+      award_type_codes: ['A', 'B', 'C', 'D'], // BPA call, purchase order, delivery order, definitive contract
+      naics_codes: ['541380'],
+      time_period: [{ start_date: ymd(start), end_date: ymd(end) }],
     };
-  }).filter((x) => x.source_id);
+    if (agencyScope === 'dod') filters.agencies = [{ type: 'awarding', tier: 'toptier', name: 'Department of Defense' }];
+    const kws = keyword ? [keyword] : (family ? familyTerms(family) : []);
+    if (kws.length) filters.keywords = kws;
+
+    const usReq = {
+      filters,
+      fields: ['Award ID', 'Recipient Name', 'Awarding Agency', 'Awarding Sub Agency', 'Award Amount', 'Start Date', 'End Date', 'Description', 'recipient_id', 'generated_internal_id', 'Contract Award Type', 'NAICS', 'PSC'],
+      page: 1, limit, sort: 'Award Amount', order: 'desc',
+    };
+
+    let usResults: any[] = [];
+    try {
+      const r = await fetch(USASPENDING, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(usReq) });
+      if (!r.ok) return json(502, { ok: false, error: `USASpending error ${r.status}: ${(await r.text()).slice(0, 300)}` });
+      const data = await r.json();
+      usResults = Array.isArray(data?.results) ? data.results : [];
+    } catch (e) {
+      return json(502, { ok: false, error: `USASpending request failed: ${e instanceof Error ? e.message : String(e)}` });
+    }
+
+    // Load clients for account matching (best-effort).
+    const clientsByNorm = new Map<string, { id: string; name: string }>();
+    const clientsList: Array<{ id: string; name: string; norm: string }> = [];
+    try {
+      const cr = await fetch(`${SUPABASE_URL}/rest/v1/clients?select=id,name`, { headers: H });
+      if (cr.ok) {
+        const cs = await cr.json();
+        for (const c of (cs || [])) {
+          const n = normName(str(c.name));
+          if (!n) continue;
+          if (!clientsByNorm.has(n)) clientsByNorm.set(n, { id: c.id, name: c.name });
+          clientsList.push({ id: c.id, name: c.name, norm: n });
+        }
+      }
+    } catch { /* matching is best-effort */ }
+
+    const matchClient = (company: string): { id: string | null; kind: string } => {
+      const n = normName(company);
+      if (!n) return { id: null, kind: 'prospect' };
+      const exact = clientsByNorm.get(n);
+      if (exact) return { id: exact.id, kind: 'account' };
+      if (n.length >= 5) {
+        const hit = clientsList.find((c) => c.norm.length >= 5 && (c.norm.includes(n) || n.includes(c.norm)));
+        if (hit) return { id: hit.id, kind: 'account' };
+      }
+      return { id: null, kind: 'prospect' };
+    };
+
+    rows = usResults.map((r) => {
+      const company = str(r['Recipient Name']);
+      const gid = str(r['generated_internal_id']);
+      const sourceId = gid || str(r['Award ID']);
+      const m = matchClient(company);
+      return {
+        source: 'usaspending_award',
+        source_id: sourceId,
+        kind: 'award',
+        title: str(r['Description']) || str(r['Award ID']) || '(no description)',
+        agency: str(r['Awarding Agency']),
+        sub_agency: str(r['Awarding Sub Agency']),
+        naics: str(r['NAICS']),
+        psc: str(r['PSC']),
+        amount: num(r['Award Amount']),
+        company_name: company,
+        url: gid ? AWARD_URL(gid) : null,
+        matched_client_id: m.id,
+        match_kind: m.kind,
+        family: familyOf(`${str(r['Description'])} ${str(r['Awarding Sub Agency'])}`),
+        last_seen_at: nowIso,
+        raw: r,
+      };
+    }).filter((x) => x.source_id);
+  }
 
   if (!rows.length) return json(200, { ok: true, count: 0, items: [] });
 
@@ -212,10 +270,12 @@ serve(async (req: Request) => {
     return json(500, { ok: false, error: `Cache upsert threw: ${e instanceof Error ? e.message : String(e)}` });
   }
 
-  // If a family filter was applied but USASpending keywords were broad, keep only
-  // rows whose tagged family matches (defensive; no-op when family is empty).
+  // Optional family filter (defensive; no-op when family is empty). Solicitations
+  // sort by soonest response deadline; awards by largest amount.
   const items = (family ? stored.filter((s) => s.family === family) : stored)
-    .sort((a, b) => num(b.amount) - num(a.amount));
+    .sort((a, b) => kind === 'solicitation'
+      ? (str(a.response_deadline) || '9999-99-99').localeCompare(str(b.response_deadline) || '9999-99-99')
+      : num(b.amount) - num(a.amount));
 
   return json(200, { ok: true, count: items.length, items });
 });

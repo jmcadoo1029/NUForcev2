@@ -29,9 +29,11 @@ export interface MarketItem {
   assigned_to: string | null
   first_seen_at: string
   last_seen_at: string
+  raw?: Record<string, any> | null // full source record (SAM.gov / USASpending)
 }
 
 export interface MarketSearchParams {
+  kind?: 'award' | 'solicitation'
   agencyScope?: 'dod' | 'all'
   monthsBack?: number
   keyword?: string
@@ -61,6 +63,7 @@ export const FAMILY_LABELS: Record<string, string> = {
 export async function searchMarket(p: MarketSearchParams = {}): Promise<MarketItem[]> {
   const res = await invokeFunction<{ ok: boolean; items?: MarketItem[]; error?: string }>('market-research', {
     action: 'search',
+    kind: p.kind || 'award',
     agencyScope: p.agencyScope || 'dod',
     monthsBack: p.monthsBack || 12,
     keyword: p.keyword || '',
