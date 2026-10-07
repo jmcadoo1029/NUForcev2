@@ -92,14 +92,21 @@ export interface ReopenRequest {
 }
 
 /** A teammate asks an approver to reopen an approved+locked quote. Logs the ask
- *  in approval history but leaves approval_status untouched (stays locked). */
+ *  in approval history AND drops the reason into the quote's chatter thread (as an
+ *  auto/system entry) so the "why" is visible inline, not just in the approval
+ *  audit trail. Leaves approval_status untouched (stays locked). */
 export async function requestReopen(quoteId: string, by: string, reason: string): Promise<void> {
   const data = await loadData(quoteId)
   const prevAp = (data.approval || {}) as ApprovalBlock
   const at = new Date().toISOString()
-  const reopenRequest: ReopenRequest = { status: 'requested', requestedBy: by, requestedAt: at, reason: reason || '' }
-  const approval: ApprovalBlock = { ...prevAp, history: [...(prevAp.history || []), { event: 'reopen_requested', by, at, comments: reason || '' }] }
-  await patch(quoteId, { data: { ...data, approval, reopenRequest } })
+  const why = (reason || '').trim()
+  const reopenRequest: ReopenRequest = { status: 'requested', requestedBy: by, requestedAt: at, reason: why }
+  const approval: ApprovalBlock = { ...prevAp, history: [...(prevAp.history || []), { event: 'reopen_requested', by, at, comments: why }] }
+  // Auto chatter entry so the reopen reason shows in the thread (and the activity
+  // feed treats e.auto === true as a system note). No reason → still log the ask.
+  const prevChatter = Array.isArray(data.chatterEntries) ? (data.chatterEntries as unknown[]) : []
+  const chatterEntries = [...prevChatter, { by, at, msg: `Reopen requested${why ? ` — ${why}` : ''}`, auto: true }]
+  await patch(quoteId, { data: { ...data, approval, reopenRequest, chatterEntries } })
 }
 
 /** Approver resolves a reopen request from the dashboard. 'unlock' reopens the
