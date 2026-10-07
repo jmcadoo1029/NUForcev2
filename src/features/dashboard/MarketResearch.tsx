@@ -24,6 +24,21 @@ const daysUntil = (iso?: string | null) => {
   return Math.ceil((t - Date.now()) / 864e5)
 }
 
+// One contracting POC: name, a clickable mailto (subject pre-filled with the notice
+// title so outreach is one click), and phone. Returns null when there's nothing to show.
+const PocLine = ({ name, email, phone, subject }: { name?: string | null; email?: string | null; phone?: string | null; subject?: string }) => {
+  if (!name && !email && !phone) return null
+  return (
+    <span>
+      {name ? <b style={{ color: 'var(--text)' }}>{name}</b> : null}
+      {email ? (
+        <>{name ? ' — ' : ''}<a href={`mailto:${email}${subject ? `?subject=${encodeURIComponent(subject)}` : ''}`} style={{ color: 'var(--accent)', textDecoration: 'none', fontWeight: 700 }}>{email}</a></>
+      ) : null}
+      {phone ? <span style={{ color: 'var(--dim)' }}>{(name || email) ? ' · ' : ''}{phone}</span> : null}
+    </span>
+  )
+}
+
 export function MarketResearch() {
   const { showToast } = useToast()
   const navigate = useNavigate()
@@ -183,6 +198,15 @@ export function MarketResearch() {
                     <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 4 }}>
                       {setAside ? <>Set-aside: <b style={{ color: 'var(--text)' }}>{setAside}</b></> : 'No set-aside'}{place ? ` · Place of performance: ${place}` : ''}
                     </div>
+                    {(it.poc_email || it.poc_name || it.poc2_email || it.poc2_name) && (
+                      <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 6, lineHeight: 1.5 }}>
+                        <span style={{ fontWeight: 700, color: 'var(--dim)' }}>Contact: </span>
+                        <PocLine name={it.poc_name} email={it.poc_email} phone={it.poc_phone} subject={`Regarding: ${it.title}`} />
+                        {(it.poc2_email || it.poc2_name) && (
+                          <><span style={{ color: 'var(--dim)' }}> &nbsp;·&nbsp; </span><PocLine name={it.poc2_name} email={it.poc2_email} phone={it.poc2_phone} subject={`Regarding: ${it.title}`} /></>
+                        )}
+                      </div>
+                    )}
                     {actionBtns(it)}
                   </div>
                 </div>

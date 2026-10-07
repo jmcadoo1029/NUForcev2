@@ -21,6 +21,13 @@ export interface MarketItem {
   company_city?: string | null
   company_state?: string | null
   company_website?: string | null
+  // Contracting point(s) of contact — solicitations only (SAM.gov). Primary + secondary.
+  poc_name?: string | null
+  poc_email?: string | null
+  poc_phone?: string | null
+  poc2_name?: string | null
+  poc2_email?: string | null
+  poc2_phone?: string | null
   url: string | null
   matched_client_id: string | null
   match_kind: 'account' | 'contact' | 'prospect' | string | null

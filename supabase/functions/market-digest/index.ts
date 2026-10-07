@@ -83,10 +83,28 @@ serve(async (req: Request) => {
 
   // 3) Build the email.
   const famLabel = (f: string) => (f ? ` · ${FAMILY_LABELS[f] || f}` : '');
+  // Contracting POC line for a solicitation — a clickable mailto (subject pre-filled)
+  // plus phone, for primary and (when present) secondary. Empty string when no POC.
+  const pocHtml = (o: any) => {
+    const subj = `?subject=${encodeURIComponent('Regarding: ' + str(o.title))}`;
+    const one = (name: string, email: string, phone: string) => {
+      if (!name && !email && !phone) return '';
+      const nm = name ? `<b>${escHtml(name)}</b>` : '';
+      const em = email ? `${name ? ' — ' : ''}<a href="mailto:${escHtml(email)}${subj}" style="color:#b3282d;font-weight:700;text-decoration:none">${escHtml(email)}</a>` : '';
+      const ph = phone ? `${(name || email) ? ' · ' : ''}${escHtml(phone)}` : '';
+      return nm + em + ph;
+    };
+    const p1 = one(str(o.poc_name), str(o.poc_email), str(o.poc_phone));
+    const p2 = one(str(o.poc2_name), str(o.poc2_email), str(o.poc2_phone));
+    const parts = [p1, p2].filter(Boolean);
+    if (!parts.length) return '';
+    return `<div style="color:#667085;font-size:12px;margin-top:3px"><span style="color:#9aa2ad">Contact:</span> ${parts.join(' &nbsp;·&nbsp; ')}</div>`;
+  };
   const solRow = (o: any) => `<tr>
     <td style="padding:8px 10px;border-bottom:1px solid #e6e8ec;font-size:14px">
       <a href="${escHtml(str(o.url))}" style="color:#b3282d;font-weight:700;text-decoration:none">${escHtml(str(o.title) || '(no title)')}</a>
       <div style="color:#667085;font-size:12px;margin-top:2px">${escHtml(str(o.agency))}${escHtml(famLabel(str(o.family)))}</div>
+      ${pocHtml(o)}
     </td>
     <td style="padding:8px 10px;border-bottom:1px solid #e6e8ec;font-size:13px;white-space:nowrap">${o.response_deadline ? 'Due ' + fmtDate(str(o.response_deadline)) : ''}</td>
   </tr>`;
@@ -114,7 +132,13 @@ serve(async (req: Request) => {
     `NUForce Market Research — weekly digest`,
     `New: ${sols.length} solicitations, ${awards.length} awards (NAICS 541380, Navy/DoD)`,
     ``,
-    ...sols.map((o) => `SOLICITATION: ${str(o.title)} — ${str(o.agency)}${o.response_deadline ? ` (due ${fmtDate(str(o.response_deadline))})` : ''}\n  ${str(o.url)}`),
+    ...sols.map((o) => {
+      const poc = [
+        [str(o.poc_name), str(o.poc_email), str(o.poc_phone)].filter(Boolean).join(' — '),
+        [str(o.poc2_name), str(o.poc2_email), str(o.poc2_phone)].filter(Boolean).join(' — '),
+      ].filter(Boolean).join(' | ');
+      return `SOLICITATION: ${str(o.title)} — ${str(o.agency)}${o.response_deadline ? ` (due ${fmtDate(str(o.response_deadline))})` : ''}\n  ${str(o.url)}${poc ? `\n  Contact: ${poc}` : ''}`;
+    }),
     ...awards.map((o) => `AWARD: ${str(o.company_name)} ${o.match_kind === 'account' ? '[existing account]' : '[new prospect]'} — ${money(Number(o.amount) || 0)} — ${str(o.title)}\n  ${str(o.url)}`),
   ].join('\n');
 

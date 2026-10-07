@@ -156,6 +156,16 @@ serve(async (req: Request) => {
       const noticeId = str(o.noticeId);
       const pop = o.placeOfPerformance || {};
       const title = str(o.title) || '(no title)';
+      // Contracting point(s) of contact. SAM returns a pointOfContact[] with
+      // type (primary/secondary), fullName, title, email, phone. Pull the primary
+      // and a distinct secondary so the tab + digest can show who to email.
+      const pocs: any[] = Array.isArray(o.pointOfContact) ? o.pointOfContact : [];
+      const byType = (want: string) => pocs.find((p) => str(p?.type).toLowerCase().includes(want)) || null;
+      const primary = byType('primary') || pocs[0] || null;
+      const secondary = byType('secondary') || pocs.find((p) => p !== primary) || null;
+      const pName = (p: any) => (p ? (str(p.fullName) || str(p.fullname) || str(p.name) || null) : null);
+      const pMail = (p: any) => (p ? (str(p.email).toLowerCase() || null) : null);
+      const pPhone = (p: any) => (p ? (str(p.phone) || null) : null);
       return {
         source: 'sam_opportunity',
         source_id: noticeId,
@@ -171,6 +181,12 @@ serve(async (req: Request) => {
         company_name: null,
         company_city: str(pop?.city?.name) || null,
         company_state: str(pop?.state?.name) || str(pop?.state?.code) || null,
+        poc_name: pName(primary),
+        poc_email: pMail(primary),
+        poc_phone: pPhone(primary),
+        poc2_name: pName(secondary),
+        poc2_email: pMail(secondary),
+        poc2_phone: pPhone(secondary),
         url: str(o.uiLink) || (noticeId ? `https://sam.gov/opp/${noticeId}/view` : null),
         matched_client_id: null,
         match_kind: null,
