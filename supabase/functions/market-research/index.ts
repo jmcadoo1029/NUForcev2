@@ -38,6 +38,9 @@ const FAMILIES: Array<[string, string[]]> = [
   ['emi_emc', ['mil-std-461', 'electromagnetic', 'emi test', 'emc test', ' emi', ' emc']],
   ['power_quality', ['mil-std-1399', 'power quality']],
   ['dc_magnetics', ['magnetic', '1399-070']],
+  // Acoustic noise (MIL-STD-810 Method 515) + audio noise susceptibility. Placed before
+  // temp_humidity so an 810-Method-515 notice tags as acoustic rather than generic 810.
+  ['acoustic', ['acoustic noise', 'acoustic', 'noise susceptibility', 'method 515', 'mil-std-810 method 515', '810-515']],
   ['temp_humidity', ['temperature', 'humidity', 'thermal', 'mil-std-810', 'iec 60068', 'do-160']],
   ['altitude', ['altitude', 'decompression']],
   ['salt_fog', ['salt fog', 'salt spray', 'astm b117']],
@@ -73,14 +76,19 @@ serve(async (req: Request) => {
   const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
   const H = { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, 'Content-Type': 'application/json' };
 
-  // Verify the caller's session (any signed-in NUForce user).
-  const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!jwt) return json(401, { ok: false, error: 'Missing bearer token.' });
-  try {
-    const ures = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON, Authorization: `Bearer ${jwt}` } });
-    if (!ures.ok) return json(401, { ok: false, error: 'Invalid or expired session.' });
-  } catch {
-    return json(401, { ok: false, error: 'Could not verify session.' });
+  // Auth: a signed-in NUForce user (bearer JWT), OR an internal call from the weekly
+  // digest carrying the shared SCHEDULE_TICK_SECRET as x-tick-secret.
+  const TICK = env('SCHEDULE_TICK_SECRET');
+  const internal = !!(TICK && (req.headers.get('x-tick-secret') || '') === TICK);
+  if (!internal) {
+    const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+    if (!jwt) return json(401, { ok: false, error: 'Missing bearer token.' });
+    try {
+      const ures = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON, Authorization: `Bearer ${jwt}` } });
+      if (!ures.ok) return json(401, { ok: false, error: 'Invalid or expired session.' });
+    } catch {
+      return json(401, { ok: false, error: 'Could not verify session.' });
+    }
   }
 
   let body: any;

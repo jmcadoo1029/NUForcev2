@@ -22,10 +22,12 @@ export interface UserRow {
   approvalsDefault: boolean
   receiptsDefault: boolean // mass-email receipt digests default ON for managers
   badContactsDefault: boolean // weekly Bad Contacts report — opt-in only (default off)
+  marketDigestDefault: boolean // weekly Market Research digest — opt-in only (default off)
   notifyDelivery: boolean | null // null = use deliveryDefault
   notifyApprovals: boolean | null // null = use approvalsDefault
   notifyReceipts: boolean | null // null = use receiptsDefault
   notifyBadContacts: boolean | null // null = use badContactsDefault (off)
+  notifyMarketDigest: boolean | null // null = use marketDigestDefault (off)
   features: Record<string, boolean> // per-user page/action overrides; key absent = use the role default (see featureDefaultFor)
 }
 
@@ -60,7 +62,7 @@ export async function fetchUsers(): Promise<UserRow[]> {
   const [emps, roles, settings, quotes] = await Promise.all([
     restFetchAll<Record<string, unknown>>('employees?select=*&order=email,id').catch(() => [] as Record<string, unknown>[]),
     restFetch<Record<string, unknown>[]>('GET', 'permission_roles?select=*&limit=200').catch(() => [] as Record<string, unknown>[]),
-    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null; notify_receipts: boolean | null; notify_bad_contacts: boolean | null; features: Record<string, unknown> | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals,notify_receipts,notify_bad_contacts,features&limit=5000').catch(() => []),
+    restFetch<{ email: string; notify_delivery: boolean | null; notify_approvals: boolean | null; notify_receipts: boolean | null; notify_bad_contacts: boolean | null; notify_market_digest: boolean | null; features: Record<string, unknown> | null }[]>('GET', 'nuforce_user_settings?select=email,notify_delivery,notify_approvals,notify_receipts,notify_bad_contacts,notify_market_digest,features&limit=5000').catch(() => []),
     restFetchAll<{ submitted_by: string | null; approved_by: string | null }>('quotes?select=submitted_by,approved_by&order=id').catch(() => [] as { submitted_by: string | null; approved_by: string | null }[]),
   ])
 
@@ -104,10 +106,12 @@ export async function fetchUsers(): Promise<UserRow[]> {
       approvalsDefault: isManager || isActive,
       receiptsDefault: isManager, // mass-email receipt digests default ON for managers
       badContactsDefault: false, // Bad Contacts report is opt-in only — off unless turned on
+      marketDigestDefault: false, // Market Research digest is opt-in only — off unless turned on
       notifyDelivery: st ? st.notify_delivery : null,
       notifyApprovals: st ? st.notify_approvals : null,
       notifyReceipts: st ? st.notify_receipts : null,
       notifyBadContacts: st ? st.notify_bad_contacts : null,
+      notifyMarketDigest: st ? st.notify_market_digest : null,
       features,
     })
   }
@@ -138,7 +142,7 @@ export async function saveUserFeature(
 
 export async function saveUserSettings(
   email: string,
-  patch: { notify_delivery?: boolean | null; notify_approvals?: boolean | null; notify_receipts?: boolean | null; notify_bad_contacts?: boolean | null },
+  patch: { notify_delivery?: boolean | null; notify_approvals?: boolean | null; notify_receipts?: boolean | null; notify_bad_contacts?: boolean | null; notify_market_digest?: boolean | null },
   by: string,
 ): Promise<void> {
   const e = (email || '').trim().toLowerCase()

@@ -72,12 +72,12 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
   const t = q.trim().toLowerCase()
   const filtered = (users || []).filter((u) => !t || `${u.name} ${u.email} ${u.roleName}`.toLowerCase().includes(t))
 
-  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals' | 'notify_receipts' | 'notify_bad_contacts', value: boolean | null) => {
+  const setToggle = async (u: UserRow, field: 'notify_delivery' | 'notify_approvals' | 'notify_receipts' | 'notify_bad_contacts' | 'notify_market_digest', value: boolean | null) => {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     setBusy(true)
     try {
       await saveUserSettings(u.email, { [field]: value }, me)
-      const key = field === 'notify_delivery' ? 'notifyDelivery' : field === 'notify_approvals' ? 'notifyApprovals' : field === 'notify_receipts' ? 'notifyReceipts' : 'notifyBadContacts'
+      const key = field === 'notify_delivery' ? 'notifyDelivery' : field === 'notify_approvals' ? 'notifyApprovals' : field === 'notify_receipts' ? 'notifyReceipts' : field === 'notify_bad_contacts' ? 'notifyBadContacts' : 'notifyMarketDigest'
       setUsers((prev) => (prev || []).map((x) => (x.email === u.email ? { ...x, [key]: value } : x)))
     } catch (e) {
       showToast('Save failed: ' + (e instanceof Error ? e.message : String(e)), 'error', 6000)
@@ -180,6 +180,15 @@ export function UsersAdmin({ onClose }: { onClose: () => void }) {
                   disabled={busy}
                   onChange={(v) => setToggle(sel, 'notify_bad_contacts', v)}
                   onReset={() => setToggle(sel, 'notify_bad_contacts', null)}
+                />
+                <Toggle
+                  label="Market research digest"
+                  help="A weekly digest (Mondays) of new federal solicitations and contract awards in NUForce's testing lane (NAICS 541380) — with the test-family tag and whether the awardee is an existing account or a new prospect. Off by default; turn it on for whoever does business development."
+                  on={effective(sel.notifyMarketDigest, sel.marketDigestDefault)}
+                  isDefault={sel.notifyMarketDigest === null}
+                  disabled={busy}
+                  onChange={(v) => setToggle(sel, 'notify_market_digest', v)}
+                  onReset={() => setToggle(sel, 'notify_market_digest', null)}
                 />
 
                 <div style={{ ...secLabel, marginTop: 'var(--sp-4)' }}>Page access</div>

@@ -47,6 +47,7 @@ export const FAMILY_LABELS: Record<string, string> = {
   emi_emc: 'EMI / EMC',
   power_quality: 'Power Quality',
   dc_magnetics: 'DC Magnetics',
+  acoustic: 'Acoustic Noise (515)',
   temp_humidity: 'Temp / Humidity',
   altitude: 'Altitude / Decompression',
   salt_fog: 'Salt Fog',
