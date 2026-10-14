@@ -5,6 +5,8 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { serializeQuote, saveQuote, type QuoteSaveModel } from '../../lib/quoteSave'
 import { isRevisionChange, oppChangeInfo, resetApprovalForNewRevision } from '../../lib/quoteGuards'
 import { persistApproval, persistWonApproval, requestReopen } from '../../lib/approvals'
+import { findBoardMatches, removeBoardRows, type BoardMatch } from '../../lib/inProgressReconcile'
+import { InProgressReconcileModal } from '../dashboard/InProgressReconcileModal'
 import { fetchQuoteByKey, fetchRevisions, type QuoteRow } from '../../lib/quotes'
 import { revRank } from '../../lib/opp'
 import { lineItemsFromData } from '../../data/quoteModel'
@@ -147,6 +149,9 @@ export function QuotePage() {
   const [loadedJobNum, setLoadedJobNum] = useState('')
   const [workspaceProjectId, setWorkspaceProjectId] = useState<string | null>(null)
   const [wsBusy, setWsBusy] = useState(false)
+  // In-progress board reconciliation — after approving, offer to clear matching rows.
+  const [recMatches, setRecMatches] = useState<BoardMatch[]>([])
+  const [recBusy, setRecBusy] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -441,6 +446,15 @@ export function QuotePage() {
     if (WRITES_ENABLED && flaggedId) {
       try { await resolveFlagsForQuote(flaggedId, me); setSendNonce((n) => n + 1) } catch { /* leave the flag if this fails */ }
     }
+    // Approved → offer to clear a matching row on the shared In-progress board
+    // (revision-insensitive match; nothing removed without the approver confirming).
+    if (WRITES_ENABLED) {
+      try {
+        const opp = s(qi.opp) || row?.opportunity || ''
+        const m = await findBoardMatches([opp])
+        if (m.length) setRecMatches(m)
+      } catch { /* reconciliation is best-effort */ }
+    }
     // Event 2: tell the send-group it's approved and ready to send (best-effort).
     if (!WRITES_ENABLED) return
     notifyQuoteApproved({
@@ -450,6 +464,19 @@ export function QuotePage() {
       approverName: prettifyEmail(me),
       submitterName: prettifyEmail(approval.submittedBy || ''),
     })
+  }
+  // Approver confirmed which matching In-progress board rows to clear.
+  const removeFromBoardNow = async (ids: string[]) => {
+    if (!ids.length) { setRecMatches([]); return }
+    setRecBusy(true)
+    try {
+      await removeBoardRows(ids)
+      showToast(`Removed ${ids.length} from In progress`, 'success')
+    } catch (e) {
+      showToast('Couldn’t update In progress: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setRecBusy(false); setRecMatches([])
+    }
   }
   const rejectQuote = (comments: string) => applyApproval({ ...approval, status: 'rejected', decidedBy: me, decidedAt: now(), comments, history: hist(approval, 'rejected', comments) }, false, 'Quote rejected')
   // Unlock reopens an approved/pending quote for editing and PERSISTS it: the
@@ -1169,6 +1196,10 @@ export function QuotePage() {
                 <Button variant="primary" small onClick={doClone} disabled={cloneBusy || !cloneOpp.trim()}>{cloneBusy ? 'Cloning…' : 'Clone'}</Button>
               </div>
             </Modal>
+          )}
+
+          {recMatches.length > 0 && (
+            <InProgressReconcileModal matches={recMatches} busy={recBusy} onCancel={() => setRecMatches([])} onConfirm={removeFromBoardNow} />
           )}
 
           {revDecision && (

@@ -10,6 +10,8 @@ import { fetchIsApprover } from '../../lib/perms'
 import { decideApproval, decideWon, resolveReopen } from '../../lib/approvals'
 import { notifyReopenUnlocked } from '../../lib/notify'
 import { notifyQuoteApproved } from '../../lib/notify'
+import { findBoardMatches, removeBoardRows, type BoardMatch } from '../../lib/inProgressReconcile'
+import { InProgressReconcileModal } from './InProgressReconcileModal'
 import { useApprovalQueue, type ApprovalRow } from './useApprovalQueue'
 
 // "Needs your attention" — the pending-approval queues. This is where approvers
@@ -111,6 +113,9 @@ export function ApprovalsCard() {
   const [selWon, setSelWon] = useState<Set<string>>(new Set())
   const [massWonOpen, setMassWonOpen] = useState(false)
   const [massWonComment, setMassWonComment] = useState('')
+  // In-progress board reconciliation — after approving, offer to clear matching rows.
+  const [recMatches, setRecMatches] = useState<BoardMatch[]>([])
+  const [recBusy, setRecBusy] = useState(false)
   const me = getSessionEmail() || ''
 
   useEffect(() => { let alive = true; fetchIsApprover().then((v) => alive && setIsApprover(v)); return () => { alive = false } }, [])
@@ -167,6 +172,8 @@ export function ApprovalsCard() {
       setDecidedIds((s) => { const n = new Set(s); targets.forEach((r) => n.add(r.id)); return n })
       showToast(WRITES_ENABLED ? `${ok} quote${ok !== 1 ? 's' : ''} approved` : `${targets.length} approved (preview)`, WRITES_ENABLED ? 'success' : 'info')
       setSelQuote(new Set()); setMassOpen(false); setMassComment('')
+      // Offer to clear any In-progress board rows matching the approved quotes.
+      await reconcileBoard(targets.map((t) => t.opportunity))
     } finally {
       setBusy(false)
     }
@@ -189,6 +196,25 @@ export function ApprovalsCard() {
       setSelWon(new Set()); setMassWonOpen(false); setMassWonComment('')
     } finally {
       setBusy(false)
+    }
+  }
+
+  // After approving, look for matching rows on the shared In-progress board and, if
+  // any, prompt to remove them (nothing is deleted without the approver confirming).
+  const reconcileBoard = async (opps: Array<string | null | undefined>) => {
+    if (!WRITES_ENABLED) return
+    try { const m = await findBoardMatches(opps); if (m.length) setRecMatches(m) } catch { /* reconciliation is best-effort */ }
+  }
+  const doRemoveFromBoard = async (ids: string[]) => {
+    if (!ids.length) { setRecMatches([]); return }
+    setRecBusy(true)
+    try {
+      await removeBoardRows(ids)
+      showToast(`Removed ${ids.length} from In progress`, 'success')
+    } catch (e) {
+      showToast('Couldn’t update In progress: ' + errMsg(e), 'error', 6000)
+    } finally {
+      setRecBusy(false); setRecMatches([])
     }
   }
 
@@ -218,6 +244,8 @@ export function ApprovalsCard() {
       }
       setDecidedIds((s) => new Set(s).add(row.id))
       setTarget(null); setComment('')
+      // Approved a quote → offer to clear its matching In-progress board row.
+      if (kind === 'quote' && decision === 'approve') await reconcileBoard([row.opportunity])
     } catch (e) {
       showToast('Decision failed: ' + errMsg(e), 'error', 6000)
     } finally {
@@ -295,6 +323,10 @@ export function ApprovalsCard() {
             <button onClick={confirmDecision} disabled={busy} style={{ fontFamily: 'inherit', fontSize: 'var(--fs-sm)', fontWeight: 700, color: '#fff', background: target.decision === 'approve' ? 'var(--pos)' : 'var(--accent)', border: 'none', borderRadius: 'var(--radius-sm)', padding: '8px 18px', cursor: busy ? 'default' : 'pointer' }}>{busy ? 'Saving…' : target.decision === 'approve' ? 'Approve' : 'Reject'}</button>
           </div>
         </Modal>
+      )}
+
+      {recMatches.length > 0 && (
+        <InProgressReconcileModal matches={recMatches} busy={recBusy} onCancel={() => setRecMatches([])} onConfirm={doRemoveFromBoard} />
       )}
     </Card>
   )
