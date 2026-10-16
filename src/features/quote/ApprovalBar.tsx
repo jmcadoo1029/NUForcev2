@@ -99,6 +99,7 @@ export function ApprovalBar({
   onReject,
   onUnlock,
   onRequestReopen,
+  onCancelSubmission,
   onMarkLost,
   onSubmitWon,
   onWonApprove,
@@ -120,6 +121,9 @@ export function ApprovalBar({
   onReject: (comments: string) => void
   onUnlock: () => void
   onRequestReopen?: (reason: string) => void
+  // The submitter withdraws their own pending quote from the queue, back to a draft.
+  // Passed (non-null) only when the current viewer is the submitter.
+  onCancelSubmission?: () => void
   // Mark the quote Closed Lost (any user, even when locked). Requires a note.
   // Absent while the quote is being edited (use the stage field there instead).
   onMarkLost?: (note: string) => void
@@ -133,6 +137,7 @@ export function ApprovalBar({
   const [reopenReason, setReopenReason] = useState('')
   const [lostOpen, setLostOpen] = useState(false)
   const [lostNote, setLostNote] = useState('')
+  const [cancelOpen, setCancelOpen] = useState(false)
 
   const allHistory = [...(approval.history || []), ...(wonApproval.history || [])].sort((a, b) => String(a.at).localeCompare(String(b.at)))
 
@@ -148,6 +153,9 @@ export function ApprovalBar({
   // both approved-locked and won-locked quotes.
   const canRequestReopen = !isApprover && locked && aStatus !== 'pending' && !needsReapproval && !reopenRequested && !!onRequestReopen
   const pendingApprovalMine = aStatus === 'pending'
+  // The submitter can pull their own pending quote back out of the queue to edit it.
+  // Gating by submitter is done in the parent (it only passes the callback then).
+  const canCancelSubmission = pendingApprovalMine && !!onCancelSubmission
   const pendingWon = wStatus === 'pending_won'
   const canSubmitWon = stage === 'Closed Won' && wStatus === 'none'
   // Recording a loss is an outcome, not a re-price — any user can do it directly,
@@ -173,6 +181,7 @@ export function ApprovalBar({
           {canSubmit && <Button small onClick={onSubmit}>{aStatus === 'approved' && !needsReapproval ? 'Re-submit for approval' : 'Submit for approval'}</Button>}
           {canSubmitWon && <Button small onClick={onSubmitWon}>Submit Closed-Won</Button>}
           {canRequestReopen && <Button variant="secondary" small onClick={() => { setReopenReason(''); setReopenOpen(true) }}>Request reopen</Button>}
+          {canCancelSubmission && <Button variant="secondary" small onClick={() => setCancelOpen(true)}>Cancel submission</Button>}
           {canMarkLost && <Button variant="secondary" small onClick={() => { setLostNote(''); setLostOpen(true) }}>Mark Closed Lost</Button>}
           {isApprover && locked && aStatus !== 'pending' && <Button variant="secondary" small onClick={onUnlock}>Reopen to edit</Button>}
         </div>
@@ -218,7 +227,13 @@ export function ApprovalBar({
           </div>
         </div>
       )}
-      {pendingApprovalMine && !isApprover && <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>Awaiting an approver. The quote is locked until it's decided.</div>}
+      {pendingApprovalMine && !isApprover && (
+        <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', marginTop: 'var(--sp-2)' }}>
+          {canCancelSubmission
+            ? 'Awaiting an approver. Need to make a change? Use “Cancel submission” to pull it back to a draft — no need to wait for a reject.'
+            : "Awaiting an approver. The quote is locked until it's decided."}
+        </div>
+      )}
 
       {/* Approver decision panel — won */}
       {pendingWon && isApprover && (
@@ -261,6 +276,18 @@ export function ApprovalBar({
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
             <Button variant="ghost" small onClick={() => setLostOpen(false)}>Cancel</Button>
             <Button small disabled={!lostNote.trim()} onClick={() => { onMarkLost?.(lostNote.trim()); setLostOpen(false) }}>Mark Closed Lost</Button>
+          </div>
+        </Modal>
+      )}
+
+      {cancelOpen && (
+        <Modal title="Cancel approval submission?" onClose={() => setCancelOpen(false)} width={440}>
+          <div style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)', lineHeight: 1.55, marginBottom: 'var(--sp-3)' }}>
+            This pulls the quote out of the approval queue and back to an editable draft, so you can make your changes now instead of waiting for a reject. Your approver won't see it again until you re-submit it.
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 'var(--sp-2)' }}>
+            <Button variant="ghost" small onClick={() => setCancelOpen(false)}>Keep in queue</Button>
+            <Button small onClick={() => { onCancelSubmission?.(); setCancelOpen(false) }}>Cancel submission</Button>
           </div>
         </Modal>
       )}

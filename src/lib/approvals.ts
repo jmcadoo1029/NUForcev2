@@ -109,6 +109,35 @@ export async function requestReopen(quoteId: string, by: string, reason: string)
   await patch(quoteId, { data: { ...data, approval, reopenRequest, chatterEntries } })
 }
 
+/** The submitter withdraws their OWN pending quote from the approval queue — back to
+ *  an editable draft, no approver needed. Approval → none (submit info cleared),
+ *  editUnlocked so it stays editable, and it drops out of the pending queue because
+ *  the status column is no longer 'pending'. Logs history + an auto chatter note.
+ *  Callers gate on WRITES_ENABLED and on the caller being the original submitter. */
+export async function cancelSubmission(quoteId: string, by: string): Promise<void> {
+  const data = await loadData(quoteId)
+  const prevAp = (data.approval || {}) as ApprovalBlock
+  const at = new Date().toISOString()
+  const approval: ApprovalBlock = {
+    ...prevAp,
+    status: 'none',
+    submittedBy: '',
+    submittedAt: '',
+    decidedBy: '',
+    decidedAt: '',
+    comments: '',
+    history: [...(prevAp.history || []), { event: 'submission_canceled', by, at, comments: '' }],
+  }
+  const prevChatter = Array.isArray(data.chatterEntries) ? (data.chatterEntries as unknown[]) : []
+  const chatterEntries = [...prevChatter, { by, at, msg: 'Approval submission canceled by submitter', auto: true }]
+  await patch(quoteId, {
+    approval_status: 'none',
+    submitted_by: null,
+    approved_by: null,
+    data: { ...data, approval, editUnlocked: true, chatterEntries },
+  })
+}
+
 /** Approver resolves a reopen request from the dashboard. 'unlock' reopens the
  *  quote (approval → none, needs re-approval) and clears the request; 'dismiss'
  *  just clears the request, leaving the quote approved/locked. */
