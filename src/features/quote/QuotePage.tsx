@@ -517,9 +517,9 @@ export function QuotePage() {
       notifyReopenRequested({ opportunity: s(qi.opp) || row.opportunity || '', requestedByName: prettifyEmail(me), requestedByEmail: me, reason: reason || '' })
     } catch (e) { showToast('Request failed: ' + errMsg(e), 'error', 6000) }
   }
-  // The submitter withdraws their own pending quote from the approval queue — back to
-  // an editable draft, no approver needed. Optimistically unlocks locally, then persists
-  // (approval → none, submit info cleared, editUnlocked). Gated to the submitter below.
+  // Withdraw a pending quote from the approval queue — back to an editable draft, no
+  // approver needed. Any team member can do this. Optimistically unlocks locally, then
+  // persists (approval → none, submit info cleared, editUnlocked).
   const cancelSubmissionNow = async () => {
     const next: ApprovalState = { ...approval, status: 'none', submittedBy: '', submittedAt: '', decidedBy: '', decidedAt: '', comments: '', history: hist(approval, 'submission_canceled', '') }
     setApproval(next); setLocked(false)
@@ -1298,7 +1298,7 @@ export function QuotePage() {
                 onReject={rejectQuote}
                 onUnlock={unlockQuote}
                 onRequestReopen={requestReopenNow}
-                onCancelSubmission={approval.status === 'pending' && !!me && (approval.submittedBy || '').toLowerCase() === me.toLowerCase() ? cancelSubmissionNow : undefined}
+                onCancelSubmission={approval.status === 'pending' ? cancelSubmissionNow : undefined}
                 onMarkLost={!editing ? markLostNow : undefined}
                 onSubmitWon={submitWon}
                 onWonApprove={approveWon}

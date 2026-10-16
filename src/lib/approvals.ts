@@ -109,11 +109,11 @@ export async function requestReopen(quoteId: string, by: string, reason: string)
   await patch(quoteId, { data: { ...data, approval, reopenRequest, chatterEntries } })
 }
 
-/** The submitter withdraws their OWN pending quote from the approval queue — back to
- *  an editable draft, no approver needed. Approval → none (submit info cleared),
- *  editUnlocked so it stays editable, and it drops out of the pending queue because
- *  the status column is no longer 'pending'. Logs history + an auto chatter note.
- *  Callers gate on WRITES_ENABLED and on the caller being the original submitter. */
+/** Withdraw a pending quote from the approval queue — back to an editable draft, no
+ *  approver decision needed. Any team member can do this (not only the submitter).
+ *  Approval → none (submit info cleared), editUnlocked so it stays editable, and it
+ *  drops out of the pending queue because the status column is no longer 'pending'.
+ *  Logs history + an auto chatter note. Callers gate on WRITES_ENABLED. */
 export async function cancelSubmission(quoteId: string, by: string): Promise<void> {
   const data = await loadData(quoteId)
   const prevAp = (data.approval || {}) as ApprovalBlock
@@ -129,7 +129,7 @@ export async function cancelSubmission(quoteId: string, by: string): Promise<voi
     history: [...(prevAp.history || []), { event: 'submission_canceled', by, at, comments: '' }],
   }
   const prevChatter = Array.isArray(data.chatterEntries) ? (data.chatterEntries as unknown[]) : []
-  const chatterEntries = [...prevChatter, { by, at, msg: 'Approval submission canceled by submitter', auto: true }]
+  const chatterEntries = [...prevChatter, { by, at, msg: 'Approval submission canceled — back to draft', auto: true }]
   await patch(quoteId, {
     approval_status: 'none',
     submitted_by: null,

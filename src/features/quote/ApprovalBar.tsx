@@ -121,8 +121,8 @@ export function ApprovalBar({
   onReject: (comments: string) => void
   onUnlock: () => void
   onRequestReopen?: (reason: string) => void
-  // The submitter withdraws their own pending quote from the queue, back to a draft.
-  // Passed (non-null) only when the current viewer is the submitter.
+  // Withdraw a pending quote from the queue, back to an editable draft. Any team
+  // member can do this; the parent passes it whenever the quote is pending.
   onCancelSubmission?: () => void
   // Mark the quote Closed Lost (any user, even when locked). Requires a note.
   // Absent while the quote is being edited (use the stage field there instead).
@@ -153,8 +153,8 @@ export function ApprovalBar({
   // both approved-locked and won-locked quotes.
   const canRequestReopen = !isApprover && locked && aStatus !== 'pending' && !needsReapproval && !reopenRequested && !!onRequestReopen
   const pendingApprovalMine = aStatus === 'pending'
-  // The submitter can pull their own pending quote back out of the queue to edit it.
-  // Gating by submitter is done in the parent (it only passes the callback then).
+  // Any team member can pull a pending quote back out of the queue to edit it. The
+  // parent passes the callback whenever the quote is pending.
   const canCancelSubmission = pendingApprovalMine && !!onCancelSubmission
   const pendingWon = wStatus === 'pending_won'
   const canSubmitWon = stage === 'Closed Won' && wStatus === 'none'
