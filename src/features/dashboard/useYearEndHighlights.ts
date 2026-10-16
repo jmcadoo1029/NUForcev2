@@ -52,6 +52,14 @@ export interface YearEndData {
   years: number[] // ascending
   byYear: Record<number, YearStats>
 }
+// Both comparison bases, computed from one fetch: `full` = each full calendar year
+// (current year is partial); `ytd` = every year truncated to today's month/day, so a
+// partial current year compares apples-to-apples against prior years' same period.
+export interface YearEndBundle {
+  full: YearEndData
+  ytd: YearEndData
+  asOf: { md: number; label: string } // today's cutoff used for the YTD basis
+}
 
 interface Q {
   id: string
@@ -80,6 +88,23 @@ function yearFromDate(s?: string | null): number | null {
   return y >= 2000 && y <= 2099 ? y : null
 }
 const wonYearOf = (q: Q): number | null => yearFromDate(q.won_date) ?? yearFromDate(q.data?.wonInfo?.wonDate)
+
+/** A date's month/day as a comparable number (month*100 + day), e.g. "2026-10-16" → 1016. */
+function monthDayOf(s?: string | null): number | null {
+  if (!s) return null
+  const m = String(s).match(/\d{4}-(\d{2})-(\d{2})/)
+  if (m) return parseInt(m[1], 10) * 100 + parseInt(m[2], 10)
+  const d = new Date(s)
+  return isNaN(d.getTime()) ? null : (d.getMonth() + 1) * 100 + d.getDate()
+}
+/** YTD gate: with no cutoff, everything passes (full-year basis). With a cutoff
+ *  (today's month/day), a row passes only if it falls on/before that same month/day
+ *  in ITS year — so every year is measured through the same calendar point. */
+function withinCutoff(dateStr: string | null | undefined, cutoffMd: number | null): boolean {
+  if (cutoffMd == null) return true
+  const md = monthDayOf(dateStr)
+  return md != null && md <= cutoffMd
+}
 
 /** Keep the highest-revision row per family. */
 function latestPerBase(rows: Q[]): Q[] {
@@ -119,9 +144,11 @@ function aggCodes(families: Q[]): CodeAgg[] {
     .sort((a, b) => b.value - a.value)
 }
 
-async function load(): Promise<YearEndData> {
-  const all = (await restFetchAll<Q>('quotes?select=id,opportunity,revision,customer,total,stage,created_at,won_date,data&order=id')) || []
-
+// Per-year rollups for one basis. `cutoffMd` null = full calendar years; a month/day
+// number = year-to-date (each year counted only through that same month/day). The
+// cross-year indexes (prior-revision lookup, family origin) stay over ALL rows so
+// revision deltas and origins are correct; only the per-year buckets are windowed.
+function computeByYear(all: Q[], cutoffMd: number | null): YearEndData {
   // Indexes shared across years.
   const byOpp = new Map<string, Q>() // exact opportunity string → row (for prior-rev lookup)
   const famRows = new Map<string, Q[]>() // baseOpp → all its revision rows
@@ -134,8 +161,12 @@ async function load(): Promise<YearEndData> {
     const b = baseOpp(q.opportunity) || `__id_${q.id}`
     const fr = famRows.get(b); if (fr) fr.push(q); else famRows.set(b, [q])
     const cy = yearFromDate(q.created_at)
-    if (cy != null) push(byCreatedYear, cy, q)
-    if (stageOf(q) === 'Closed Won') { const wy = wonYearOf(q); if (wy != null) push(byWonYear, wy, q) }
+    if (cy != null && withinCutoff(q.created_at, cutoffMd)) push(byCreatedYear, cy, q)
+    if (stageOf(q) === 'Closed Won') {
+      const wy = wonYearOf(q)
+      const wonMd = monthDayOf(q.won_date) ?? monthDayOf(q.data?.wonInfo?.wonDate)
+      if (wy != null && (cutoffMd == null || (wonMd != null && wonMd <= cutoffMd))) push(byWonYear, wy, q)
+    }
   }
 
   // Each family's ORIGIN created-time (its blank-rev row, else its earliest row).
@@ -240,9 +271,17 @@ async function load(): Promise<YearEndData> {
   return { years, byYear }
 }
 
+async function load(): Promise<YearEndBundle> {
+  const all = (await restFetchAll<Q>('quotes?select=id,opportunity,revision,customer,total,stage,created_at,won_date,data&order=id')) || []
+  const now = new Date()
+  const md = (now.getMonth() + 1) * 100 + now.getDate()
+  const label = now.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return { full: computeByYear(all, null), ytd: computeByYear(all, md), asOf: { md, label } }
+}
+
 /** Loads only once, and only after `enabled` becomes true (panel expanded). */
 export function useYearEndHighlights(enabled: boolean) {
-  const [data, setData] = useState<YearEndData | null>(null)
+  const [data, setData] = useState<YearEndBundle | null>(null)
   const [err, setErr] = useState('')
   const [loading, setLoading] = useState(false)
   const started = useRef(false)

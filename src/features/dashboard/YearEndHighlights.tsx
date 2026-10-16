@@ -152,15 +152,19 @@ export function YearEndHighlights() {
   const { data, err, loading } = useYearEndHighlights(open)
   const [selYear, setSelYear] = useState<number | null>(null)
   const [metricKey, setMetricKey] = useState('quotedValue')
+  // Comparison basis: 'full' = each full calendar year (current year partial); 'ytd' =
+  // every year truncated to today's date so the current partial year compares fairly.
+  const [basis, setBasis] = useState<'full' | 'ytd'>('full')
 
+  const ds = data ? (basis === 'ytd' ? data.ytd : data.full) : null
   const nowYear = new Date().getFullYear()
-  const year = selYear ?? (data ? (data.years.includes(nowYear) ? nowYear : data.years[data.years.length - 1]) : nowYear)
-  const cur = data?.byYear[year]
+  const year = selYear ?? (ds ? (ds.years.includes(nowYear) ? nowYear : ds.years[ds.years.length - 1]) : nowYear)
+  const cur = ds?.byYear[year]
   const metric = METRICS.find((m) => m.key === metricKey) || METRICS[0]
 
   const subMoney = (pick: (s: YearStats) => number) => {
-    if (!data || !cur) return null
-    const t = trailing3(data.byYear, year, pick)
+    if (!ds || !cur) return null
+    const t = trailing3(ds.byYear, year, pick)
     if (t.n === 0) return <span style={{ color: 'var(--dim)' }}>no prior years yet</span>
     const c = pick(cur)
     const up = c >= t.avg
@@ -173,8 +177,8 @@ export function YearEndHighlights() {
     )
   }
   const subCount = (pick: (s: YearStats) => number) => {
-    if (!data || !cur) return null
-    const t = trailing3(data.byYear, year, pick)
+    if (!ds || !cur) return null
+    const t = trailing3(ds.byYear, year, pick)
     if (t.n === 0) return <span style={{ color: 'var(--dim)' }}>no prior years yet</span>
     const c = pick(cur)
     const up = c >= t.avg
@@ -202,12 +206,25 @@ export function YearEndHighlights() {
           {err && <div style={{ color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}>Couldn’t load: {err}</div>}
           {loading && <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Loading all-history data…</div>}
 
-          {!loading && !err && data && cur && (
+          {!loading && !err && ds && cur && (
             <>
+              {/* Comparison basis: full calendar years vs year-to-date (same period each year) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)', flexWrap: 'wrap', marginBottom: 'var(--sp-3)' }}>
+                <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
+                  <button style={seg(basis === 'full', true)} onClick={() => setBasis('full')}>Full year</button>
+                  <button style={seg(basis === 'ytd', false)} onClick={() => setBasis('ytd')}>Year-to-date</button>
+                </div>
+                <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)' }}>
+                  {basis === 'ytd'
+                    ? `Every year counted through ${data?.asOf.label} — same period each year, so the current year compares apples-to-apples.`
+                    : 'Each full calendar year — the current year is still in progress, so it reads low against prior full years.'}
+                </span>
+              </div>
+
               {/* Year picker */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 'var(--sp-4)' }}>
-                {[...data.years].reverse().map((yy) => (
-                  <button key={yy} onClick={() => setSelYear(yy)} style={pill(yy === year)}>{yy}{yy === nowYear ? ' · YTD' : ''}</button>
+                {[...ds.years].reverse().map((yy) => (
+                  <button key={yy} onClick={() => setSelYear(yy)} style={pill(yy === year)}>{yy}{basis === 'full' && yy === nowYear ? ' · YTD' : ''}{basis === 'ytd' ? ` · thru ${data?.asOf.label}` : ''}</button>
                 ))}
               </div>
 
@@ -254,7 +271,7 @@ export function YearEndHighlights() {
                   ))}
                 </div>
               </div>
-              <MetricTrend data={data} metric={metric} />
+              <MetricTrend data={ds} metric={metric} />
 
               {/* Product-code leaders */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 'var(--sp-5)', marginTop: 'var(--sp-5)' }}>
@@ -263,7 +280,7 @@ export function YearEndHighlights() {
               </div>
 
               <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginTop: 'var(--sp-5)' }}>
-                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Top account gains / drops” compare each account’s quoted value this year with last year and list the five biggest increases / decreases (last year → this year). The 3-year average is the mean of the up-to-three prior years with data.
+                Quoted value is net of revisions (new families' value the year they started, plus only the delta of revisions saved that year). Best customer and best product rank by total value won that year; highest closed is new-business only. “Top account gains / drops” compare each account’s quoted value this year with last year and list the five biggest increases / decreases (last year → this year). The 3-year average is the mean of the up-to-three prior years with data. Use <b>Full year</b> vs <b>Year-to-date</b> to switch the basis: Full year counts each complete calendar year (the current year is still partial), while Year-to-date counts every year only through today’s date so the current year compares against prior years’ same period.
               </div>
             </>
           )}
