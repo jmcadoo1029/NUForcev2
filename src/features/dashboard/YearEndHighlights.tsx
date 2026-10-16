@@ -154,7 +154,8 @@ export function YearEndHighlights() {
   const [metricKey, setMetricKey] = useState('quotedValue')
   // Comparison basis: 'full' = each full calendar year (current year partial); 'ytd' =
   // every year truncated to today's date so the current partial year compares fairly.
-  const [basis, setBasis] = useState<'full' | 'ytd'>('full')
+  // Defaults to YTD — the apples-to-apples view that avoids the partial-year lag.
+  const [basis, setBasis] = useState<'full' | 'ytd'>('ytd')
 
   const ds = data ? (basis === 'ytd' ? data.ytd : data.full) : null
   const nowYear = new Date().getFullYear()
