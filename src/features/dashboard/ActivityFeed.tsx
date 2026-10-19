@@ -208,6 +208,14 @@ function OutreachRow({ item }: { item: OutreachItem }) {
                   <span style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, color: p.status === 'bounced' || p.status === 'complained' ? 'var(--accent)' : 'var(--muted)', minWidth: 92 }}>{statusLabel(p.status)}</span>
                   <a href={`mailto:${p.email}`} style={{ fontSize: 'var(--fs-sm)', fontWeight: 600, color: 'var(--text)', textDecoration: 'none' }}>{p.email}</a>
                   {p.name && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}>{p.name}</span>}
+                  {p.status === 'bounced' && p.bounceCount ? (
+                    <span
+                      title={p.bounceCount >= 2 ? 'This address has bounced on more than one of your sends — likely a dead mailbox.' : 'First recorded bounce for this address.'}
+                      style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, borderRadius: 20, padding: '1px 8px', whiteSpace: 'nowrap', color: p.bounceCount >= 2 ? '#fff' : 'var(--muted)', background: p.bounceCount >= 2 ? 'var(--accent)' : 'var(--chip)' }}
+                    >
+                      {p.bounceCount >= 2 ? `bounced ${p.bounceCount}×` : '1st bounce'}{p.bounceCount >= 2 && p.lastBounceAt ? ` · last ${new Date(p.lastBounceAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}` : ''}
+                    </span>
+                  ) : null}
                   {p.reason && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', flexBasis: '100%', paddingLeft: 92 }}>{p.reason}</span>}
                 </div>
               ))}

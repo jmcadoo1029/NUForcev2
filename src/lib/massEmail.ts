@@ -180,12 +180,49 @@ export async function fetchMassEmails(): Promise<MassEmailRow[]> {
  *  failed to send — with the reason when the webhook recorded one. Lets the sender
  *  see exactly which addresses to investigate. All pages (a big blast can exceed the
  *  1000-row cap). */
-export interface MassRecipientProblem { email: string; name: string | null; status: string; reason: string | null }
+export interface MassRecipientProblem { email: string; name: string | null; status: string; reason: string | null; bounceCount?: number; lastBounceAt?: string | null }
+
+/** How many times each address has bounced across ALL mass sends (not just this one),
+ *  and when it last bounced. Lets the reviewer tell a one-off glitch from a dead
+ *  address — especially useful for Resend's reason-less "General" hard bounces. The
+ *  send date comes from the embedded mass_emails row; fails soft to count-only. */
+export async function fetchBounceHistory(emails: string[]): Promise<Map<string, { count: number; lastAt: string | null }>> {
+  const out = new Map<string, { count: number; lastAt: string | null }>()
+  const uniq = Array.from(new Set(emails.map((e) => (e || '').trim().toLowerCase()).filter(Boolean)))
+  for (let i = 0; i < uniq.length; i += 100) {
+    const inList = uniq.slice(i, i + 100).map((e) => encodeURIComponent(e)).join(',')
+    let rows: Array<{ email: string | null; mass_emails?: { sent_at: string | null } | null }> = []
+    try {
+      rows = await fetchAllPages(`mass_email_recipients?select=email,mass_emails(sent_at)&status=eq.bounced&email=in.(${inList})&order=email`)
+    } catch {
+      try { rows = await fetchAllPages(`mass_email_recipients?select=email&status=eq.bounced&email=in.(${inList})&order=email`) } catch { rows = [] }
+    }
+    for (const r of rows) {
+      const e = (r.email || '').trim().toLowerCase()
+      if (!e) continue
+      const cur = out.get(e) || { count: 0, lastAt: null }
+      cur.count += 1
+      const sa = r.mass_emails?.sent_at || null
+      if (sa && (!cur.lastAt || sa > cur.lastAt)) cur.lastAt = sa
+      out.set(e, cur)
+    }
+  }
+  return out
+}
+
 export async function fetchMassEmailProblems(massId: string): Promise<MassRecipientProblem[]> {
   const rows = await fetchAllPages<{ email: string; name: string | null; status: string | null; error: string | null }>(
     `mass_email_recipients?select=email,name,status,error&mass_email_id=eq.${encodeURIComponent(massId)}&status=in.(bounced,complained,failed)&order=status,email`,
   )
-  return rows.map((r) => ({ email: r.email, name: r.name ?? null, status: r.status || 'unknown', reason: r.error ?? null }))
+  const base = rows.map((r) => ({ email: r.email, name: r.name ?? null, status: r.status || 'unknown', reason: r.error ?? null }))
+  // Enrich bounced rows with their all-time bounce tally (best-effort).
+  let hist = new Map<string, { count: number; lastAt: string | null }>()
+  try { hist = await fetchBounceHistory(base.filter((r) => r.status === 'bounced').map((r) => r.email)) } catch { /* count stays undefined */ }
+  return base.map((r) => {
+    if (r.status !== 'bounced') return r
+    const h = hist.get((r.email || '').trim().toLowerCase())
+    return { ...r, bounceCount: h?.count, lastBounceAt: h?.lastAt ?? null }
+  })
 }
 
 /** Recipients of one blast in the given delivery states (e.g. delivered, opened),
