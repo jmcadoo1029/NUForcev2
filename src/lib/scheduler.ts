@@ -15,7 +15,9 @@ import { fillProductToken } from './productName'
 // WRITES_ENABLED / manager permission.
 
 export type ScheduleKind = 'calendar' | 'rule'
-export type Cadence = 'once' | 'monthly' | 'annually'
+export type Cadence = 'once' | 'monthly' | 'quarterly' | 'semiannual' | 'annually'
+// Cadences that fire on a day-of-month (monthly and its multiples).
+export const MONTHLY_STEP: Record<string, number> = { monthly: 1, quarterly: 3, semiannual: 6 }
 export type Audience = 'all' | 'code' | 'code_won' | 'campaign' | 'account'
 export type RuleType = 'quoted_code_ago' | 'won_code_ago' | 'not_quoted'
 
@@ -80,10 +82,13 @@ const monthsAgoDate = (months: number) => { const d = new Date(); d.setMonth(d.g
 // 'annually' on its run_on month/day. Sends are staged at 09:00 local-ish (UTC).
 export function computeNextFire(cadence: Cadence, runOn: string | null, dayOfMonth: number | null, from = new Date()): string | null {
   if (cadence === 'once') return runOn ? new Date(runOn + 'T09:00:00Z').toISOString() : null
-  if (cadence === 'monthly') {
+  // Monthly and its multiples (quarterly = every 3, semiannual = every 6) fire on a
+  // day-of-month, stepping by that many months — anchored to the current month.
+  const step = MONTHLY_STEP[cadence]
+  if (step) {
     const dom = Math.min(Math.max(dayOfMonth || 1, 1), 28)
     const d = new Date(from); d.setUTCHours(9, 0, 0, 0); d.setUTCDate(dom)
-    if (d.getTime() <= from.getTime()) d.setUTCMonth(d.getUTCMonth() + 1)
+    if (d.getTime() <= from.getTime()) d.setUTCMonth(d.getUTCMonth() + step)
     return d.toISOString()
   }
   if (cadence === 'annually' && runOn) {

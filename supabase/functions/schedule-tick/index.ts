@@ -31,10 +31,12 @@ async function rest(method: string, path: string, body?: unknown, prefer?: strin
 // Same cadence math as the client (src/lib/scheduler.ts).
 function computeNextFire(cadence: string, runOn: string | null, dayOfMonth: number | null, from = new Date()): string | null {
   if (cadence === 'once') return null // one-shot: disabled after firing
-  if (cadence === 'monthly') {
+  // Monthly and its multiples (quarterly = every 3, semiannual = every 6).
+  const step = ({ monthly: 1, quarterly: 3, semiannual: 6 } as Record<string, number>)[cadence]
+  if (step) {
     const dom = Math.min(Math.max(dayOfMonth || 1, 1), 28)
     const d = new Date(from); d.setUTCHours(9, 0, 0, 0); d.setUTCDate(dom)
-    if (d.getTime() <= from.getTime()) d.setUTCMonth(d.getUTCMonth() + 1)
+    if (d.getTime() <= from.getTime()) d.setUTCMonth(d.getUTCMonth() + step)
     return d.toISOString()
   }
   if (cadence === 'annually' && runOn) {

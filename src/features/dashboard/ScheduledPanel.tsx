@@ -34,8 +34,12 @@ const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
 function cadenceText(s: Schedule): string {
   if (s.cadence === 'once') return s.run_on ? `Once · ${s.run_on}` : 'Once'
   if (s.cadence === 'monthly') return `Monthly · day ${s.day_of_month || 1}`
+  if (s.cadence === 'quarterly') return `Quarterly · day ${s.day_of_month || 1}`
+  if (s.cadence === 'semiannual') return `Every 6 months · day ${s.day_of_month || 1}`
   return s.run_on ? `Annually · ${s.run_on.slice(5)}` : 'Annually'
 }
+// Cadences that fire on a day-of-month (so the UI shows the day picker).
+const isMonthlyCadence = (c: Cadence) => c === 'monthly' || c === 'quarterly' || c === 'semiannual'
 function summaryText(s: Schedule): string {
   const c = s.config || {}
   if (s.kind === 'rule') {
@@ -124,8 +128,8 @@ export function ScheduledPanel() {
     const effCadence: Cadence = kind === 'rule' && cadence === 'once' ? 'monthly' : cadence
     const payload: NewSchedule = {
       name: name.trim(), kind, enabled: true, template_key, template_id, config,
-      cadence: effCadence, run_on: effCadence === 'monthly' ? null : (runOn || null),
-      day_of_month: effCadence === 'monthly' ? dayOfMonth : null,
+      cadence: effCadence, run_on: isMonthlyCadence(effCadence) ? null : (runOn || null),
+      day_of_month: isMonthlyCadence(effCadence) ? dayOfMonth : null,
       cooldown_months: cooldownMonths, created_by: me,
     }
     setBusy(true)
@@ -278,18 +282,20 @@ export function ScheduledPanel() {
           )}
 
           <label style={label}>{kind === 'rule' ? 'How often to check' : 'When'}</label>
-          <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 8, overflow: 'hidden', flexWrap: 'wrap' }}>
             {kind === 'calendar' && <button onClick={() => setCadence('once')} style={seg(cadence === 'once', true)}>Once</button>}
             <button onClick={() => setCadence('monthly')} style={seg(cadence === 'monthly', kind === 'rule')}>Monthly</button>
+            <button onClick={() => setCadence('quarterly')} style={seg(cadence === 'quarterly', false)}>Quarterly</button>
+            <button onClick={() => setCadence('semiannual')} style={seg(cadence === 'semiannual', false)}>Every 6 mo</button>
             <button onClick={() => setCadence('annually')} style={seg(cadence === 'annually', false)}>Annually</button>
           </div>
           <div style={{ marginTop: 'var(--sp-2)' }}>
             {cadence === 'once' && <input type="date" value={runOn} onChange={(e) => setRunOn(e.target.value)} style={{ ...input, width: 'auto' }} />}
-            {cadence === 'monthly' && (
+            {isMonthlyCadence(cadence) && (
               <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center' }}>
                 <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>on day</span>
                 <input type="number" min={1} max={28} value={dayOfMonth} onChange={(e) => setDayOfMonth(Math.min(28, Math.max(1, Number(e.target.value) || 1)))} style={{ ...input, width: 80 }} />
-                <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>of each month (1–28)</span>
+                <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--dim)' }}>{cadence === 'monthly' ? 'of each month (1–28)' : cadence === 'quarterly' ? 'every 3 months (1–28)' : 'every 6 months (1–28)'}</span>
               </div>
             )}
             {cadence === 'annually' && (
