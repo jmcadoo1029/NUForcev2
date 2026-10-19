@@ -5,7 +5,7 @@
 // fill-empty + append notes). Nothing here fetches — pass a workup from crr.ts.
 
 import type { CrrWorkup, CrrUnit } from './crr'
-import { crrUnits, crrEnabled, crrEnabledForUnit, crrShiftsForUnit, EMI_SPECS, PQ_SPECS, DCM_SPECS, parseCurrentAmps, firstInt, parseSpecialReq } from './crr'
+import { crrUnits, crrEnabled, crrEnabledForUnit, crrShiftsForUnit, crrHasSubcontracted, EMI_SPECS, PQ_SPECS, DCM_SPECS, parseCurrentAmps, firstInt, parseSpecialReq } from './crr'
 import { EMI_SR, PQ_SR, DCM_SR } from '../data/calcPricing'
 import { buildCatalog } from '../data/catalog'
 import type { DraftImport, DraftLineItem } from './importDraft'
@@ -111,6 +111,19 @@ function unitStandards(u: CrrUnit): string {
  *  unit and its standards (so the quote records which tests belong to which unit — the
  *  reader's convention), then the global Section VII (quoteReq) and the non-$ Special Test
  *  Requirements leftover, under a header naming the enabled families. '' if empty. */
+/** The standard Subcontracting clause, added when the CRR has outsourced/subcontracted
+ *  tests. The customer (quote account) carries the pass-through costs/responsibilities. */
+function subcontractingNote(account: string): string {
+  const who = account.trim() || 'the customer'
+  return [
+    'Subcontracting:',
+    '•Pricing for subcontracted tests may be verified prior to performing tests.',
+    `•Any additional charges, price changes or additions to scope is at the determination of the subcontracting lab. Any changes will be passed on to ${who}.`,
+    `•Shipping to and from the subcontracting lab, including but not limited to test article and peripheral equipment, is the responsibility of ${who}.`,
+    `•In-person representation for setup, operation or functional testing is the responsibility of ${who}.`,
+  ].join('\n')
+}
+
 export function crrNotesBlock(w: CrrWorkup | null | undefined): string {
   const units = crrUnits(w)
   const multi = units.length > 1
@@ -122,7 +135,8 @@ export function crrNotesBlock(w: CrrWorkup | null | undefined): string {
   const unitLines = multi
     ? units.map((u) => { const std = unitStandards(u); return `${u.name || 'Unit'}${std ? ': ' + std : ''}` }).join('\n')
     : ''
-  const body = [unitLines, String(g.quoteReq || '').trim(), special.leftover].filter(Boolean).join('\n\n')
+  const subNote = crrHasSubcontracted(w) ? subcontractingNote(String(g.custCompany || '')) : ''
+  const body = [unitLines, String(g.quoteReq || '').trim(), special.leftover, subNote].filter(Boolean).join('\n\n')
   return body ? `${header}\n${body}` : ''
 }
 

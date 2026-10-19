@@ -400,6 +400,38 @@ export function parseSpecialReq(text: unknown): SpecialReqParse {
 // Spec Builder, which should carry TESTING rows only.
 const NON_TEST_ROW = /setup|tear\s*-?\s*down|teardown|procedure|report/i
 
+// A test the tech marked as outsourced / subcontracted (usually written in the Time
+// column of the workup instead of an hour count). These go into their own
+// "subcontracted" spec table (no Time shown) rather than being dropped.
+const SUBCON = /subcontract|out[-\s]?sourc/i
+const timeColFor = (fam: CrrFamily | null) => (fam === 'pq' ? 1 : 2)
+function isSubcontractedRow(row: Array<unknown>, timeCol: number): boolean {
+  if (!Array.isArray(row)) return false
+  if (SUBCON.test(String(row[timeCol] ?? ''))) return true // normally in the Time cell
+  return SUBCON.test(row.map((c) => String(c ?? '')).join(' ')) // fallback: anywhere in the row
+}
+
+/** True if any enabled spec in the workup has a test row marked outsourced/subcontracted. */
+export function crrHasSubcontracted(w: CrrWorkup | null | undefined): boolean {
+  for (const u of crrUnits(w)) {
+    const en = u.enabledSpecs || {}
+    const rows = u.specRows || {}
+    for (const k of Object.keys(en)) {
+      if (!en[k]) continue
+      const fam = familyOfKey(k)
+      if (!fam) continue
+      const tc = timeColFor(fam)
+      const labelCol = fam === 'pq' ? 2 : 1
+      for (const r of rows[k] || []) {
+        if (!Array.isArray(r)) continue
+        if (NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[labelCol] ?? ''))) continue
+        if (isSubcontractedRow(r, tc)) return true
+      }
+    }
+  }
+  return false
+}
+
 // ── Spec Builder from CRR ─────────────────────────────────────────────────────
 // Build the Spec Builder payload from the CRR workup — the same shape the
 // from-NUForce path produces ({ quote, sections:[{type, rows:[[test,label,comments]]}] })
@@ -407,7 +439,7 @@ const NON_TEST_ROW = /setup|tear\s*-?\s*down|teardown|procedure|report/i
 // (blank / "TBD" / "1 day" rows are dropped — the tech hasn't committed a time).
 // Ported from Classic's buildSpecBuilderPayloadFromCrr.
 
-export interface SpecSection { type: string; rows: string[][]; intro?: string }
+export interface SpecSection { type: string; rows: string[][]; intro?: string; subcontracted?: boolean }
 export interface SpecPayload { quote: string; sections: SpecSection[] }
 
 const isNumericTime = (v: unknown) => /^\s*\d+(?:\.\d+)?\s*$/.test(String(v ?? ''))
@@ -417,32 +449,55 @@ export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, qu
   const multi = units.length > 1
   const sections: SpecSection[] = []
 
+  // Intro lines (multi-unit prefixes the unit name so each table is attributable).
+  const performedIntro = (type: string, unitName: string) => `${multi ? (unitName || 'Unit') + ' — ' : ''}The following ${type} tests will be performed at NU Labs:`
+  const subIntro = (type: string, unitName: string) => `${multi ? (unitName || 'Unit') + ' — ' : ''}The following ${type} tests will be subcontracted:`
+
   for (const unit of units) {
     const enabled = unit.enabledSpecs || {}
     const allRows = unit.specRows || {}
     const unitSections: SpecSection[] = []
 
+    // Push a performed table (in-house, numeric Time) and, if any, a SECOND table for
+    // subcontracted/outsourced tests — same columns minus Time, its own intro.
+    const emit = (type: string, perf: string[][], sub: string[][]) => {
+      if (perf.length) unitSections.push({ type, rows: perf, intro: performedIntro(type, unit.name) })
+      if (sub.length) unitSections.push({ type, rows: sub, intro: subIntro(type, unit.name), subcontracted: true })
+    }
+
     // EMI / DC Mag: [test, description, time(2), comments] → [test, desc, comments]
     const mapFourCol = (key: string, type: string) => {
       if (!enabled[key]) return
-      const rows = (allRows[key] || [])
-        .filter((r) => Array.isArray(r) && isNumericTime(r[2]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[1] ?? '')))
-        .map((r) => [String(r[0] ?? ''), String(r[1] ?? ''), String(r[3] ?? '')])
-      if (rows.length) unitSections.push({ type, rows })
+      const perf: string[][] = []
+      const sub: string[][] = []
+      for (const r of allRows[key] || []) {
+        if (!Array.isArray(r) || NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[1] ?? ''))) continue
+        const row = [String(r[0] ?? ''), String(r[1] ?? ''), String(r[3] ?? '')]
+        // Subcontracted rows carry a blank Comments cell — the estimator pastes the
+        // subcontractor's quote wording in by hand.
+        if (isSubcontractedRow(r, 2)) sub.push([row[0], row[1], ''])
+        else if (isNumericTime(r[2])) perf.push(row)
+      }
+      emit(type, perf, sub)
     }
     // PQ: [requirement, time(1), paragraph(2), testReq(3), tables(4)]
     //   → [test=paragraph, label=requirement, comments=testReq + tables]
     const mapPq = (key: string) => {
       if (!enabled[key]) return
-      const rows = (allRows[key] || [])
-        .filter((r) => Array.isArray(r) && isNumericTime(r[1]) && !NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[2] ?? '')))
-        .map((r) => {
-          const parts: string[] = []
-          if (String(r[3] ?? '')) parts.push(String(r[3]))
-          if (String(r[4] ?? '')) parts.push('Tables / Figures: ' + String(r[4]))
-          return [String(r[2] ?? ''), String(r[0] ?? ''), parts.join('\n')]
-        })
-      if (rows.length) unitSections.push({ type: 'Power Quality', rows })
+      const toRow = (r: Array<unknown>) => {
+        const parts: string[] = []
+        if (String(r[3] ?? '')) parts.push(String(r[3]))
+        if (String(r[4] ?? '')) parts.push('Tables / Figures: ' + String(r[4]))
+        return [String(r[2] ?? ''), String(r[0] ?? ''), parts.join('\n')]
+      }
+      const perf: string[][] = []
+      const sub: string[][] = []
+      for (const r of allRows[key] || []) {
+        if (!Array.isArray(r) || NON_TEST_ROW.test(String(r[0] ?? '') + ' ' + String(r[2] ?? ''))) continue
+        if (isSubcontractedRow(r, 1)) { const t = toRow(r); sub.push([t[0], t[1], '']) } // blank comments — pasted by hand
+        else if (isNumericTime(r[1])) perf.push(toRow(r))
+      }
+      emit('Power Quality', perf, sub)
     }
 
     // Dispatch every enabled key by family (EMI/DC-Mag share the 4-col mapper; PQ its
@@ -456,9 +511,6 @@ export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, qu
       else mapFourCol(key, 'EMI')
     }
 
-    // Multi-unit: label each table set with its unit so the Spec Builder shows one set
-    // per unit. The builder honors a payload-provided `intro` (falls back to the preset).
-    if (multi) unitSections.forEach((sec) => { sec.intro = `${unit.name || 'Unit'} — ${sec.type}` })
     sections.push(...unitSections)
   }
 

@@ -141,7 +141,8 @@ export function PricingCalculator({
   // section per active standard, rows as [test, label, comments]. Ported from
   // Classic's buildSpecBuilderPayload.
   const buildSpecPayload = () => {
-    const sections: { type: string; rows: string[][] }[] = []
+    const introFor = (type: string) => `The following ${type} tests will be performed at NU Labs:`
+    const sections: { type: string; rows: string[][]; intro?: string }[] = []
     // EMI — F is the default when neither rev is picked; G only when picked.
     const includeF = emi.revF || (!emi.revF && !emi.revG)
     const includeG = emi.revG
@@ -151,8 +152,8 @@ export function PricingCalculator({
       if (r.positions && r.positions.length > 0) desc = desc + '\n' + r.positions.map((p: any) => '  ' + p.range + ': ' + p.pos).join('\n')
       return [r.key, r.label, desc]
     })
-    if (includeF && emiKeys.size > 0) { const f = rowsForRev(getEmi461fTestDefinitions(emi, ti, setup)); if (f.length > 0) sections.push({ type: 'EMI', rows: f }) }
-    if (includeG && emiKeys.size > 0) { const g = rowsForRev(getEmi461gTestDefinitions(emi, ti, setup)); if (g.length > 0) sections.push({ type: 'EMI', rows: g }) }
+    if (includeF && emiKeys.size > 0) { const f = rowsForRev(getEmi461fTestDefinitions(emi, ti, setup)); if (f.length > 0) sections.push({ type: 'EMI', rows: f, intro: introFor('EMI') }) }
+    if (includeG && emiKeys.size > 0) { const g = rowsForRev(getEmi461gTestDefinitions(emi, ti, setup)); if (g.length > 0) sections.push({ type: 'EMI', rows: g, intro: introFor('EMI') }) }
     // PQ — 300B keys start with "B"; strip it for display. Both share pq.rows.
     const pqKeys = new Set(Object.entries(pq.rows || {}).filter(([, v]) => v).map(([k]) => k))
     if (pqKeys.size > 0) {
@@ -163,11 +164,11 @@ export function PricingCalculator({
         const displayKey = r.key.startsWith('B') ? r.key.slice(1) : r.key
         return [displayKey, r.label, parts.join('\n')]
       })
-      const b3 = pqRowsFromDefs(getPq300bTestDefinitions()); if (b3.length > 0) sections.push({ type: 'Power Quality', rows: b3 })
-      const p1 = pqRowsFromDefs(getPq300p1TestDefinitions()); if (p1.length > 0) sections.push({ type: 'Power Quality', rows: p1 })
+      const b3 = pqRowsFromDefs(getPq300bTestDefinitions()); if (b3.length > 0) sections.push({ type: 'Power Quality', rows: b3, intro: introFor('Power Quality') })
+      const p1 = pqRowsFromDefs(getPq300p1TestDefinitions()); if (p1.length > 0) sections.push({ type: 'Power Quality', rows: p1, intro: introFor('Power Quality') })
     }
     // DC Magnetics — fixed test set, gated by the "include" checkbox.
-    if (dcm.include) sections.push({ type: 'DC Magnetics', rows: [['DC Magnetics', 'DOD-STD-1399 Section 070', 'Field Strength: 1,600 A/m. Positions: Three (3) orthogonal positions.']] })
+    if (dcm.include) sections.push({ type: 'DC Magnetics', rows: [['DC Magnetics', 'DOD-STD-1399 Section 070', 'Field Strength: 1,600 A/m. Positions: Three (3) orthogonal positions.']], intro: introFor('DC Magnetics') })
     return { quote: qi?.opp || '', sections }
   }
 
