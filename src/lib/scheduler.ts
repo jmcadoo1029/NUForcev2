@@ -16,8 +16,8 @@ import { fillProductToken } from './productName'
 
 export type ScheduleKind = 'calendar' | 'rule'
 export type Cadence = 'once' | 'monthly' | 'annually'
-export type Audience = 'all' | 'code' | 'campaign' | 'account'
-export type RuleType = 'quoted_code_ago' | 'not_quoted'
+export type Audience = 'all' | 'code' | 'code_won' | 'campaign' | 'account'
+export type RuleType = 'quoted_code_ago' | 'won_code_ago' | 'not_quoted'
 
 export interface ScheduleConfig {
   audience?: Audience
@@ -172,10 +172,12 @@ export async function resolveRecipients(s: Schedule): Promise<Recipient[]> {
     const aud = cfg.audience || 'all'
     if (aud === 'all') list = (await fetchAllContacts()).recipients
     else if (aud === 'code') list = await fetchContactsByProductCode(cfg.code || '')
+    else if (aud === 'code_won') list = await fetchContactsByProductCode(cfg.code || '', undefined, true) // won/performed
     else if (aud === 'campaign') list = await fetchContactsByCampaign(cfg.campaignId || '')
     else if (aud === 'account') list = await fetchContactsByAccount(cfg.clientId || '')
   } else {
     if (cfg.rule === 'quoted_code_ago') list = await fetchContactsByProductCode(cfg.code || '', { to: monthsAgoDate(cfg.ruleMonths || 12) })
+    else if (cfg.rule === 'won_code_ago') list = await fetchContactsByProductCode(cfg.code || '', { to: monthsAgoDate(cfg.ruleMonths || 12) }, true) // won/performed
     else if (cfg.rule === 'not_quoted') list = await fetchNotQuotedSince(cfg.ruleMonths || 12)
     list = await filterCooldown(s.id, s.cooldown_months, list)
   }
@@ -200,11 +202,13 @@ export function audienceLabel(s: Schedule): string {
   const cfg = s.config || {}
   if (s.kind === 'rule') {
     if (cfg.rule === 'quoted_code_ago') return `Quoted ${cfg.code || '—'} over ${cfg.ruleMonths || 12} mo ago`
+    if (cfg.rule === 'won_code_ago') return `Won ${cfg.code || '—'} over ${cfg.ruleMonths || 12} mo ago`
     return `Not quoted in over ${cfg.ruleMonths || 12} mo`
   }
   const aud = cfg.audience || 'all'
   if (aud === 'all') return 'All contacts'
   if (aud === 'code') return `Quoted code ${cfg.code || '—'}`
+  if (aud === 'code_won') return `Won code ${cfg.code || '—'}`
   if (aud === 'campaign') return `Campaign: ${cfg.campaignName || '—'}`
   return `Account: ${cfg.accountName || '—'}`
 }

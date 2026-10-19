@@ -40,11 +40,13 @@ function summaryText(s: Schedule): string {
   const c = s.config || {}
   if (s.kind === 'rule') {
     if (c.rule === 'quoted_code_ago') return `Quoted ${c.code || '—'} over ${c.ruleMonths || 12} mo ago`
+    if (c.rule === 'won_code_ago') return `Won ${c.code || '—'} over ${c.ruleMonths || 12} mo ago`
     return `Not quoted in over ${c.ruleMonths || 12} mo`
   }
   const a = c.audience || 'all'
   if (a === 'all') return 'All contacts'
   if (a === 'code') return `Quoted code ${c.code || '—'}`
+  if (a === 'code_won') return `Won code ${c.code || '—'}`
   if (a === 'campaign') return `Campaign: ${c.campaignName || '—'}`
   return `Account: ${c.accountName || '—'}`
 }
@@ -103,19 +105,19 @@ export function ScheduledPanel() {
     if (!name.trim()) { showToast('Give the schedule a name.', 'warn'); return }
     if (cadence === 'once' && !runOn) { showToast('Pick a date for a one-time send.', 'warn'); return }
     if (cadence === 'annually' && !runOn) { showToast('Pick the annual date.', 'warn'); return }
-    if (kind === 'calendar' && audience === 'code' && !code) { showToast('Pick a product code.', 'warn'); return }
+    if (kind === 'calendar' && (audience === 'code' || audience === 'code_won') && !code) { showToast('Pick a product code.', 'warn'); return }
     if (kind === 'calendar' && audience === 'campaign' && !campaignId) { showToast('Pick a campaign.', 'warn'); return }
     if (kind === 'calendar' && audience === 'account' && !clientId) { showToast('Pick an account.', 'warn'); return }
-    if (kind === 'rule' && rule === 'quoted_code_ago' && !code) { showToast('Pick a product code for the rule.', 'warn'); return }
+    if (kind === 'rule' && (rule === 'quoted_code_ago' || rule === 'won_code_ago') && !code) { showToast('Pick a product code for the rule.', 'warn'); return }
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
 
     const template_key = tplSel.startsWith('key:') ? (tplSel.slice(4) as TemplateKey) : null
     const template_id = tplSel.startsWith('custom:') ? tplSel.slice(7) : null
     const config: NewSchedule['config'] = kind === 'rule'
-      ? { rule, ruleMonths, ...(rule === 'quoted_code_ago' ? { code } : {}) }
+      ? { rule, ruleMonths, ...(rule === 'quoted_code_ago' || rule === 'won_code_ago' ? { code } : {}) }
       : {
           audience,
-          ...(audience === 'code' ? { code } : {}),
+          ...(audience === 'code' || audience === 'code_won' ? { code } : {}),
           ...(audience === 'campaign' ? { campaignId, campaignName: campaigns.find((c) => c.id === campaignId)?.name || '' } : {}),
           ...(audience === 'account' ? { clientId, accountName: accountText } : {}),
         }
@@ -216,10 +218,11 @@ export function ScheduledPanel() {
               <select value={audience} onChange={(e) => setAudience(e.target.value as Audience)} style={input}>
                 <option value="all">All contacts</option>
                 <option value="code">Everyone quoted a product code</option>
+                <option value="code_won">Everyone we performed (won) a product code</option>
                 <option value="campaign">A campaign</option>
                 <option value="account">An account</option>
               </select>
-              {audience === 'code' && (
+              {(audience === 'code' || audience === 'code_won') && (
                 <select value={code} onChange={(e) => setCode(e.target.value)} style={{ ...input, marginTop: 'var(--sp-2)' }}>
                   <option value="">— Product code —</option>
                   {CODE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.code} — {o.label}</option>)}
@@ -253,9 +256,10 @@ export function ScheduledPanel() {
               <select value={rule} onChange={(e) => setRule(e.target.value as RuleType)} style={input}>
                 <option value="not_quoted">Not quoted in over N months</option>
                 <option value="quoted_code_ago">Quoted a product code over N months ago</option>
+                <option value="won_code_ago">Won (performed) a product code over N months ago</option>
               </select>
               <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'center', marginTop: 'var(--sp-2)', flexWrap: 'wrap' }}>
-                {rule === 'quoted_code_ago' && (
+                {(rule === 'quoted_code_ago' || rule === 'won_code_ago') && (
                   <select value={code} onChange={(e) => setCode(e.target.value)} style={{ ...input, width: 'auto', minWidth: 200 }}>
                     <option value="">— Product code —</option>
                     {CODE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.code} — {o.label}</option>)}
