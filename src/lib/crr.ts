@@ -83,6 +83,7 @@ function mergedSpecSource(w: CrrWorkup | null | undefined): { enabled: Record<st
 //   EMI  (emi461f/g): [testKey, label, time, comments]        → time at col 2
 //   PQ   (pq300b/p1) : [requirement, time, paragraph, …]       → time at col 1
 //   DCMag(dcmag)     : [test, description, time, comments]      → time at col 2
+export type CrrFamily = 'emi' | 'pq' | 'dcm'
 export interface SpecDef {
   key: string // specRows key
   rev: string // display label
@@ -90,19 +91,64 @@ export interface SpecDef {
   keyCol: number // the test identifier column
   altKeyCol?: number // fallback identifier column (PQ: requirement)
   labelCol: number
+  family?: CrrFamily
 }
 
 export const EMI_SPECS: SpecDef[] = [
-  { key: 'emi461f', rev: 'F', keyCol: 0, labelCol: 1, timeCol: 2 },
-  { key: 'emi461g', rev: 'G', keyCol: 0, labelCol: 1, timeCol: 2 },
+  { key: 'emi461f', rev: 'F', keyCol: 0, labelCol: 1, timeCol: 2, family: 'emi' },
+  { key: 'emi461g', rev: 'G', keyCol: 0, labelCol: 1, timeCol: 2, family: 'emi' },
 ]
 export const PQ_SPECS: SpecDef[] = [
-  { key: 'pq300b', rev: '300B', keyCol: 2, altKeyCol: 0, labelCol: 0, timeCol: 1 },
-  { key: 'pq300p1', rev: '300P1', keyCol: 2, altKeyCol: 0, labelCol: 0, timeCol: 1 },
+  { key: 'pq300b', rev: '300B', keyCol: 2, altKeyCol: 0, labelCol: 0, timeCol: 1, family: 'pq' },
+  { key: 'pq300p1', rev: '300P1', keyCol: 2, altKeyCol: 0, labelCol: 0, timeCol: 1, family: 'pq' },
 ]
 export const DCM_SPECS: SpecDef[] = [
-  { key: 'dcmag', rev: 'DCM', keyCol: 0, labelCol: 1, timeCol: 2 },
+  { key: 'dcmag', rev: 'DCM', keyCol: 0, labelCol: 1, timeCol: 2, family: 'dcm' },
 ]
+
+// Column layout per test family. New templates Workspace adds to the CRR form are
+// recognized by their key PREFIX (emi… / pq… / dcm…) and get their family's layout —
+// so a new EMI revision is picked up automatically, no exact-key allowlist needed.
+const FAMILY_LAYOUT: Record<CrrFamily, Pick<SpecDef, 'keyCol' | 'altKeyCol' | 'labelCol' | 'timeCol'>> = {
+  emi: { keyCol: 0, labelCol: 1, timeCol: 2 },
+  pq: { keyCol: 2, altKeyCol: 0, labelCol: 0, timeCol: 1 },
+  dcm: { keyCol: 0, labelCol: 1, timeCol: 2 },
+}
+/** Classify a specRows key into a test family by prefix (emi461f, pq300b, dcmag, and
+ *  any future same-prefixed template). Null for keys in no quoting family. */
+export function familyOfKey(k: string): CrrFamily | null {
+  const s = String(k || '').toLowerCase()
+  if (s.startsWith('emi')) return 'emi'
+  if (s.startsWith('pq')) return 'pq'
+  if (s.startsWith('dcm')) return 'dcm'
+  return null
+}
+/** A display revision label for an unknown key, derived from its suffix
+ *  (emi461h → "H", pq300c → "300C", dcm… → "DCM"). */
+function revLabelForKey(k: string, fam: CrrFamily): string {
+  if (fam === 'dcm') return 'DCM'
+  if (fam === 'pq') return k.replace(/^pq/i, '').toUpperCase() || k.toUpperCase()
+  const m = k.match(/([a-z]+)$/i)
+  return m ? m[1].toUpperCase() : k.toUpperCase()
+}
+/** Expand a requested family's spec list to include ANY enabled key in that family —
+ *  known keys keep their exact label/layout; unknown same-family keys get the family
+ *  layout and a derived label. This is what makes new templates work automatically. */
+function effectiveSpecs(enabled: Record<string, boolean>, specs: SpecDef[]): SpecDef[] {
+  const fams = new Set<CrrFamily>()
+  specs.forEach((sp) => { if (sp.family) fams.add(sp.family) })
+  const out: SpecDef[] = []
+  const seen = new Set<string>()
+  for (const sp of specs) { out.push(sp); seen.add(sp.key) } // known first (order + labels)
+  for (const k of Object.keys(enabled || {})) {
+    if (!enabled[k] || seen.has(k)) continue
+    const fam = familyOfKey(k)
+    if (!fam || !fams.has(fam)) continue
+    out.push({ key: k, rev: revLabelForKey(k, fam), family: fam, ...FAMILY_LAYOUT[fam] })
+    seen.add(k)
+  }
+  return out
+}
 
 /**
  * Fetch the CRR workup for a quote number. Matches on the BASE opportunity
@@ -220,7 +266,7 @@ const parseHours = (timeStr: unknown): number | null => {
  */
 function deriveShiftsFrom(enabled: Record<string, boolean>, allRows: Record<string, Array<Array<unknown>>>, specs: SpecDef[]): CrrShiftSummary {
   const tests: CrrTest[] = []
-  for (const spec of specs) {
+  for (const spec of effectiveSpecs(enabled, specs)) {
     if (!enabled[spec.key]) continue
     const rows = allRows[spec.key] || []
     rows.forEach((row, idx) => {
@@ -265,16 +311,26 @@ export function crrShiftsForUnit(unit: CrrUnit, specs: SpecDef[]): CrrShiftSumma
 
 // ── CRR → quote helpers ───────────────────────────────────────────────────────
 
+/** Reduce an enabledSpecs map to which families are present — any enabled key whose
+ *  prefix classifies it (emi… / pq… / dcm…), so new templates count without an allowlist. */
+function familiesEnabled(e: Record<string, boolean>): { emi: boolean; pq: boolean; dcm: boolean } {
+  const out = { emi: false, pq: false, dcm: false }
+  for (const k of Object.keys(e || {})) {
+    if (!e[k]) continue
+    const fam = familyOfKey(k)
+    if (fam) out[fam] = true
+  }
+  return out
+}
+
 /** Which test families a workup has enabled (any spec revision counts, any unit). */
 export function crrEnabled(w: CrrWorkup | null | undefined): { emi: boolean; pq: boolean; dcm: boolean } {
-  const e = mergedSpecSource(w).enabled
-  return { emi: !!(e.emi461f || e.emi461g), pq: !!(e.pq300b || e.pq300p1), dcm: !!e.dcmag }
+  return familiesEnabled(mergedSpecSource(w).enabled)
 }
 
 /** Same, for a single unit (multi-unit per-unit line items). */
 export function crrEnabledForUnit(u: CrrUnit): { emi: boolean; pq: boolean; dcm: boolean } {
-  const e = u.enabledSpecs || {}
-  return { emi: !!(e.emi461f || e.emi461g), pq: !!(e.pq300b || e.pq300p1), dcm: !!e.dcmag }
+  return familiesEnabled(u.enabledSpecs || {})
 }
 
 /** Suggested (rounded-up) shift count per family, from the workup's spec-row times. */
@@ -389,11 +445,16 @@ export function buildSpecPayloadFromCrr(workup: CrrWorkup | null | undefined, qu
       if (rows.length) unitSections.push({ type: 'Power Quality', rows })
     }
 
-    mapFourCol('emi461f', 'EMI')
-    mapFourCol('emi461g', 'EMI')
-    mapPq('pq300b')
-    mapPq('pq300p1')
-    mapFourCol('dcmag', 'DC Magnetics')
+    // Dispatch every enabled key by family (EMI/DC-Mag share the 4-col mapper; PQ its
+    // own), grouped EMI → PQ → DC Magnetics. New same-family templates flow through here.
+    const famRank = (k: string) => ({ emi: 0, pq: 1, dcm: 2 }[familyOfKey(k) || 'dcm'] ?? 3)
+    const enabledKeys = Object.keys(enabled).filter((k) => enabled[k] && familyOfKey(k)).sort((a, b) => famRank(a) - famRank(b))
+    for (const key of enabledKeys) {
+      const fam = familyOfKey(key)
+      if (fam === 'pq') mapPq(key)
+      else if (fam === 'dcm') mapFourCol(key, 'DC Magnetics')
+      else mapFourCol(key, 'EMI')
+    }
 
     // Multi-unit: label each table set with its unit so the Spec Builder shows one set
     // per unit. The builder honors a payload-provided `intro` (falls back to the preset).
