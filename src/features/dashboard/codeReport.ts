@@ -73,6 +73,8 @@ const TEST_ALIASES: Array<{ phrases: string[]; codes: string[] }> = [
   { phrases: ['hydrostatic'], codes: ['95'] },
   { phrases: ['high speed video'], codes: ['32'] },
   { phrases: ['instrumentation'], codes: ['33'] },
+  { phrases: ['subcontracting', 'subcontracted', 'subcontract', 'outsourced', 'outsourcing', 'outsource'], codes: ['98'] },
+  { phrases: ['tear down', 'tear-down', 'teardown'], codes: ['96'] },
 ]
 
 export interface TestQuery {
