@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { restFetch } from '../../lib/restFetch'
 import type { ChatterEntry } from '../../lib/quoteActions'
-import { fetchMassEmails } from '../../lib/massEmail'
+import { fetchMassEmails, fetchFollowupSends } from '../../lib/massEmail'
 
 // Live activity feed — the most recent human chatter + key events across all quotes.
 // Chatter lives per-quote in data.chatterEntries, so we pull the most recently-updated
@@ -18,6 +18,7 @@ export interface FeedItem {
   at: string
   msg: string
   kind?: 'quote' | 'followup' // set on the Sent feed: initial send vs a follow-up
+  contact?: string // set for a 1:1 contact follow-up (not tied to a quote) — the person contacted
 }
 
 interface Row {
@@ -84,6 +85,27 @@ async function load(mode: FeedMode): Promise<FeedItem[]> {
       })
     })
   })
+  // The Follow-ups tab also shows the 1:1 contact follow-up emails sent from the
+  // reminder composer (they live in mass_emails as "Follow-up: <contact>"), merged in
+  // alongside the quote-bound follow-ups. Best-effort — a failure just omits them.
+  if (mode === 'followups') {
+    try {
+      const sends = await fetchFollowupSends(KEEP_ITEMS)
+      sends.forEach((f) => {
+        items.push({
+          key: `cf:${f.id}`,
+          quoteId: '',
+          opportunity: '',
+          customer: '',
+          contact: f.contact,
+          by: f.by,
+          at: f.at,
+          msg: f.subject ? `“${f.subject}”` : 'Follow-up email',
+          kind: 'followup',
+        })
+      })
+    } catch { /* contact follow-ups are best-effort */ }
+  }
   items.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
   return items.slice(0, KEEP_ITEMS)
 }

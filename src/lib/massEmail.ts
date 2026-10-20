@@ -148,7 +148,7 @@ export async function deleteTemplate(id: string): Promise<void> {
 // ── Send ─────────────────────────────────────────────────────────────────────
 export interface MassSendResult { ok: boolean; massId?: string; total?: number; sent?: number; failed?: number; error?: string; notDeployed?: boolean }
 
-export async function sendMassEmail(input: { subject: string; body: string; audience: string; recipients: Recipient[] }): Promise<MassSendResult> {
+export async function sendMassEmail(input: { subject: string; body: string; audience: string; recipients: Recipient[]; cc?: string[] }): Promise<MassSendResult> {
   const token = getAccessToken()
   if (!token) return { ok: false, error: 'No active session.' }
   // Fill the sender's name/signature into the body before sending (same for every
@@ -174,6 +174,24 @@ export async function sendMassEmail(input: { subject: string; body: string; audi
 // ── History + metrics ────────────────────────────────────────────────────────
 export async function fetchMassEmails(): Promise<MassEmailRow[]> {
   return (await restFetch<MassEmailRow[]>('GET', `mass_emails?select=id,subject,audience,sent_by,sent_at,recipient_count,sent_count,failed_count&order=sent_at.desc&limit=100`)) || []
+}
+
+/** The 1:1 contact follow-up emails sent from the reminder composer. They go through
+ *  the mass-email function with an audience of "Follow-up: <contact>", so they're a
+ *  mass_emails row we can pull back out for the Feed's Follow-ups tab. */
+export interface FollowupSend { id: string; subject: string; contact: string; by: string; at: string }
+export async function fetchFollowupSends(limit = 80): Promise<FollowupSend[]> {
+  const rows = await restFetch<Array<{ id: string; subject: string | null; audience: string | null; sent_by: string | null; sent_at: string | null }>>(
+    'GET',
+    `mass_emails?select=id,subject,audience,sent_by,sent_at&audience=ilike.${encodeURIComponent('Follow-up:*')}&order=sent_at.desc&limit=${limit}`,
+  )
+  return (rows || []).map((r) => ({
+    id: String(r.id),
+    subject: String(r.subject || ''),
+    contact: String(r.audience || '').replace(/^Follow-up:\s*/i, '').trim(),
+    by: String(r.sent_by || ''),
+    at: String(r.sent_at || ''),
+  }))
 }
 
 /** The recipients of one blast that need attention — bounced, marked spam, or

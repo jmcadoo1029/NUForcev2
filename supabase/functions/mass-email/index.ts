@@ -56,7 +56,7 @@ function unsubFooter(url: string): string {
 }
 
 interface Recipient { email: string; name?: string }
-interface Req { subject: string; body: string; audience?: string; recipients: Recipient[] }
+interface Req { subject: string; body: string; audience?: string; recipients: Recipient[]; cc?: string | string[] }
 
 /** Fill {first name} / {firstName} (case-insensitive) with the recipient's first name. */
 function fill(body: string, name: string): string {
@@ -116,6 +116,13 @@ serve(async (req: Request) => {
   const sendable = list.filter((r) => !optedOut.has(r.email))
   if (!sendable.length) return json(400, { ok: false, error: 'Every recipient has unsubscribed — nothing to send.' })
 
+  // Optional CC (used by the 1:1 follow-up composer to copy a colleague). Applied to
+  // every email in the send, so in practice only passed for single-recipient sends.
+  // Bulk blasts from the mass-email/campaign UIs don't pass cc. We don't drop cc
+  // addresses for opt-out (a cc'd colleague isn't the marketing audience).
+  const ccRaw = Array.isArray(payload.cc) ? payload.cc : (payload.cc ? String(payload.cc).split(/[;,]/) : [])
+  const ccList = Array.from(new Set(ccRaw.map((e) => str(e).toLowerCase()).filter((e) => e.includes('@'))))
+
   // 3) Resolve the sender (from/reply-to) from the employee record.
   let emp: any = null
   try {
@@ -148,6 +155,7 @@ serve(async (req: Request) => {
     const emails = chunk.map((r, k) => ({
       from: `${fromName} <${fromEmail}>`,
       to: [r.email],
+      ...(ccList.length ? { cc: ccList } : {}),
       reply_to: realEmail,
       subject,
       text: fill(body, r.name || '') + unsubFooter(unsubs[k]),

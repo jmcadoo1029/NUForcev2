@@ -60,11 +60,20 @@ function Row({ item }: { item: FeedItem }) {
               {item.kind === 'quote' ? 'Sent' : 'Follow-up'}
             </span>
           )}
-          <span style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>on</span>
-          <Link to={`/quote/${item.quoteId}`} style={{ fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
-            {item.opportunity || `#${item.quoteId}`}
-          </Link>
-          {item.customer && <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {item.customer}</span>}
+          {item.quoteId ? (
+            <>
+              <span style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>on</span>
+              <Link to={`/quote/${item.quoteId}`} style={{ fontWeight: 600, color: 'var(--accent)', textDecoration: 'none' }}>
+                {item.opportunity || `#${item.quoteId}`}
+              </Link>
+              {item.customer && <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>· {item.customer}</span>}
+            </>
+          ) : item.contact ? (
+            <>
+              <span style={{ color: 'var(--dim)', fontSize: 'var(--fs-sm)' }}>with</span>
+              <span style={{ fontWeight: 600, color: 'var(--text)' }}>{item.contact}</span>
+            </>
+          ) : null}
           <span style={{ marginLeft: 'auto', color: 'var(--dim)', fontSize: 'var(--fs-caption)', whiteSpace: 'nowrap' }} title={new Date(item.at).toLocaleString()}>{relTime(item.at)}</span>
         </div>
         <div style={{ marginTop: 3, color: 'var(--text)', fontSize: 'var(--fs-sm)', lineHeight: 1.55, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{item.msg}</div>

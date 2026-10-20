@@ -9,7 +9,7 @@
 //
 // Dashboard: "Verify JWT" = OFF (we verify the caller's token ourselves, same as
 // market-research). Secrets: ANTHROPIC_API_KEY (required), ANTHROPIC_MODEL
-// (optional, default claude-3-5-haiku-latest), plus the auto SUPABASE_URL /
+// (optional, default claude-haiku-5-5), plus the auto SUPABASE_URL /
 // SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.
 // ============================================================================
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -38,7 +38,7 @@ serve(async (req: Request) => {
   const ANON = env('SUPABASE_ANON_KEY');
   const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
   const ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY');
-  const MODEL = env('ANTHROPIC_MODEL') || 'claude-3-5-haiku-latest';
+  const MODEL = env('ANTHROPIC_MODEL') || 'claude-haiku-5-5';
 
   // Auth: a signed-in NUForce user (bearer JWT).
   const jwt = (req.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
@@ -121,7 +121,10 @@ serve(async (req: Request) => {
     });
     if (!r.ok) return json(502, { ok: false, error: `Model error ${r.status}: ${(await r.text()).slice(0, 300)}` });
     const data = await r.json();
-    text = str(data?.content?.[0]?.text);
+    // Concatenate every text block. Newer models (e.g. Haiku 5.5) emit a leading
+    // "thinking" block, so content[0] is NOT the answer — we must pick the text blocks.
+    const blocks = Array.isArray(data?.content) ? data.content : [];
+    text = str(blocks.filter((b: any) => b?.type === 'text').map((b: any) => str(b?.text)).filter(Boolean).join('\n'));
   } catch (e) {
     return json(502, { ok: false, error: `Model request failed: ${e instanceof Error ? e.message : String(e)}` });
   }

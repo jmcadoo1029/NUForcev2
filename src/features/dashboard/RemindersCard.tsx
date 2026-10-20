@@ -26,6 +26,7 @@ export function RemindersCard() {
   const [instr, setInstr] = useState('')
   const [subject, setSubject] = useState('')
   const [bodyText, setBodyText] = useState('')
+  const [cc, setCc] = useState('')
   const [genBusy, setGenBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
 
@@ -38,7 +39,7 @@ export function RemindersCard() {
   }, [])
   useEffect(() => { let alive = true; fetchSelf().then((s) => alive && setSelf(s)).catch(() => {}); return () => { alive = false } }, [])
 
-  const openCompose = (r: ContactReminder) => { setCompose(r); setInstr(''); setSubject(''); setBodyText('') }
+  const openCompose = (r: ContactReminder) => { setCompose(r); setInstr(''); setSubject(''); setBodyText(''); setCc('') }
   const closeCompose = () => { if (!genBusy && !sendBusy) setCompose(null) }
   const errMsgC = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -59,9 +60,10 @@ export function RemindersCard() {
     if (!to) { showToast('This reminder has no email address — add one on the contact first.', 'warn'); return }
     if (!subject.trim() || !bodyText.trim()) { showToast('Add a subject and body (or Generate one).', 'warn'); return }
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
+    const ccList = cc.split(/[;,]/).map((e) => e.trim()).filter((e) => e.includes('@'))
     setSendBusy(true)
     try {
-      const res = await sendMassEmail({ subject: subject.trim(), body: bodyText, audience: `Follow-up: ${compose.contact_name || to}`, recipients: [{ email: to, name: compose.contact_name || '' }] })
+      const res = await sendMassEmail({ subject: subject.trim(), body: bodyText, audience: `Follow-up: ${compose.contact_name || to}`, recipients: [{ email: to, name: compose.contact_name || '' }], cc: ccList })
       if (!res.ok) { showToast(res.notDeployed ? 'The email function isn’t deployed on this environment.' : 'Send failed: ' + (res.error || 'unknown'), 'error', 7000); return }
       // Sending IS the ping — reschedule the reminder to its next interval.
       try { await pingReminder(compose) } catch { /* reminder reschedule best-effort */ }
@@ -136,6 +138,13 @@ export function RemindersCard() {
           <div style={{ fontSize: 'var(--fs-caption)', color: 'var(--dim)', marginBottom: 'var(--sp-3)' }}>
             To: {compose.contact_email}{compose.account ? ` · ${compose.account}` : ''}
           </div>
+          <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', display: 'block', marginBottom: 4 }}>Cc <span style={{ textTransform: 'none', fontWeight: 400 }}>(optional — separate multiple with commas)</span></label>
+          <input
+            value={cc}
+            onChange={(e) => setCc(e.target.value)}
+            placeholder="colleague@nulabs.com"
+            style={{ width: '100%', fontFamily: 'inherit', fontSize: 'var(--fs-sm)', padding: '8px 10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-strong)', background: 'var(--surface)', color: 'var(--text)', boxSizing: 'border-box', marginBottom: 'var(--sp-3)' }}
+          />
           <label style={{ fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', display: 'block', marginBottom: 4 }}>What should it say?</label>
           <div style={{ display: 'flex', gap: 'var(--sp-2)', alignItems: 'flex-start' }}>
             <input
