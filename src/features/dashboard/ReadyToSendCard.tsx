@@ -4,8 +4,10 @@ import { Card, CardLabel, Modal, useToast } from '../../components'
 import { money } from '../../lib/format'
 import { restFetch } from '../../lib/restFetch'
 import { WRITES_ENABLED } from '../../lib/config'
+import { getSessionEmail } from '../../lib/auth'
 import { lineItemsFromData } from '../../data/quoteModel'
 import { SendComposer } from '../quote/SendComposer'
+import { JobChatterModal } from '../quote/JobChatterModal'
 import { useReadyToSend, dismissReadyToSend, type ReadyRow } from './useReadyToSend'
 
 // Ready-to-Send queue — approved quotes not yet sent. Each row links to its quote,
@@ -20,8 +22,15 @@ interface SendTarget {
   contactEmail: string
   ccEmails: string[]
   testItem: string
+  businessType: string // data.qi.type — drives the Existing-Business Workspace-chatter prompt
+  jobNum: string       // data.wonInfo.jobNum — prefilled into that prompt
   pdfInput: { qi: Record<string, any>; ti: Record<string, any>; lines: { code?: string | null; label: string; desc?: string; price: number; qty?: number }[]; budget: { on: boolean; rows: any[]; markup: string } }
 }
+
+// A pending Existing-Business → Workspace chatter prompt. Sending an Existing-Business
+// quote from here (single or part of a combined send) queues one of these; each is
+// worked through in a required JobChatterModal, same as sending from the quote page.
+interface ChatterJob { quoteId: string; opportunity: string; jobNum: string }
 
 export function ReadyToSendCard() {
   const { data, err } = useReadyToSend()
@@ -35,8 +44,22 @@ export function ReadyToSendCard() {
   // Combined send: rows the user has ticked to send together in one email.
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [groupBusy, setGroupBusy] = useState(false)
-  const [groupTarget, setGroupTarget] = useState<{ contactName: string; contactEmail: string; ccEmails: string[]; quotes: { quoteId: string; opportunity: string; revision: string | null; testItem: string; pdfInput: SendTarget['pdfInput'] }[] } | null>(null)
+  const [groupTarget, setGroupTarget] = useState<{ contactName: string; contactEmail: string; ccEmails: string[]; quotes: { quoteId: string; opportunity: string; revision: string | null; testItem: string; businessType: string; jobNum: string; pdfInput: SendTarget['pdfInput'] }[] } | null>(null)
+  // Existing-Business Workspace-chatter prompts still owed after a send (worked one at a time).
+  const [chatterQueue, setChatterQueue] = useState<ChatterJob[]>([])
+  const me = getSessionEmail() || ''
   const errMsg = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+  // After a real send (not a preview), queue a required Workspace-chatter prompt for
+  // each Existing-Business quote that just went out — matching the quote-page behavior.
+  const queueExistingBizChatter = (
+    quotes: Array<{ quoteId: string; opportunity: string; businessType: string; jobNum: string }>,
+    result: { ok?: boolean; status?: string } | undefined,
+  ) => {
+    if (!result?.ok || result.status === 'preview') return
+    const eb = quotes.filter((q) => (q.businessType || '').trim() === 'Existing Business')
+    if (eb.length) setChatterQueue(eb.map((q) => ({ quoteId: q.quoteId, opportunity: q.opportunity, jobNum: q.jobNum || '' })))
+  }
 
   const rows = (data || []).filter((r) => !dismissedIds.has(r.id))
   const hide = (id: string) => setDismissedIds((cur) => new Set(cur).add(id))
@@ -52,7 +75,7 @@ export function ReadyToSendCard() {
       const infos = await Promise.all(chosen.map(async (r) => ({ r, info: await loadSendInfo(r.id) })))
       const first = infos[0].info
       const ccUnion = Array.from(new Set(infos.flatMap((x) => x.info.ccEmails).map((s) => s.trim()).filter(Boolean))).filter((e) => e !== first.contactEmail)
-      const quotes = infos.map(({ r, info }) => ({ quoteId: r.id, opportunity: r.opportunity, revision: info.revision, testItem: info.testItem, pdfInput: info.pdfInput }))
+      const quotes = infos.map(({ r, info }) => ({ quoteId: r.id, opportunity: r.opportunity, revision: info.revision, testItem: info.testItem, businessType: info.businessType, jobNum: info.jobNum, pdfInput: info.pdfInput }))
       setGroupTarget({ contactName: first.contactName, contactEmail: first.contactEmail, ccEmails: ccUnion, quotes })
     } catch (e) {
       showToast('Couldn’t load the quotes: ' + errMsg(e), 'error', 6000)
@@ -70,6 +93,7 @@ export function ReadyToSendCard() {
     const qi = (d.qi || {}) as Record<string, any>
     const ti = (d.ti || {}) as Record<string, any>
     const b = (d.budget || {}) as Record<string, any>
+    const won = (d.wonInfo || {}) as Record<string, any>
     // Carry qty so a quantity quote's PDF expands unit × qty in the SENT attachment
     // (not just the on-screen view). Dropping it here sent customers unit-only totals.
     const lines = lineItemsFromData(d).map((l) => ({ code: l.code, label: l.label, desc: l.desc, price: l.price, qty: l.qty }))
@@ -80,6 +104,8 @@ export function ReadyToSendCard() {
       contactEmail: String(qi.email || ''),
       ccEmails: cc,
       testItem: String(ti.item || ''),
+      businessType: String(qi.type || ''),
+      jobNum: String(won.jobNum || ''),
       pdfInput: { qi, ti, lines, budget: { on: !!b.on, rows: Array.isArray(b.rows) ? b.rows : [], markup: b.markup != null ? String(b.markup) : '25' } },
     }
   }
@@ -209,7 +235,12 @@ export function ReadyToSendCard() {
           testItem={sendTarget.testItem}
           pdfInput={sendTarget.pdfInput}
           onClose={() => setSendTarget(null)}
-          onSent={() => { hide(sendTarget.row.id); setSendTarget(null) }}
+          onSent={(result) => {
+            const t = sendTarget
+            hide(t.row.id)
+            setSendTarget(null)
+            queueExistingBizChatter([{ quoteId: t.row.id, opportunity: t.row.opportunity, businessType: t.businessType, jobNum: t.jobNum }], result)
+          }}
         />
       )}
 
@@ -224,7 +255,27 @@ export function ReadyToSendCard() {
           ccEmails={groupTarget.ccEmails}
           groupQuotes={groupTarget.quotes}
           onClose={() => setGroupTarget(null)}
-          onSent={() => { setDismissedIds((cur) => { const n = new Set(cur); groupTarget.quotes.forEach((q) => n.add(q.quoteId)); return n }); setSelected(new Set()); setGroupTarget(null) }}
+          onSent={(result) => {
+            const quotes = groupTarget.quotes
+            setDismissedIds((cur) => { const n = new Set(cur); quotes.forEach((q) => n.add(q.quoteId)); return n })
+            setSelected(new Set())
+            setGroupTarget(null)
+            queueExistingBizChatter(quotes.map((q) => ({ quoteId: q.quoteId, opportunity: q.opportunity, businessType: q.businessType, jobNum: q.jobNum })), result)
+          }}
+        />
+      )}
+
+      {/* Existing-Business quotes just sent from the queue → post the required Workspace
+          chatter note, one quote at a time (post-send mode: must post or reclassify). */}
+      {chatterQueue.length > 0 && (
+        <JobChatterModal
+          key={chatterQueue[0].quoteId}
+          quoteId={chatterQueue[0].quoteId}
+          opportunity={chatterQueue[0].opportunity}
+          initialJobNum={chatterQueue[0].jobNum}
+          me={me}
+          cancelable={false}
+          onClose={() => setChatterQueue((q) => q.slice(1))}
         />
       )}
 
