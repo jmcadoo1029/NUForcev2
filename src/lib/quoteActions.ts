@@ -88,6 +88,24 @@ export async function flagQuote(input: FlagInput): Promise<QuoteFlag | null> {
   return rows?.[0] || null
 }
 
+export interface QuoteRef { id: string; opportunity: string; customer: string | null }
+
+/** Resolve a free-text opportunity (e.g. an In Progress board row) to the best
+ *  matching live quote: an exact opportunity match, else the highest revision in the
+ *  family. Returns null if nothing matches (a board row that isn't a real quote). */
+export async function findQuoteByOpportunity(opportunity: string): Promise<QuoteRef | null> {
+  const opp = (opportunity || '').trim()
+  const base = baseOpp(opp).toUpperCase()
+  if (!base) return null
+  const rows = await restFetch<Array<{ id: string; opportunity: string | null; customer: string | null }>>(
+    'GET', `quotes?select=id,opportunity,customer&opportunity=ilike.${encodeURIComponent(base + '%')}&order=opportunity.desc&limit=25`,
+  )
+  const list = rows || []
+  const exact = list.find((r) => String(r.opportunity || '').trim().toUpperCase() === opp.toUpperCase())
+  const chosen = exact || list.find((r) => baseOpp(String(r.opportunity || '')).toUpperCase() === base) || null
+  return chosen ? { id: String(chosen.id), opportunity: String(chosen.opportunity || opp), customer: chosen.customer ?? null } : null
+}
+
 export interface ChatterEntry { by: string; at: string; msg: string; auto?: boolean }
 
 /**
