@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Card, CardLabel, Button, useToast } from '../../components'
 import { WRITES_ENABLED } from '../../lib/config'
+import { restFetch } from '../../lib/restFetch'
+import { baseOpp } from '../../lib/opp'
 import { saveBoard } from '../../lib/openQuotes'
 import { useOpenQuotes } from './useOpenQuotes'
 
@@ -19,6 +21,16 @@ export function InProgressCard() {
   const seq = useRef(1)
   const [dragKey, setDragKey] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
+  // Open flags, by opportunity family — so a board row for a flagged quote shows a ⚑.
+  const [flaggedBases, setFlaggedBases] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let alive = true
+    restFetch<Array<{ opportunity: string | null }>>('GET', 'quote_flags?select=opportunity&resolved=eq.false&limit=1000')
+      .then((r) => { if (alive) setFlaggedBases(new Set((r || []).map((x) => baseOpp(String(x.opportunity || '')).toUpperCase()).filter(Boolean))) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [data])
+  const isFlagged = (opp: string | null) => { const b = baseOpp(String(opp || '')).toUpperCase(); return !!b && flaggedBases.has(b) }
 
   // Seed the editable copy from the shared board once it loads (and whenever a
   // fresh load arrives while we're not mid-edit).
@@ -104,7 +116,10 @@ export function InProgressCard() {
             <tbody>
               {data.map((r) => (
                 <tr key={r.id}>
-                  <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.opportunity || '—'}</td>
+                  <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {r.opportunity || '—'}
+                    {isFlagged(r.opportunity) && <span title="This quote is flagged for attention" style={{ marginLeft: 6, fontSize: 'var(--fs-caption)', fontWeight: 800, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 20, padding: '1px 7px' }}>⚑ Flagged</span>}
+                  </td>
                   <td style={{ ...td, color: 'var(--muted)' }}>{r.account || '—'}</td>
                   <td style={{ ...td, color: 'var(--text)' }}>{r.description || ''}</td>
                 </tr>

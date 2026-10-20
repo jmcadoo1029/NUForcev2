@@ -7,7 +7,7 @@ import { fetchProductOverrides } from './lib/productOverrides'
 import { DevAuthGate } from './features/auth/DevAuthGate'
 import { DashboardShell } from './features/dashboard/DashboardShell'
 import { DashboardHome } from './features/dashboard/DashboardHome'
-import { useCanViewManager } from './lib/perms'
+import { useCanViewManager, useFeatureState } from './lib/perms'
 import { MyWork } from './features/dashboard/MyWork'
 import { InProgress } from './features/dashboard/InProgress'
 import { JobSearch } from './features/dashboard/JobSearch'
@@ -45,6 +45,20 @@ function ContractingHome() {
   )
 }
 
+// My Work — the personal worklist. On for everyone by default; a manager can turn it
+// off per person in Users. When off, there's no worklist to show, so fall back to the
+// Home screen and let them choose where to go. Wait for the real value before deciding.
+function MyWorkHome() {
+  const { on, loading } = useFeatureState('my_work')
+  if (loading) return null
+  if (!on) return <Navigate to="/" replace />
+  return (
+    <DashboardShell>
+      <MyWork />
+    </DashboardShell>
+  )
+}
+
 // Customer Contact — outreach + contact hygiene (Mass Emails, Campaigns, Bad Contacts,
 // and the re-engage list). Visible to everyone.
 function CustomerContactHome() {
@@ -75,14 +89,7 @@ export default function App() {
         <Routes>
         <Route path="/" element={<HomeLauncher />} />
         <Route path="/dashboard" element={<ManagerHome />} />
-        <Route
-          path="/my-work"
-          element={
-            <DashboardShell>
-              <MyWork />
-            </DashboardShell>
-          }
-        />
+        <Route path="/my-work" element={<MyWorkHome />} />
         <Route
           path="/in-progress"
           element={

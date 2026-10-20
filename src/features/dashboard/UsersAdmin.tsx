@@ -15,6 +15,7 @@ import { featureDefaultFor } from '../../lib/perms'
 // featureDefaultFor) unless a manager flips it here.
 const PAGE_FEATURES: { key: string; label: string; help: string }[] = [
   { key: 'manager_dashboard', label: 'Manager dashboard', help: 'The Manager view — the dashboard route, the Manager tab, and its tiles. Off means this person only sees their own quotes.' },
+  { key: 'my_work', label: 'My Work tab', help: 'The personal worklist — the My Work route and tab (Ready to Send, flagged, follow-ups, reminders, active quotes). On for everyone by default; turn off for anyone who doesn’t need it.' },
   { key: 'reengage', label: 'Re-engage tab', help: 'Customer Contact → Contacts → Re-engage: the dormant-contact outreach list.' },
   { key: 'bad_contacts', label: 'Bad contacts tab', help: 'Customer Contact → Contacts → Bad contacts: the contact-hygiene / reassignment tool.' },
   { key: 'campaigns', label: 'Campaigns tab', help: 'Customer Contact → Outreach → Campaigns: building and managing outreach lists.' },

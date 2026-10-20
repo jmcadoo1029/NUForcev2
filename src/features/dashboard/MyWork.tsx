@@ -2,20 +2,22 @@ import { ReadyToSendCard } from './ReadyToSendCard'
 import { FlaggedQuotesCard } from './FlaggedQuotesCard'
 import { FollowUpsCard } from './FollowUpsCard'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
+import { RemindersCard } from './RemindersCard'
 import { useCanViewManager } from '../../lib/perms'
 
 // My Work view — the daily worklist (frame/top bar comes from DashboardShell).
-// Ordered by action priority: send-ready, flagged, then follow-ups. Users without
-// the Manager view also get "Active quotes this month" here, since they don't see
-// the Manager tab where that card normally lives; Manager-view users see it there.
+// Ready-to-Send and Follow-ups live in the Manager's "Needs your attention" area, so
+// here they show only for non-managers (who don't see that dashboard). Flagged quotes,
+// due follow-up reminders, and Active-quotes-this-month show for everyone in My Work.
 export function MyWork() {
   const { canView } = useCanViewManager()
   return (
     <>
-      <ReadyToSendCard />
+      {!canView && <ReadyToSendCard />}
       <FlaggedQuotesCard />
-      <FollowUpsCard />
-      {!canView && <ActiveQuotesCard />}
+      {!canView && <FollowUpsCard />}
+      <RemindersCard />
+      <ActiveQuotesCard />
     </>
   )
 }

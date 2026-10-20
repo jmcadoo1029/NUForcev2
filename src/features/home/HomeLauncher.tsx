@@ -1,6 +1,6 @@
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useCanViewManager, useIsApprover } from '../../lib/perms'
+import { useCanViewManager, useIsApprover, useFeature } from '../../lib/perms'
 import { WORKSPACE_URL } from '../../lib/config'
 import { Campaigns } from '../dashboard/Campaigns'
 import { CustomerLookup } from '../account/CustomerLookup'
@@ -40,6 +40,7 @@ export function HomeLauncher() {
   const navigate = useNavigate()
   const { canView, loading } = useCanViewManager()
   const { isApprover, loading: apprLoading } = useIsApprover()
+  const canMyWork = useFeature('my_work')
   const [modal, setModal] = useState<null | 'campaigns' | 'lookup' | 'import'>(null)
   const [hover, setHover] = useState<string | null>(null)
 
@@ -57,7 +58,7 @@ export function HomeLauncher() {
     { key: 'workspace', label: 'Open Workspace', desc: 'Jump to NUWorkspace in a new tab.', onClick: () => window.open(WORKSPACE_URL, '_blank', 'noopener,noreferrer'), icon: iconExternal },
   ]
 
-  const visible = tiles.filter((t) => (!t.managerOnly || canView) && (!t.approverOnly || isApprover))
+  const visible = tiles.filter((t) => (!t.managerOnly || canView) && (!t.approverOnly || isApprover) && (t.key !== 'mywork' || canMyWork))
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: 'var(--sp-6) var(--sp-5) 60px' }}>

@@ -1,4 +1,5 @@
 import { restFetch } from './restFetch'
+import { baseOpp } from './opp'
 
 // Read-only access to a quote's action state — its open flag and its send /
 // follow-up history — so the quote page can reflect what the dashboard cards
@@ -65,6 +66,25 @@ export async function flagQuote(input: FlagInput): Promise<QuoteFlag | null> {
     returnRepresentation: true,
     upsert: true,
   })
+  // Keep the shared In Progress board in sync: a freshly-flagged quote that isn't
+  // already on the board gets added, so flagged work shows up there too. Matched by
+  // opportunity FAMILY (revision-insensitive) to avoid duplicating an existing row.
+  // Best-effort — a board failure must never fail the flag itself.
+  try {
+    const opp = (input.opportunity || '').trim()
+    const base = baseOpp(opp).toUpperCase()
+    if (base) {
+      const existing = await restFetch<Array<{ id: string; opportunity: string | null }>>(
+        'GET', `open_quotes?select=id,opportunity&opportunity=ilike.${encodeURIComponent(base + '%')}&limit=20`,
+      )
+      const already = (existing || []).some((r) => baseOpp(String(r.opportunity || '')).toUpperCase() === base)
+      if (!already) {
+        await restFetch('POST', 'open_quotes', {
+          body: { opportunity: opp, account: (input.customer || '').trim() || null, description: (input.note || '').trim() || 'Flagged — needs attention' },
+        })
+      }
+    }
+  } catch { /* board sync is best-effort */ }
   return rows?.[0] || null
 }
 

@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { Button } from '../../components'
 import { WORKSPACE_URL, CLASSIC_URL } from '../../lib/config'
-import { useCanViewManager, useIsApprover } from '../../lib/perms'
+import { useCanViewManager, useIsApprover, useFeature } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
 import { CustomerLookup } from '../account/CustomerLookup'
@@ -35,6 +35,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const { canView } = useCanViewManager() // Manager tab: approvers + view-only roles (Accounting)
+  const canMyWork = useFeature('my_work') // My Work tab: on for everyone unless turned off in Users
   const { isApprover } = useIsApprover() // Import a Draft: approvers only
   const [privacy, setPrivacy] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
@@ -59,8 +60,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
           <div style={{ display: 'inline-flex', border: '1px solid var(--border-strong)', borderRadius: 9, overflow: 'hidden' }}>
             {canView && <Link to="/dashboard" style={seg(view === 'manager', true)}>Manager</Link>}
-            <Link to="/my-work" style={seg(view === 'mywork', canView ? false : true)}>My Work</Link>
-            <Link to="/in-progress" style={seg(view === 'inprogress', false)}>In Progress</Link>
+            {canMyWork && <Link to="/my-work" style={seg(view === 'mywork', !canView)}>My Work</Link>}
+            <Link to="/in-progress" style={seg(view === 'inprogress', !canView && !canMyWork)}>In Progress</Link>
             <Link to="/job-search" style={seg(view === 'jobsearch', false)}>Job Search</Link>
             <button onClick={() => setLookupOpen(true)} style={{ ...seg(false, false), fontFamily: 'inherit' }}>Customer Lookup</button>
             {canView && <Link to="/contracting" style={seg(view === 'contracting', false)}>Contracting</Link>}

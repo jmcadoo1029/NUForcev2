@@ -4,6 +4,8 @@ import { useDashboardMetrics } from './useDashboardMetrics'
 import { ThreeMonthWidgets } from './ThreeMonthWidgets'
 import { ApprovalsCard } from './ApprovalsCard'
 import { RemindersCard } from './RemindersCard'
+import { ReadyToSendCard } from './ReadyToSendCard'
+import { FollowUpsCard } from './FollowUpsCard'
 import { ScheduledRunsCard } from './ScheduledRunsCard'
 import { TrendChart } from './TrendChart'
 import { ProductCodeDeepDive } from './ProductCodeDeepDive'
@@ -35,6 +37,10 @@ export function DashboardHome() {
       )}
 
       <ApprovalsCard />
+
+      <ReadyToSendCard />
+
+      <FollowUpsCard />
 
       <RemindersCard />
 

@@ -47,6 +47,7 @@ export type FeatureBasis = 'manager' | 'approver' | 'all'
 export const FEATURE_DEFAULTS: Record<string, FeatureBasis> = {
   // Page / tab visibility
   manager_dashboard: 'manager',
+  my_work: 'all',
   mass_emails: 'manager',
   scheduled: 'manager',
   campaigns: 'all',
@@ -148,6 +149,20 @@ export function useFeature(name: string): boolean {
     return () => { alive = false }
   }, [name])
   return on
+}
+
+/** Reactive feature check with a loading flag — for route guards that must not act
+ *  (redirect) until the real value is known. */
+export function useFeatureState(name: string): { on: boolean; loading: boolean } {
+  const [on, setOn] = useState(false)
+  const [loading, setLoading] = useState(true)
+  useEffect(() => {
+    let alive = true
+    setLoading(true)
+    fetchFeature(name).then((v) => { if (alive) { setOn(v); setLoading(false) } })
+    return () => { alive = false }
+  }, [name])
+  return { on, loading }
 }
 
 /** Reactive approver check: { isApprover, loading }. Gates approve/edit authority. */
