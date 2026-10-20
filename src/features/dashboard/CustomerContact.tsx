@@ -6,6 +6,7 @@ import { MassEmails } from './MassEmails'
 import { BadContactsCard } from './BadContactsCard'
 import { CampaignsPanel } from './Campaigns'
 import { ScheduledPanel } from './ScheduledPanel'
+import { RemindersPanel } from './RemindersPanel'
 
 // Customer Contact — the home for outreach + contact hygiene. Visible to everyone,
 // organized into two groups:
@@ -15,11 +16,11 @@ import { ScheduledPanel } from './ScheduledPanel'
 // non-managers and a non-manager can never land on it. Because a campaign is emailed
 // from the Mass Emails composer, sending from a campaign stays manager-gated there.
 
-type Sub = 'reengage' | 'badcontacts' | 'campaigns' | 'massemails' | 'scheduled'
+type Sub = 'reengage' | 'badcontacts' | 'reminders' | 'campaigns' | 'massemails' | 'scheduled'
 
 interface Tab { key: Sub; label: string; managerOnly?: boolean }
 const GROUPS: { label: string; tabs: Tab[] }[] = [
-  { label: 'Contacts', tabs: [{ key: 'reengage', label: 'Re-engage' }, { key: 'badcontacts', label: 'Bad contacts' }] },
+  { label: 'Contacts', tabs: [{ key: 'reengage', label: 'Re-engage' }, { key: 'badcontacts', label: 'Bad contacts' }, { key: 'reminders', label: 'Reminders' }] },
   { label: 'Outreach', tabs: [{ key: 'campaigns', label: 'Campaigns' }, { key: 'massemails', label: 'Mass Emails', managerOnly: true }, { key: 'scheduled', label: 'Scheduled', managerOnly: true }] },
 ]
 
@@ -44,23 +45,25 @@ export function CustomerContact() {
   // Scheduled default to managers.
   const canReengage = useFeature('reengage')
   const canBad = useFeature('bad_contacts')
+  const canReminders = useFeature('reminders')
   const canCampaigns = useFeature('campaigns')
   const canMass = useFeature('mass_emails')
   const canSched = useFeature('scheduled')
   const allowed = (t: Sub) =>
     t === 'reengage' ? canReengage
       : t === 'badcontacts' ? canBad
-        : t === 'campaigns' ? canCampaigns
-          : t === 'massemails' ? canMass
-            : canSched
-  const ORDER: Sub[] = ['reengage', 'badcontacts', 'campaigns', 'massemails', 'scheduled']
+        : t === 'reminders' ? canReminders
+          : t === 'campaigns' ? canCampaigns
+            : t === 'massemails' ? canMass
+              : canSched
+  const ORDER: Sub[] = ['reengage', 'badcontacts', 'reminders', 'campaigns', 'massemails', 'scheduled']
   const firstAllowed = ORDER.find(allowed) || null
   const [sub, setSub] = useState<Sub>('reengage')
 
   // Never sit on a tab this person can't access — fall back to the first they can.
   useEffect(() => {
     if (!allowed(sub) && firstAllowed) setSub(firstAllowed)
-  }, [canReengage, canBad, canCampaigns, canMass, canSched, sub]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canReengage, canBad, canReminders, canCampaigns, canMass, canSched, sub]) // eslint-disable-line react-hooks/exhaustive-deps
   const view: Sub | null = allowed(sub) ? sub : firstAllowed
 
   return (
@@ -86,6 +89,7 @@ export function CustomerContact() {
         <Card><div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>You don't have access to any outreach tools. Ask a manager if you think this is a mistake.</div></Card>
       ) : view === 'reengage' ? <ReEngageContacts />
         : view === 'badcontacts' ? <BadContactsCard />
+        : view === 'reminders' ? <RemindersPanel />
         : view === 'campaigns' ? <Card><CampaignsPanel /></Card>
         : view === 'scheduled' ? <Card><ScheduledPanel /></Card>
         : <MassEmails />}

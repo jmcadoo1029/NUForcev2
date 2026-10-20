@@ -52,6 +52,7 @@ export const FEATURE_DEFAULTS: Record<string, FeatureBasis> = {
   campaigns: 'all',
   bad_contacts: 'all',
   reengage: 'all',
+  reminders: 'all',
   // Action-level (what you can DO on a page you can see)
   send_mass_email: 'manager',
   edit_templates: 'approver',

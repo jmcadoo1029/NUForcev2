@@ -3,6 +3,7 @@ import { money, moneyShort } from '../../lib/format'
 import { useDashboardMetrics } from './useDashboardMetrics'
 import { ThreeMonthWidgets } from './ThreeMonthWidgets'
 import { ApprovalsCard } from './ApprovalsCard'
+import { RemindersCard } from './RemindersCard'
 import { ScheduledRunsCard } from './ScheduledRunsCard'
 import { TrendChart } from './TrendChart'
 import { ProductCodeDeepDive } from './ProductCodeDeepDive'
@@ -34,6 +35,8 @@ export function DashboardHome() {
       )}
 
       <ApprovalsCard />
+
+      <RemindersCard />
 
       <ScheduledRunsCard />
 
