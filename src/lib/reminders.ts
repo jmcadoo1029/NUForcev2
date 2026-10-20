@@ -42,9 +42,11 @@ export async function createReminder(r: NewReminder, by: string): Promise<void> 
   })
 }
 
-/** Active reminders that have come due (due_at today or earlier). */
-export async function fetchDueReminders(): Promise<ContactReminder[]> {
-  return (await restFetch<ContactReminder[]>('GET', `contact_reminders?select=*&status=eq.active&due_at=lte.${todayStr()}&order=due_at`)) || []
+/** Active reminders that have come due (due_at today or earlier). When `createdBy`
+ *  is passed, scoped to reminders that person set — each user sees only their own. */
+export async function fetchDueReminders(createdBy?: string): Promise<ContactReminder[]> {
+  const mine = createdBy && createdBy.trim() ? `&created_by=eq.${encodeURIComponent(createdBy.trim())}` : ''
+  return (await restFetch<ContactReminder[]>('GET', `contact_reminders?select=*&status=eq.active&due_at=lte.${todayStr()}${mine}&order=due_at`)) || []
 }
 
 /** All active reminders (for the management list), soonest-due first. */

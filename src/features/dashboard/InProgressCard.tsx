@@ -21,16 +21,29 @@ export function InProgressCard() {
   const seq = useRef(1)
   const [dragKey, setDragKey] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
-  // Open flags, by opportunity family — so a board row for a flagged quote shows a ⚑.
-  const [flaggedBases, setFlaggedBases] = useState<Set<string>>(new Set())
+  // Open flags, by opportunity family → the flag's note, so a board row for a flagged
+  // quote shows a ⚑ and the detail someone left when they flagged it.
+  const [flagNotes, setFlagNotes] = useState<Map<string, string>>(new Map())
   useEffect(() => {
     let alive = true
-    restFetch<Array<{ opportunity: string | null }>>('GET', 'quote_flags?select=opportunity&resolved=eq.false&limit=1000')
-      .then((r) => { if (alive) setFlaggedBases(new Set((r || []).map((x) => baseOpp(String(x.opportunity || '')).toUpperCase()).filter(Boolean))) })
+    restFetch<Array<{ opportunity: string | null; note: string | null }>>('GET', 'quote_flags?select=opportunity,note&resolved=eq.false&limit=1000')
+      .then((r) => {
+        if (!alive) return
+        const m = new Map<string, string>()
+        for (const x of r || []) {
+          const b = baseOpp(String(x.opportunity || '')).toUpperCase()
+          if (!b) continue
+          const note = String(x.note || '').trim()
+          // First flag for a family wins the key; fill in a note if a later one has one.
+          if (!m.has(b)) m.set(b, note)
+          else if (!m.get(b) && note) m.set(b, note)
+        }
+        setFlagNotes(m)
+      })
       .catch(() => {})
     return () => { alive = false }
   }, [data])
-  const isFlagged = (opp: string | null) => { const b = baseOpp(String(opp || '')).toUpperCase(); return !!b && flaggedBases.has(b) }
+  const flagBase = (opp: string | null) => { const b = baseOpp(String(opp || '')).toUpperCase(); return b && flagNotes.has(b) ? b : '' }
 
   // Seed the editable copy from the shared board once it loads (and whenever a
   // fresh load arrives while we're not mid-edit).
@@ -111,19 +124,31 @@ export function InProgressCard() {
                 <th style={th}>Opportunity</th>
                 <th style={th}>Account</th>
                 <th style={th}>Description</th>
+                <th style={{ ...th, width: 220 }}>Flag</th>
               </tr>
             </thead>
             <tbody>
-              {data.map((r) => (
-                <tr key={r.id}>
-                  <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                    {r.opportunity || '—'}
-                    {isFlagged(r.opportunity) && <span title="This quote is flagged for attention" style={{ marginLeft: 6, fontSize: 'var(--fs-caption)', fontWeight: 800, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 20, padding: '1px 7px' }}>⚑ Flagged</span>}
-                  </td>
-                  <td style={{ ...td, color: 'var(--muted)' }}>{r.account || '—'}</td>
-                  <td style={{ ...td, color: 'var(--text)' }}>{r.description || ''}</td>
-                </tr>
-              ))}
+              {data.map((r) => {
+                const fb = flagBase(r.opportunity)
+                const note = fb ? flagNotes.get(fb) || '' : ''
+                return (
+                  <tr key={r.id}>
+                    <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.opportunity || '—'}</td>
+                    <td style={{ ...td, color: 'var(--muted)' }}>{r.account || '—'}</td>
+                    <td style={{ ...td, color: 'var(--text)' }}>{r.description || ''}</td>
+                    <td style={td}>
+                      {fb ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                          <span title="This quote is flagged for attention" style={{ alignSelf: 'flex-start', fontSize: 'var(--fs-caption)', fontWeight: 800, color: 'var(--accent)', background: 'var(--accent-soft)', border: '1px solid var(--accent)', borderRadius: 20, padding: '1px 7px' }}>⚑ Flagged</span>
+                          {note && <span style={{ fontSize: 'var(--fs-caption)', color: 'var(--muted)', lineHeight: 1.35 }}>{note}</span>}
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--dim)' }}>—</span>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

@@ -4,13 +4,15 @@ import { WRITES_ENABLED } from '../../lib/config'
 import { fmtDate } from '../../lib/format'
 import { prettifyEmail } from '../../lib/text'
 import { fetchSelf, type Self } from '../../lib/me'
+import { getSessionEmail } from '../../lib/auth'
 import { sendMassEmail } from '../../lib/massEmail'
 import { generateFollowupDraft } from '../../lib/aiEmail'
 import { fetchDueReminders, pingReminder, snoozeReminder, stopReminder, type ContactReminder } from '../../lib/reminders'
 
 // "Follow-up reminders" — the contact pings that have come due, shown in the
-// dashboard "Needs your attention" area. Team-visible. Renders nothing when none
-// are due so it only appears when there's something to act on.
+// dashboard "Needs your attention" area and in My Work. Scoped to the signed-in
+// user: you only see reminders you set. Renders nothing when none are due so it
+// only appears when there's something to act on.
 const weeks = (days: number) => (days % 7 === 0 ? `${days / 7} week${days / 7 === 1 ? '' : 's'}` : `${days} days`)
 
 export function RemindersCard() {
@@ -27,7 +29,13 @@ export function RemindersCard() {
   const [genBusy, setGenBusy] = useState(false)
   const [sendBusy, setSendBusy] = useState(false)
 
-  useEffect(() => { let alive = true; fetchDueReminders().then((d) => alive && setList(d)).catch(() => alive && setList([])); return () => { alive = false } }, [])
+  useEffect(() => {
+    let alive = true
+    const me = getSessionEmail() || ''
+    if (!me) { setList([]); return () => { alive = false } } // can't identify the user → show nothing rather than everyone's
+    fetchDueReminders(me).then((d) => alive && setList(d)).catch(() => alive && setList([]))
+    return () => { alive = false }
+  }, [])
   useEffect(() => { let alive = true; fetchSelf().then((s) => alive && setSelf(s)).catch(() => {}); return () => { alive = false } }, [])
 
   const openCompose = (r: ContactReminder) => { setCompose(r); setInstr(''); setSubject(''); setBodyText('') }

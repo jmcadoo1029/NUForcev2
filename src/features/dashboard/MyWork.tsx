@@ -3,19 +3,18 @@ import { FlaggedQuotesCard } from './FlaggedQuotesCard'
 import { FollowUpsCard } from './FollowUpsCard'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
 import { RemindersCard } from './RemindersCard'
-import { useCanViewManager } from '../../lib/perms'
 
-// My Work view — the daily worklist (frame/top bar comes from DashboardShell).
-// Ready-to-Send and Follow-ups live in the Manager's "Needs your attention" area, so
-// here they show only for non-managers (who don't see that dashboard). Flagged quotes,
-// due follow-up reminders, and Active-quotes-this-month show for everyone in My Work.
+// My Work view — the personal worklist (frame/top bar comes from DashboardShell).
+// Ready-to-Send, Flagged quotes, Follow-ups due, your due follow-up reminders, and
+// Active-quotes-this-month all live here for everyone. Ready-to-Send and Follow-ups
+// ALSO appear in the Manager's "Needs your attention" area — they're in both spots,
+// not moved.
 export function MyWork() {
-  const { canView } = useCanViewManager()
   return (
     <>
-      {!canView && <ReadyToSendCard />}
+      <ReadyToSendCard />
       <FlaggedQuotesCard />
-      {!canView && <FollowUpsCard />}
+      <FollowUpsCard />
       <RemindersCard />
       <ActiveQuotesCard />
     </>
