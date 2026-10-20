@@ -31,9 +31,20 @@ async function loadBadContacts(): Promise<BadGroup[]> {
   )
   const emails = Array.from(new Set((bad || []).map((c) => (c.email || '').trim()).filter(Boolean)))
   if (!emails.length) return []
+  // Closed Won quotes are historical — their contact text is a record of who we won the
+  // deal with, so they're NEVER touched by the bulk replace. We exclude them here (so
+  // they don't show, count, or get updated). Stage can live in the top-level column OR
+  // in data.qi.stage, so we read both and drop a quote if either says Closed Won.
+  const isWon = (s: string | null) => (s || '').trim() === 'Closed Won'
   const groups = await Promise.all(
     emails.map(async (email) => {
-      const quotes = await restFetch<BadQuote[]>('GET', `quotes?select=id,opportunity,customer,total,stage,clientId:data->qi->>client_id&data->qi->>email=ilike.${enc(email)}&order=updated_at.desc&limit=100`).catch(() => [])
+      const raw = await restFetch<Array<{ id: string; opportunity: string | null; customer: string | null; total: number | null; stage: string | null; qstage: string | null; clientId?: string | null }>>(
+        'GET',
+        `quotes?select=id,opportunity,customer,total,stage,qstage:data->qi->>stage,clientId:data->qi->>client_id&data->qi->>email=ilike.${enc(email)}&order=updated_at.desc&limit=100`,
+      ).catch(() => [])
+      const quotes: BadQuote[] = (raw || [])
+        .filter((q) => !isWon(q.stage) && !isWon(q.qstage))
+        .map((q) => ({ id: q.id, opportunity: q.opportunity, customer: q.customer, total: q.total, stage: q.stage || q.qstage, clientId: q.clientId }))
       const c = bad.find((b) => (b.email || '').trim() === email)
       const name = [c?.first_name, c?.last_name].filter(Boolean).join(' ').trim()
       // Default account = the account on these quotes (they almost always share one).
