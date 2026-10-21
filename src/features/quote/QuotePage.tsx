@@ -42,7 +42,7 @@ import { LineItemsCard } from './form/LineItemsCard'
 import { BudgetCard } from './form/BudgetCard'
 import { fetchIsApprover, fetchMyEmployeeId } from '../../lib/perms'
 import { notifyQuoteSubmitted, notifyQuoteApproved, notifyReopenUnlocked, notifyReopenRequested, notifyQuoteLost, fetchPendingSubmitterIds } from '../../lib/notify'
-import { markClosedLost, softDeleteQuote, resolveFlagsForQuote } from '../../lib/quoteActions'
+import { markClosedLost, softDeleteQuote, resolveFlagsForQuote, closedLostMessage } from '../../lib/quoteActions'
 import type { DraftImport } from '../../lib/importDraft'
 import { priceDraftLines } from '../../lib/importDraft'
 import { getSessionEmail } from '../../lib/auth'
@@ -539,7 +539,8 @@ export function QuotePage() {
     if (!row) return
     const at = now()
     const prevChatter = ((row.data?.chatterEntries as ChatterEntry[]) || [])
-    const nextChatter = [...prevChatter, { by: me, at, msg: `Marked Closed Lost — ${note}` }]
+    const lostOpp = s(qiEdit.opp) || row.opportunity || ''
+    const nextChatter = [...prevChatter, { by: me, at, msg: closedLostMessage(lostOpp, at, me, note) }]
     setQiEdit((q) => ({ ...q, stage: 'Closed Lost' }))
     setRow((prev) => {
       if (!prev) return prev

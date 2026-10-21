@@ -1,5 +1,6 @@
 import { restFetch } from './restFetch'
 import { baseOpp } from './opp'
+import { prettifyEmail } from './text'
 
 // Read-only access to a quote's action state — its open flag and its send /
 // follow-up history — so the quote page can reflect what the dashboard cards
@@ -153,12 +154,26 @@ export async function setBusinessType(quoteId: string, type: 'New Business' | 'E
  * Workspace project. The quote stays reopenable through the normal reopen path if
  * the customer comes back. Callers gate on WRITES_ENABLED. Returns the new chatter.
  */
+/** The Closed-Lost chatter sentence, e.g.
+ *  "Quote #26-123 was closed lost 10/21/26 by Jane Smith because budget cut."
+ *  Shared by the DB write and the quote page's optimistic update so they match. */
+export function closedLostMessage(opportunity: string, atIso: string, by: string, note: string): string {
+  const d = new Date(atIso)
+  const date = isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { year: '2-digit', month: '2-digit', day: '2-digit' })
+  const who = prettifyEmail(by) || by || 'someone'
+  const opp = (opportunity || '').replace(/^#/, '').trim()
+  return `Quote #${opp || '(unknown)'} was closed lost ${date} by ${who} because ${(note || '').trim()}`
+}
+
 export async function markClosedLost(quoteId: string, note: string, by: string): Promise<ChatterEntry[]> {
-  const rows = await restFetch<Array<{ data?: Record<string, any> }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data&limit=1`)
+  const rows = await restFetch<Array<{ data?: Record<string, any>; opportunity?: string | null }>>('GET', `quotes?id=eq.${encodeURIComponent(quoteId)}&select=data,opportunity&limit=1`)
   const data = (rows?.[0]?.data || {}) as Record<string, any>
+  const opp = String(rows?.[0]?.opportunity || data?.qi?.opp || '').trim()
   const at = new Date().toISOString()
   const prev: ChatterEntry[] = Array.isArray(data.chatterEntries) ? data.chatterEntries : []
-  const next = [...prev, { by, at, msg: `Marked Closed Lost — ${note}` }]
+  // Full-sentence chatter note so the reason is readable right in the thread/feed,
+  // not just in the manager's approval queue. Author + timestamp are also on the row.
+  const next = [...prev, { by, at, msg: closedLostMessage(opp, at, by, note) }]
   const approval = (data.approval || {}) as Record<string, any>
   const history = [...((approval.history as unknown[]) || []), { event: 'closed_lost', by, at, comments: note }]
   const nextData = {
