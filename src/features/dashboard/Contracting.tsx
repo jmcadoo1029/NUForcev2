@@ -157,6 +157,17 @@ export function Contracting() {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     const jobNum = won.jobNum.trim()
     if (!jobNum) { showToast('Enter a Job # before creating a project.', 'error', 4000); setWsResult({ ok: false, msg: 'Enter a Job # before creating a project.' }); return }
+    // Existing-Business quotes almost always belong on a job that already exists in
+    // Workspace — creating a NEW project here is usually a mistake ("Add to existing"
+    // is the right call). Make the user confirm. (Same gate as the quote page.)
+    if (String((quote.qi as Record<string, unknown>)?.type || '').trim().toLowerCase() === 'existing business') {
+      const proceed = window.confirm(
+        `This quote is marked Existing Business.\n\n`
+        + `Existing-business work usually belongs on an EXISTING Workspace project — "Add to existing" is normally the right choice here.\n\n`
+        + `Are you sure you want to create a brand-new project instead?`,
+      )
+      if (!proceed) { showToast('Create project cancelled — use “Add to existing” if this belongs on an existing job.', 'warn', 6000); return }
+    }
     setBusy(true)
     setWsResult(null)
     try {
