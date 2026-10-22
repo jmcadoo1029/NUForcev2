@@ -3,6 +3,7 @@ import { money, moneyShort } from '../../lib/format'
 import { useDashboardMetrics } from './useDashboardMetrics'
 import { ThreeMonthWidgets } from './ThreeMonthWidgets'
 import { ApprovalsCard } from './ApprovalsCard'
+import { DueSoonCard } from './DueSoonCard'
 import { RemindersCard } from './RemindersCard'
 import { ReadyToSendCard } from './ReadyToSendCard'
 import { FollowUpsCard } from './FollowUpsCard'
@@ -37,6 +38,8 @@ export function DashboardHome() {
       )}
 
       <ApprovalsCard />
+
+      <DueSoonCard />
 
       <ReadyToSendCard />
 

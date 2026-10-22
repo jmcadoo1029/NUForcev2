@@ -13,7 +13,31 @@ import { useOpenQuotes } from './useOpenQuotes'
 // rows, edits fields, and drags to reorder. Save reconciles the whole board to
 // open_quotes (delete/insert/update + sort_order) so it syncs across users.
 
-interface EditRow { key: number; id?: string; opportunity: string; account: string; description: string }
+interface EditRow { key: number; id?: string; opportunity: string; account: string; description: string; due_date: string }
+
+// Due-date helpers (dates are plain YYYY-MM-DD, parsed in local time so there's no
+// timezone drift). daysUntil<0 = overdue, 0–5 = due soon.
+const daysUntil = (ymd: string): number | null => {
+  const s = (ymd || '').slice(0, 10)
+  const [y, m, d] = s.split('-').map(Number)
+  if (!y || !m || !d) return null
+  const due = new Date(y, m - 1, d)
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  return Math.round((due.getTime() - now.getTime()) / 86400000)
+}
+const fmtDue = (ymd: string): string => {
+  const s = (ymd || '').slice(0, 10)
+  const [y, m, d] = s.split('-').map(Number)
+  if (!y || !m || !d) return s
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+const dueColor = (ymd: string): string => {
+  const n = daysUntil(ymd)
+  if (n === null) return 'var(--text)'
+  if (n < 0) return 'var(--accent)'   // overdue
+  if (n <= 5) return 'var(--warn)'    // due soon
+  return 'var(--text)'
+}
 
 export function InProgressCard() {
   const { data, err, reload } = useOpenQuotes()
@@ -103,7 +127,7 @@ export function InProgressCard() {
   // fresh load arrives while we're not mid-edit).
   useEffect(() => {
     if (data && !editing) {
-      setRows(data.map((r) => ({ key: seq.current++, id: r.id, opportunity: r.opportunity || '', account: r.account || '', description: r.description || '' })))
+      setRows(data.map((r) => ({ key: seq.current++, id: r.id, opportunity: r.opportunity || '', account: r.account || '', description: r.description || '', due_date: (r.due_date || '').slice(0, 10) })))
     }
   }, [data, editing])
 
@@ -113,7 +137,7 @@ export function InProgressCard() {
     setBusy(true)
     try {
       const originalIds = (data || []).map((r) => r.id)
-      await saveBoard(rows.map((r) => ({ id: r.id, opportunity: r.opportunity, account: r.account, description: r.description })), originalIds)
+      await saveBoard(rows.map((r) => ({ id: r.id, opportunity: r.opportunity, account: r.account, description: r.description, due_date: r.due_date })), originalIds)
       showToast('In-progress board saved', 'success')
       setEditing(false)
       reload()
@@ -130,7 +154,7 @@ export function InProgressCard() {
 
   const upd = (key: number, patch: Partial<EditRow>) => setRows((cur) => cur.map((r) => (r.key === key ? { ...r, ...patch } : r)))
   const remove = (key: number) => setRows((cur) => cur.filter((r) => r.key !== key))
-  const add = () => setRows((cur) => [...cur, { key: seq.current++, opportunity: '', account: '', description: '' }])
+  const add = () => setRows((cur) => [...cur, { key: seq.current++, opportunity: '', account: '', description: '', due_date: '' }])
   const reorderTo = (fromKey: number, toKey: number) =>
     setRows((cur) => {
       const from = cur.findIndex((r) => r.key === fromKey)
@@ -144,7 +168,7 @@ export function InProgressCard() {
 
   const cancelEdit = () => {
     // Discard local changes — reseed from the shared board.
-    if (data) setRows(data.map((r) => ({ key: seq.current++, opportunity: r.opportunity || '', account: r.account || '', description: r.description || '' })))
+    if (data) setRows(data.map((r) => ({ key: seq.current++, id: r.id, opportunity: r.opportunity || '', account: r.account || '', description: r.description || '', due_date: (r.due_date || '').slice(0, 10) })))
     setEditing(false)
   }
 
@@ -177,6 +201,7 @@ export function InProgressCard() {
               <tr>
                 <th style={th}>Opportunity</th>
                 <th style={th}>Account</th>
+                <th style={{ ...th, width: 110 }}>Due date</th>
                 <th style={th}>Description</th>
                 <th style={{ ...th, width: 220 }}>Flag</th>
               </tr>
@@ -185,10 +210,14 @@ export function InProgressCard() {
               {data.map((r) => {
                 const fb = flagBase(r.opportunity)
                 const note = fb ? flagNotes.get(fb) || '' : ''
+                const du = daysUntil(r.due_date || '')
                 return (
                   <tr key={r.id}>
                     <td style={{ ...td, fontWeight: 600, whiteSpace: 'nowrap' }}>{r.opportunity || '—'}</td>
                     <td style={{ ...td, color: 'var(--muted)' }}>{r.account || '—'}</td>
+                    <td style={{ ...td, whiteSpace: 'nowrap', color: dueColor(r.due_date || ''), fontWeight: du !== null && du <= 5 ? 700 : 400 }}>
+                      {r.due_date ? <span title={du !== null ? (du < 0 ? `${-du}d overdue` : du === 0 ? 'Due today' : `${du}d left`) : ''}>{fmtDue(r.due_date)}</span> : <span style={{ color: 'var(--dim)' }}>—</span>}
+                    </td>
                     <td style={{ ...td, color: 'var(--text)' }}>{r.description || ''}</td>
                     <td style={td}>
                       {fb ? (
@@ -216,10 +245,11 @@ export function InProgressCard() {
               ? 'Add, edit, and drag to reorder. Save updates the shared board for everyone. Use ⚑ Flag to flag a quote (saves right away).'
               : 'Preview — writes are off, so Save won’t sync to other users yet.'}
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '20px 150px 1fr 1.4fr auto 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '0 0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '20px 130px 1fr 140px 1.3fr auto 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '0 0 6px', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)' }}>
             <span />
             <span>Opportunity</span>
             <span>Account</span>
+            <span>Due date</span>
             <span>Description</span>
             <span />
             <span />
@@ -232,7 +262,7 @@ export function InProgressCard() {
                 <div key={r.key}>
                   <div
                     onDragOver={(e) => { e.preventDefault(); if (dragKey != null && dragKey !== r.key) reorderTo(dragKey, r.key) }}
-                    style={{ display: 'grid', gridTemplateColumns: '20px 150px 1fr 1.4fr auto 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '4px 0', opacity: dragKey === r.key ? 0.4 : 1 }}
+                    style={{ display: 'grid', gridTemplateColumns: '20px 130px 1fr 140px 1.3fr auto 26px', gap: 'var(--sp-2)', alignItems: 'center', padding: '4px 0', opacity: dragKey === r.key ? 0.4 : 1 }}
                   >
                     <span
                       draggable
@@ -243,6 +273,7 @@ export function InProgressCard() {
                     >⠿</span>
                     <input value={r.opportunity} onChange={(e) => upd(r.key, { opportunity: e.target.value })} placeholder="26-000" style={inp} />
                     <input value={r.account} onChange={(e) => upd(r.key, { account: e.target.value })} placeholder="Account" style={inp} />
+                    <input type="date" value={r.due_date} onChange={(e) => upd(r.key, { due_date: e.target.value })} title="Due date (optional)" style={{ ...inp, color: r.due_date ? dueColor(r.due_date) : 'var(--muted)' }} />
                     <input value={r.description} onChange={(e) => upd(r.key, { description: e.target.value })} placeholder="What's happening…" style={inp} />
                     <button
                       onClick={() => (panelOpen ? closeFlag() : openFlag(r))}

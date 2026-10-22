@@ -10,13 +10,14 @@ export interface OpenQuoteRow {
   opportunity: string | null
   account: string | null
   description: string | null
+  due_date: string | null // YYYY-MM-DD, optional
   sort_order: number | null
 }
 
 async function load(): Promise<OpenQuoteRow[]> {
   return restFetch<OpenQuoteRow[]>(
     'GET',
-    'open_quotes?select=id,opportunity,account,description,sort_order&order=sort_order.asc,created_at.asc',
+    'open_quotes?select=id,opportunity,account,description,due_date,sort_order&order=sort_order.asc,created_at.asc',
   )
 }
 

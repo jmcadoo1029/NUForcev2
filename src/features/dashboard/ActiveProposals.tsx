@@ -1,15 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Modal } from '../../components'
 import { restFetch } from '../../lib/restFetch'
 import { money } from '../../lib/format'
-import { baseOpp, revRank } from '../../lib/opp'
+import { baseOpp, revRank, yearOfOpp } from '../../lib/opp'
 
 // "Active quotes" — everything currently sitting in the Proposal/Price Quote stage:
 // the live pipeline you can still engage with. Stage lives in the top-level column on
 // most quotes and in data.qi.stage on others, so we query BOTH and merge. Deduped to
-// the latest revision per opportunity family. Count + a clickable list, newest activity
-// first. Reached from the dashboard More menu.
+// the latest revision per opportunity family, then grouped by year (newest first) with
+// each year collapsible. Reached from the dashboard More menu.
 
 const STAGE = 'Proposal/Price Quote'
 
@@ -56,6 +56,8 @@ async function loadActive(): Promise<ActiveRow[]> {
 export function ActiveProposals({ onClose }: { onClose: () => void }) {
   const [rows, setRows] = useState<ActiveRow[] | null>(null)
   const [err, setErr] = useState('')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [didInit, setDidInit] = useState(false)
 
   useEffect(() => {
     let alive = true
@@ -63,9 +65,25 @@ export function ActiveProposals({ onClose }: { onClose: () => void }) {
     return () => { alive = false }
   }, [])
 
-  const total = (rows || []).reduce((a, r) => a + r.total, 0)
-  const th: React.CSSProperties = { textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '8px 10px', borderBottom: '1px solid var(--border)' }
-  const td: React.CSSProperties = { padding: '9px 10px', borderBottom: '1px solid var(--border)' }
+  // Group by year (from the opportunity's "YY-" prefix), newest year first.
+  const groups = useMemo(() => {
+    const m = new Map<string, ActiveRow[]>()
+    ;(rows || []).forEach((r) => { const y = yearOfOpp(r.opportunity, 'Unknown'); const a = m.get(y) || []; a.push(r); m.set(y, a) })
+    const years = Array.from(m.keys()).sort((a, b) => (a === 'Unknown' ? 1 : b === 'Unknown' ? -1 : Number(b) - Number(a)))
+    return years.map((y) => ({ year: y, rows: m.get(y) as ActiveRow[] }))
+  }, [rows])
+
+  // Default: most-recent year expanded, older years collapsed.
+  useEffect(() => {
+    if (!didInit && groups.length) { setExpanded(new Set([groups[0].year])); setDidInit(true) }
+  }, [groups, didInit])
+
+  const toggle = (y: string) => setExpanded((s) => { const n = new Set(s); n.has(y) ? n.delete(y) : n.add(y); return n })
+  const grandTotal = (rows || []).reduce((a, r) => a + r.total, 0)
+
+  const th: React.CSSProperties = { textAlign: 'left', fontSize: 'var(--fs-caption)', fontWeight: 700, letterSpacing: '.05em', textTransform: 'uppercase', color: 'var(--dim)', padding: '6px 10px', borderBottom: '1px solid var(--border)' }
+  const td: React.CSSProperties = { padding: '8px 10px', borderBottom: '1px solid var(--border)' }
+  const yearHeader: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', width: '100%', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', padding: '9px 12px' }
 
   return (
     <Modal title="Active quotes — Proposal / Price Quote" onClose={onClose} width={720}>
@@ -76,32 +94,48 @@ export function ActiveProposals({ onClose }: { onClose: () => void }) {
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--sp-3)', marginBottom: 'var(--sp-3)' }}>
             <span style={{ fontSize: 'var(--fs-xl)', fontWeight: 800 }}>{rows.length}</span>
             <span style={{ color: 'var(--muted)' }}>active quote{rows.length !== 1 ? 's' : ''} you can engage with</span>
-            <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>Total <b style={{ color: 'var(--text)' }}>{money(total)}</b></span>
+            <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums', color: 'var(--muted)' }}>Total <b style={{ color: 'var(--text)' }}>{money(grandTotal)}</b></span>
           </div>
           {rows.length === 0 ? (
             <div style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>Nothing in the Proposal / Price Quote stage right now.</div>
           ) : (
-            <div style={{ maxHeight: 460, overflowY: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-base)' }}>
-                <thead><tr>
-                  <th style={th}>Opportunity</th>
-                  <th style={th}>Account</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Total</th>
-                  <th style={{ ...th, textAlign: 'right' }}>Idle</th>
-                </tr></thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.id}>
-                      <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600 }}>
-                        <Link to={`/quote/${encodeURIComponent(r.opportunity || r.id)}`} onClick={onClose} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.opportunity || r.id}</Link>
-                      </td>
-                      <td style={{ ...td, color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer || '—'}</td>
-                      <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(r.total)}</td>
-                      <td style={{ ...td, textAlign: 'right', color: r.daysIdle >= 30 ? 'var(--accent)' : 'var(--dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.daysIdle}d</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div style={{ maxHeight: 460, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--sp-2)' }}>
+              {groups.map(({ year, rows: yr }) => {
+                const open = expanded.has(year)
+                const yTotal = yr.reduce((a, r) => a + r.total, 0)
+                return (
+                  <div key={year}>
+                    <button style={yearHeader} onClick={() => toggle(year)}>
+                      <span style={{ display: 'inline-block', transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s', color: 'var(--dim)' }}>▸</span>
+                      <span style={{ fontWeight: 800, fontSize: 'var(--fs-lg)' }}>{year}</span>
+                      <span style={{ color: 'var(--muted)', fontSize: 'var(--fs-sm)' }}>{yr.length} quote{yr.length !== 1 ? 's' : ''}</span>
+                      <span style={{ marginLeft: 'auto', fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{money(yTotal)}</span>
+                    </button>
+                    {open && (
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 'var(--fs-base)', marginTop: 4 }}>
+                        <thead><tr>
+                          <th style={th}>Opportunity</th>
+                          <th style={th}>Account</th>
+                          <th style={{ ...th, textAlign: 'right' }}>Total</th>
+                          <th style={{ ...th, textAlign: 'right' }}>Idle</th>
+                        </tr></thead>
+                        <tbody>
+                          {yr.map((r) => (
+                            <tr key={r.id}>
+                              <td style={{ ...td, whiteSpace: 'nowrap', fontWeight: 600 }}>
+                                <Link to={`/quote/${encodeURIComponent(r.opportunity || r.id)}`} onClick={onClose} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.opportunity || r.id}</Link>
+                              </td>
+                              <td style={{ ...td, color: 'var(--muted)', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.customer || '—'}</td>
+                              <td style={{ ...td, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{money(r.total)}</td>
+                              <td style={{ ...td, textAlign: 'right', color: r.daysIdle >= 30 ? 'var(--accent)' : 'var(--dim)', fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>{r.daysIdle}d</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </>

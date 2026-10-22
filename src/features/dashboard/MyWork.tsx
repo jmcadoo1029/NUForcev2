@@ -1,4 +1,5 @@
 import { ReadyToSendCard } from './ReadyToSendCard'
+import { DueSoonCard } from './DueSoonCard'
 import { FlaggedQuotesCard } from './FlaggedQuotesCard'
 import { FollowUpsCard } from './FollowUpsCard'
 import { ActiveQuotesCard } from './ActiveQuotesCard'
@@ -13,6 +14,7 @@ export function MyWork() {
   return (
     <>
       <ReadyToSendCard />
+      <DueSoonCard />
       <FlaggedQuotesCard />
       <FollowUpsCard />
       <RemindersCard />

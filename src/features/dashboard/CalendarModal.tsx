@@ -10,11 +10,12 @@ import { fetchSchedules } from '../../lib/scheduler'
 // follow-ups when they come due, and scheduled outreach sends by next fire date.
 // Click a day to see its events listed below the grid.
 
-type Kind = 'reminder' | 'followup' | 'outreach'
+type Kind = 'reminder' | 'followup' | 'outreach' | 'due'
 interface CalEvent { date: string; kind: Kind; title: string; sub: string; quoteKey?: string }
 
-const KIND_COLOR: Record<Kind, string> = { reminder: 'var(--info)', followup: 'var(--accent)', outreach: 'var(--pos)' }
-const KIND_LABEL: Record<Kind, string> = { reminder: 'Follow-up reminder', followup: 'Quote follow-up', outreach: 'Scheduled outreach' }
+const KIND_COLOR: Record<Kind, string> = { reminder: 'var(--info)', followup: 'var(--accent)', outreach: 'var(--pos)', due: '#8250c4' }
+const KIND_LABEL: Record<Kind, string> = { reminder: 'Follow-up reminder', followup: 'Quote follow-up', outreach: 'Scheduled outreach', due: 'In-progress due date' }
+const KINDS: Kind[] = ['reminder', 'followup', 'outreach', 'due']
 
 // Local YYYY-MM-DD for a timestamp; plain date strings are used as-is (first 10 chars).
 const ymdOf = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -58,6 +59,19 @@ async function loadEvents(me: string): Promise<CalEvent[]> {
     ;(sch || []).filter((s) => s.enabled && s.next_fire_at).forEach((s) => {
       const date = ymdFromTs(s.next_fire_at as string)
       if (date) out.push({ date, kind: 'outreach', title: (s.name || 'Outreach').trim() || 'Outreach', sub: String(s.cadence || '') })
+    })
+  } catch { /* best-effort */ }
+
+  // 4) In-progress board due dates.
+  try {
+    const oq = await restFetch<Array<{ opportunity: string | null; account: string | null; description: string | null; due_date: string | null }>>(
+      'GET', 'open_quotes?select=opportunity,account,description,due_date&due_date=not.is.null&limit=1000',
+    )
+    ;(oq || []).forEach((r) => {
+      const date = (r.due_date || '').slice(0, 10)
+      if (!date) return
+      const opp = (r.opportunity || '').trim()
+      out.push({ date, kind: 'due', title: opp || (r.account || '').trim() || 'In progress', sub: (r.description || r.account || '').trim(), quoteKey: opp })
     })
   } catch { /* best-effort */ }
 
@@ -112,7 +126,7 @@ export function CalendarModal({ onClose }: { onClose: () => void }) {
         <button style={navBtn} onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>›</button>
         <button style={{ ...navBtn, marginLeft: 4 }} onClick={() => { setCursor(new Date(today.getFullYear(), today.getMonth(), 1)); setSelected(todayYmd) }}>Today</button>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--sp-3)', flexWrap: 'wrap' }}>
-          {(['reminder', 'followup', 'outreach'] as Kind[]).map((k) => (
+          {KINDS.map((k) => (
             <span key={k} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 'var(--fs-caption)', color: 'var(--muted)' }}><span style={dot(k)} /> {KIND_LABEL[k]}</span>
           ))}
         </div>
@@ -175,7 +189,7 @@ export function CalendarModal({ onClose }: { onClose: () => void }) {
                     </>
                   )
                   const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', gap: 'var(--sp-2)', padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', textDecoration: 'none', color: 'var(--text)' }
-                  return e.kind === 'followup' && e.quoteKey
+                  return (e.kind === 'followup' || e.kind === 'due') && e.quoteKey
                     ? <Link key={i} to={`/quote/${encodeURIComponent(e.quoteKey)}`} onClick={onClose} style={rowStyle}>{body}</Link>
                     : <div key={i} style={rowStyle}>{body}</div>
                 })}

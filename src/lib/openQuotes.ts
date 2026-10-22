@@ -12,15 +12,17 @@ export interface BoardInput {
   opportunity: string
   account: string
   description: string
+  due_date?: string // YYYY-MM-DD, optional
 }
 
 const clean = (r: BoardInput) => ({
   opportunity: r.opportunity.trim() || null,
   account: r.account.trim() || null,
   description: r.description.trim() || null,
+  due_date: (r.due_date || '').trim() || null,
 })
 
-const isEmpty = (r: BoardInput) => !r.opportunity.trim() && !r.account.trim() && !r.description.trim()
+const isEmpty = (r: BoardInput) => !r.opportunity.trim() && !r.account.trim() && !r.description.trim() && !(r.due_date || '').trim()
 
 /**
  * Persist the board to match `rows` exactly. `originalIds` is the set of row ids
