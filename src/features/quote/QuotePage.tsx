@@ -601,6 +601,9 @@ export function QuotePage() {
   const qi = qiEdit // Quote Info display/edit share one live source.
   const ti = tiEdit // Test Item display/edit share one live source.
   const s = (v: unknown) => (v === undefined || v === null ? '' : String(v))
+  // Robust Existing-Business test — tolerant of stray whitespace / casing in the stored
+  // type value (s() doesn't trim), so the Workspace-project gate & chatter fire reliably.
+  const isExistingBiz = () => s(qiEdit.type).trim().toLowerCase() === 'existing business'
 
   const acct = s(qi.account) || row?.customer || ''
   const setTi = (patch: Record<string, any>) => setTiEdit((t) => ({ ...t, ...patch }))
@@ -1018,7 +1021,7 @@ export function QuotePage() {
     // Existing-Business quotes almost always belong on a job that already exists in
     // Workspace — creating a NEW project here is usually a mistake (the user meant
     // "Add to existing"). Make them confirm before we create a duplicate project.
-    if (s(qiEdit.type) === 'Existing Business') {
+    if (isExistingBiz()) {
       const proceed = window.confirm(
         `This quote is marked Existing Business.\n\n`
         + `Existing-business work usually belongs on an EXISTING Workspace project — "Add to existing" is normally the right choice here.\n\n`
@@ -1142,7 +1145,7 @@ export function QuotePage() {
                 <Button variant="ghost" small onClick={() => setRevOpen(true)}>Revisions</Button>
                 {row.id && WRITES_ENABLED && <Button variant="secondary" small onClick={() => { setCloneOpp(''); setCloneOpen(true) }} title="Create a copy of this quote under a new number">Clone</Button>}
                 {row.id && <Button variant="secondary" small onClick={() => setSendOpen(true)}>Send</Button>}
-                {row.id && (wonInfo.jobNum.trim() || s(qi.type) === 'Existing Business') && (
+                {row.id && (wonInfo.jobNum.trim() || isExistingBiz()) && (
                   <Button variant="secondary" small onClick={() => setJobChatterMode('manual')} title="Post an additional-charges note to this job's Workspace chatter">Workspace chatter</Button>
                 )}
               </div>
@@ -1341,7 +1344,7 @@ export function QuotePage() {
                 setSendNonce((n) => n + 1)
                 // Existing-Business quote just went out → prompt to post the
                 // additional-charges note to its Workspace job (choice required).
-                if (result?.ok && result.status !== 'preview' && s(qiEdit.type) === 'Existing Business') {
+                if (result?.ok && result.status !== 'preview' && isExistingBiz()) {
                   setJobChatterMode('post_send')
                 }
               }}
