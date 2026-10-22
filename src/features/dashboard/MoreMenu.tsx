@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { MonthlySnapshot } from './MonthlySnapshot'
+import { ActiveProposals } from './ActiveProposals'
 import { RecentlyApproved } from './RecentlyApproved'
 import { ProductCatalog } from './ProductCatalog'
 import { Templates } from './Templates'
@@ -18,7 +19,7 @@ const THEME_LABEL: Record<ThemePref, string> = { light: 'Light', dark: 'Dark', a
 // the top bar uncluttered. (Campaigns is a top-list tab, not in here.)
 export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTogglePrivacy: () => void }) {
   const [open, setOpen] = useState(false)
-  const [modal, setModal] = useState<null | 'snapshot' | 'recent' | 'catalog' | 'templates' | 'standards' | 'deleted' | 'users'>(null)
+  const [modal, setModal] = useState<null | 'active' | 'snapshot' | 'recent' | 'catalog' | 'templates' | 'standards' | 'deleted' | 'users'>(null)
   const { canView } = useCanViewManager() // Standards ↔ codes is manager-only
   const { isApprover } = useIsApprover() // Deleted quotes (restore) is approver-only
   const ref = useRef<HTMLDivElement>(null)
@@ -67,6 +68,9 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
       </button>
       {open && (
         <div style={{ position: 'absolute', top: 'calc(100% + 6px)', right: 0, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-lg)', minWidth: 210, padding: 6, zIndex: 60 }}>
+          <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('active'); setOpen(false) }}>
+            Active quotes
+          </button>
           <button style={item} onMouseEnter={(e) => (e.currentTarget.style.background = 'var(--bg)')} onMouseLeave={(e) => (e.currentTarget.style.background = 'none')} onClick={() => { setModal('snapshot'); setOpen(false) }}>
             Monthly snapshot
           </button>
@@ -103,6 +107,7 @@ export function MoreMenu({ privacy, onTogglePrivacy }: { privacy: boolean; onTog
           </button>
         </div>
       )}
+      {modal === 'active' && <ActiveProposals onClose={() => setModal(null)} />}
       {modal === 'snapshot' && <MonthlySnapshot onClose={() => setModal(null)} />}
       {modal === 'recent' && <RecentlyApproved onClose={() => setModal(null)} />}
       {modal === 'catalog' && <ProductCatalog onClose={() => setModal(null)} />}

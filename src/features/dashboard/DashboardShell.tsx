@@ -5,6 +5,7 @@ import { WORKSPACE_URL, CLASSIC_URL } from '../../lib/config'
 import { useCanViewManager, useIsApprover, useFeature } from '../../lib/perms'
 import { GlobalSearch } from './GlobalSearch'
 import { MoreMenu } from './MoreMenu'
+import { CalendarModal } from './CalendarModal'
 import { CustomerLookup } from '../account/CustomerLookup'
 import { ImportDraft } from '../quote/ImportDraft'
 
@@ -41,6 +42,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const [refreshKey, setRefreshKey] = useState(0)
   const [lookupOpen, setLookupOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [calendarOpen, setCalendarOpen] = useState(false)
   const view = pathname.startsWith('/my-work') ? 'mywork' : pathname.startsWith('/in-progress') ? 'inprogress' : pathname.startsWith('/job-search') ? 'jobsearch' : pathname.startsWith('/market-research') ? 'market' : pathname.startsWith('/contracting') ? 'contracting' : pathname.startsWith('/customer-contact') ? 'customercontact' : pathname.startsWith('/feed') ? 'feed' : 'manager'
   const subtitle = view === 'mywork' ? 'Your worklist' : view === 'inprogress' ? 'Shared — what the team is working on' : view === 'jobsearch' ? 'Find past jobs and the quotes on them' : view === 'market' ? 'Federal awards & solicitations in your testing lane' : view === 'contracting' ? 'Close won deals and open jobs' : view === 'customercontact' ? 'Reach out to clients and keep contacts clean' : view === 'feed' ? 'Live activity across all quotes' : monthLabel
 
@@ -73,6 +75,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--sp-3)' }}>
           <GlobalSearch />
           <button
+            onClick={() => setCalendarOpen(true)}
+            title="Calendar — upcoming follow-ups & scheduled outreach"
+            aria-label="Calendar"
+            style={{ width: 42, height: 42, border: '1px solid var(--border-strong)', background: 'var(--surface)', borderRadius: 'var(--radius-sm)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)' }}
+          >
+            <svg width="17" height="17" viewBox="0 0 18 18" fill="none">
+              <rect x="2.5" y="3.5" width="13" height="12" rx="1.6" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M2.5 7h13M6 2.5v2.5M12 2.5v2.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </button>
+          <button
             onClick={() => setRefreshKey((k) => k + 1)}
             title="Refresh dashboard data"
             aria-label="Refresh"
@@ -93,6 +106,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       <div key={refreshKey} style={{ filter: privacy ? 'blur(8px)' : 'none', pointerEvents: privacy ? 'none' : 'auto', userSelect: privacy ? 'none' : 'auto', transition: 'filter .2s' }}>
         {children}
       </div>
+      {calendarOpen && <CalendarModal onClose={() => setCalendarOpen(false)} />}
       {lookupOpen && <CustomerLookup onClose={() => setLookupOpen(false)} />}
       {importOpen && isApprover && <ImportDraft onClose={() => setImportOpen(false)} />}
     </div>

@@ -1015,6 +1015,17 @@ export function QuotePage() {
     if (!WRITES_ENABLED) { showToast('Writes are off (preview).', 'warn'); return }
     const jobNum = wonInfo.jobNum.trim()
     if (!jobNum) { showToast('Enter a Job # before creating a project.', 'error', 4000); return }
+    // Existing-Business quotes almost always belong on a job that already exists in
+    // Workspace — creating a NEW project here is usually a mistake (the user meant
+    // "Add to existing"). Make them confirm before we create a duplicate project.
+    if (s(qiEdit.type) === 'Existing Business') {
+      const proceed = window.confirm(
+        `This quote is marked Existing Business.\n\n`
+        + `Existing-business work usually belongs on an EXISTING Workspace project — "Add to existing" is normally the right choice here.\n\n`
+        + `Are you sure you want to create a brand-new project instead?`,
+      )
+      if (!proceed) { showToast('Create project cancelled — use “Add to existing” if this belongs on an existing job.', 'warn', 6000); return }
+    }
     setWsBusy(true)
     try {
       const savedId = await saveQuietly()
