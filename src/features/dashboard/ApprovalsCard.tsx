@@ -253,12 +253,23 @@ export function ApprovalsCard() {
     }
   }
 
+  // The reconcile prompt must render even when the queue is now empty. Approving the
+  // LAST pending item empties the queue, which hits the "all caught up" early-return
+  // below — and without rendering the modal here, the In-Progress removal prompt would
+  // never appear on that final approval (it worked only while other items remained).
+  const reconcileModal = recMatches.length > 0 ? (
+    <InProgressReconcileModal matches={recMatches} busy={recBusy} onCancel={() => setRecMatches([])} onConfirm={doRemoveFromBoard} />
+  ) : null
+
   if (!err && data && quoteRows.length + wonRows.length + reopenRows.length === 0) {
     return (
-      <Card style={{ marginBottom: 'var(--sp-4)', display: 'flex', alignItems: 'center', gap: 10, padding: '13px var(--sp-5)' }}>
-        <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pos)', flexShrink: 0 }} />
-        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>No action items pending — you&rsquo;re all caught up.</span>
-      </Card>
+      <>
+        <Card style={{ marginBottom: 'var(--sp-4)', display: 'flex', alignItems: 'center', gap: 10, padding: '13px var(--sp-5)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--pos)', flexShrink: 0 }} />
+          <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--muted)' }}>No action items pending — you&rsquo;re all caught up.</span>
+        </Card>
+        {reconcileModal}
+      </>
     )
   }
 
@@ -325,9 +336,7 @@ export function ApprovalsCard() {
         </Modal>
       )}
 
-      {recMatches.length > 0 && (
-        <InProgressReconcileModal matches={recMatches} busy={recBusy} onCancel={() => setRecMatches([])} onConfirm={doRemoveFromBoard} />
-      )}
+      {reconcileModal}
     </Card>
   )
 }
